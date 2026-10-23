@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **废止注记（2026-10-23，f0b5cec 后）**：Task 3 Step 1 的「拷贝 JNI 绑定层（含 JNIEnvGuard 补丁）」已被取代——core/jni 现为官方 1.16.2 java/jni 原样 + 自维护 `core/jni/ZT_jniguard.h`（GETENV 守卫，ZT_jniutils.h 唯一 MPL 修改）。勿按原步骤从 v1 拷贝 ZT_jniutils.h。
+
 **Goal:** 从零建立可构建、可装机的 Gradle 工程骨架：vendor 引入 ZeroTier 1.16.2 源码，打通 JNI 的 NDK 构建，真机启动 APK 并验证 `libZeroTierOneJNI.so` 加载成功，配好 CI。
 
 **Architecture:** 双模块（`:app` application + `:core` JNI 绑定 library）。ZeroTier 官方 1.16.2 源码以 vendor 子集入仓（`externals/core/`，MPL-2.0，零修改），树外 CMake（`externals/CMakeLists.txt`）编译为四 ABI 的 `libZeroTierOneJNI.so`；Java SDK 源码经 `srcDirs` 重定向直接编译进 core 模块。本计划只覆盖 P0，P1–P5 各自成计划。
