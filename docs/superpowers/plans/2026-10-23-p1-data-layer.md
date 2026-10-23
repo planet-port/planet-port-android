@@ -507,7 +507,7 @@ class AppConfigStore(val paths: StorePaths) {
     /** 应用启动且隧道未连接时，把所有已连接标记复位（调用时机由 P2/P5 决定）。静默。 */
     suspend fun resetAllNetworkActivation() = mutate {
         val all = readNetworksFile().orEmpty()
-        if (all.none { it.lastActivated }) return
+        if (all.none { it.lastActivated }) return@mutate
         files.write(paths.networksFile, all.map { it.copy(lastActivated = false) }, networkList)
     }
 
