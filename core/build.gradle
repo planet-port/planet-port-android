@@ -1,0 +1,42 @@
+// ZeroTier JNI 绑定模块（MPL-2.0 组件的构建壳，自有文件）。
+// Java SDK 源码 vendor 于 ../externals/core/java/src，经 srcDirs 重定向编译；
+// native 构建走树外 CMake（../externals/CMakeLists.txt）。
+// NDK 钉 25.2：NDK 26+ 移除 minSdk 19 支持的旧工具链行为，此组合已验证。
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.zerotier.sdk'
+    compileSdk 36
+    ndkVersion "25.2.9519653"
+
+    defaultConfig {
+        minSdk 23
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('../externals/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    sourceSets {
+        main.java.srcDirs = ['../externals/core/java/src']
+    }
+}
+
+dependencies {
+}

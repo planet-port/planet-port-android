@@ -15,3 +15,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "PlanetPort"
+
+include(":core")
