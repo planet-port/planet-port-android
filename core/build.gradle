@@ -34,7 +34,9 @@ android {
     }
 
     sourceSets {
-        main.java.srcDirs = ['../externals/core/java/src']
+        // srcDirs 赋值是替换语义：只写 vendor 目录会把默认 src/main/java
+        // 静默移出编译路径，两个目录都显式列出
+        main.java.srcDirs = ['src/main/java', '../externals/core/java/src']
     }
 }
 

@@ -19,6 +19,11 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
+      # AGP 通常在 license 接受后自动安装缺失组件；若未自动安装导致构建
+      # 失败，取消下面步骤的注释以显式预装：
+      # - name: Preinstall Android SDK components
+      #   run: "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;25.2.9519653" "cmake;3.22.1" "platforms;android-36"
+
       - name: Build
         run: ./gradlew assembleDebug --no-daemon --console=plain
 
