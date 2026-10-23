@@ -1,8 +1,10 @@
 package cn.imgozi.planetport.store
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -45,7 +47,8 @@ class AppConfigStore(val paths: StorePaths) {
     private val opMutex = Mutex()
 
     private val _configChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
-    /** 配置发生需要隧道/其它读者感知的变化时发射（P2 订阅触发重配）。 */
+    /** 配置变更信号（P2 订阅触发重配）。有损合并：extraBufferCapacity=16 溢出即丢（对齐 iOS Darwin 通知
+     *  语义），订阅方必须 level-triggered——收到信号即全量重读文件，不得假设逐条精确。 */
     val configChanges: SharedFlow<Unit> = _configChanges
 
     private val planetList = ListSerializer(PlanetProfile.serializer())
@@ -68,9 +71,9 @@ class AppConfigStore(val paths: StorePaths) {
 
     /** 不取域锁的写档（仅在已持有 opMutex 的复合段内使用，如导入器的读-追加-写）。 */
     internal suspend fun writePlanetsLocked(profiles: List<PlanetProfile>) {
-        // official 永在且排最前（以固定档案为准，天然去重）
-        val normalized = listOf(PlanetProfile.OFFICIAL) +
-            profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
+        // official 永在且排最前；档案本体以既有条目为准（保留 lastNodeId 等字段变更），缺失才用固定档案兜底
+        val official = profiles.firstOrNull { it.id == PlanetProfile.OFFICIAL_ID } ?: PlanetProfile.OFFICIAL
+        val normalized = listOf(official) + profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
         files.write(paths.planetsFile, normalized, planetList)
     }
 
@@ -122,8 +125,10 @@ class AppConfigStore(val paths: StorePaths) {
         files.write(paths.networksFile, readNetworksFile().orEmpty().filterNot { it.planetId == profile.id }, networkList)
         files.write(paths.moonsFile, readMoonsFile().orEmpty().filterNot { it.planetId == profile.id }, moonList)
 
-        profile.fileName?.let { File(paths.planetsDir, it).delete() }
-        paths.planetStateDir(profile.id).deleteRecursively()
+        withContext(Dispatchers.IO) {
+            profile.fileName?.let { File(paths.planetsDir, it).delete() }
+            paths.planetStateDir(profile.id).deleteRecursively()
+        }
 
         if (wasSelected) selectPlanetLocked(PlanetProfile.OFFICIAL_ID)
         if (wasActive) activatePlanetLocked(PlanetProfile.OFFICIAL_ID)
@@ -198,7 +203,7 @@ class AppConfigStore(val paths: StorePaths) {
      * prefs.json 不引导落盘（readPrefs 缺失时回退内存默认，首次真实写才创建）。
      * .corrupt 存在 = 上次现场待排查，不自动重建（读到 null 走内存默认）。
      */
-    private suspend fun bootstrap() {
+    private suspend fun bootstrap() = withContext(Dispatchers.IO) {
         if (!paths.planetsFile.exists() && !File(paths.planetsFile.path + ".corrupt").exists()) {
             files.write(paths.planetsFile, listOf(PlanetProfile.OFFICIAL), planetList)
         }

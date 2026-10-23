@@ -16,6 +16,7 @@ import java.io.IOException
  * - 写 = 序列化到 <name>.tmp 后 rename 原子替换（序列化失败直接抛，不产生半截文件）；
  * - 读损坏 = 隔离为 <name>.corrupt（覆盖旧隔离）并返回 null——保留现场供排查，
  *   不自动重建；调用方决定内存默认值，文件由下一次真实写回重建。
+ * 读/写 try 块内不得引入挂起点（catch(Exception) 会吞 CancellationException 的前提）。
  */
 internal class JsonFileStore(private val json: Json) {
 

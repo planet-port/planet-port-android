@@ -2,7 +2,9 @@ package cn.imgozi.planetport.ui
 
 import android.content.Context
 import cn.imgozi.planetport.store.AppConfigStore
+import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.MoonEntry
+import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.MoonImporter
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetKind
@@ -68,14 +70,62 @@ internal object P1SelfCheck {
         val active = store.activePlanetId()
         line(selected == profile.id && changed && active == profile.id && store.hasActivatedPlanet(), "select/activate 切换（$selected / $active）")
 
+        // 5.5 networks 分组盖戳（两个 planet 各写一组，互不串扰；active 取自激活 planet）
+        store.writeNetworks(
+            listOf(
+                NetworkEntry(
+                    networkId = "aabbccddeeff0011",
+                    networkName = "网A",
+                    lastActivated = true,
+                    routeViaZeroTier = true,
+                    dnsMode = DnsMode.network,
+                    customDns = listOf("1.1.1.1"),
+                )
+            ),
+            planetId = PlanetProfile.OFFICIAL_ID,
+        )
+        store.writeNetworks(
+            listOf(
+                NetworkEntry(
+                    networkId = "1122334455667788",
+                    networkName = "网B",
+                    lastActivated = true,
+                    routeViaZeroTier = false,
+                    dnsMode = DnsMode.custom,
+                    customDns = listOf("2.2.2.2", "8.8.8.8"),
+                )
+            ),
+            planetId = profile.id,
+        )
+        val byPlanet = store.readNetworksByPlanet()
+        val activeNetworks = store.readActiveNetworks()
+        line(
+            byPlanet[PlanetProfile.OFFICIAL_ID]?.size == 1 &&
+                byPlanet[profile.id]?.size == 1 &&
+                byPlanet[PlanetProfile.OFFICIAL_ID]!![0].planetId == PlanetProfile.OFFICIAL_ID &&
+                byPlanet[profile.id]!![0].planetId == profile.id &&
+                activeNetworks.size == 1 && activeNetworks[0].planetId == profile.id,
+            "networks 分组盖戳（两 planet 互不串扰）",
+        )
+
+        // 5.6 激活标记复位（静默，不发变更通知）
+        store.resetAllNetworkActivation()
+        line(
+            store.readNetworks(planetId = PlanetProfile.OFFICIAL_ID).none { it.lastActivated } &&
+                store.readNetworks(planetId = profile.id).none { it.lastActivated },
+            "networks 激活标记复位",
+        )
+
         // 6. 级联删除与回退
         store.deletePlanet(profile)
         val afterDelete = store.readPlanets()
         line(
             afterDelete.size == 1 && store.selectedPlanetId() == PlanetProfile.OFFICIAL_ID &&
                 store.activePlanetId() == PlanetProfile.OFFICIAL_ID &&
-                !File(store.paths.planetsDir, profile.fileName!!).exists(),
-            "删除级联回退 official",
+                !File(store.paths.planetsDir, profile.fileName!!).exists() &&
+                store.readNetworksByPlanet()[profile.id] == null &&
+                store.readNetworksByPlanet()[PlanetProfile.OFFICIAL_ID]?.size == 1,
+            "删除级联回退 official（含名下 networks，official 名下保留）",
         )
 
         return lines
