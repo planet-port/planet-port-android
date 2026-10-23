@@ -13,10 +13,12 @@ import com.zerotier.sdk.VirtualNetworkConfigOperation
 import com.zerotier.sdk.VirtualNetworkFrameListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -75,6 +77,9 @@ internal class NodeRuntime(
     var node: Node? = null
         private set
 
+    /** 后台任务驱动协程（shutdown 时先 cancel + join 再 close node，防 native UAF） */
+    private var supervisorJob: Job? = null
+
     // MARK: - 生命周期
 
     fun start(sender: PacketSender): Boolean {
@@ -100,13 +105,20 @@ internal class NodeRuntime(
     }
 
     fun shutdown() {
+        // 先停后台驱动协程并等其真正退出，再 close node：协程仍处
+        // processBackgroundTasks JNI 内时 close 会 native UAF。JNI 调用毫秒级，
+        // runBlocking/join 的短暂阻塞（≤一个驱动周期）在停机路径可接受
+        val job = supervisorJob
+        supervisorJob = null
+        job?.cancel()
+        if (job != null) runBlocking { job.join() }
         node?.close()
         node = null
     }
 
     /** 后台任务 deadline 驱动（对齐 iOS bgTimer：50..100ms 自适应窗口） */
     private fun startSupervisor() {
-        scope.launch(Dispatchers.IO) {
+        supervisorJob = scope.launch(Dispatchers.IO) {
             val deadline = longArrayOf(0)
             while (isActive) {
                 val n = node ?: break

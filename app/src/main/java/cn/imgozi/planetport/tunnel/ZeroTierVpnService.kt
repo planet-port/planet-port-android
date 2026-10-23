@@ -10,17 +10,23 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import java.net.SocketException
 
 /**
  * VpnService 壳（对齐设计文档 §4：≤200 行生命周期组装，具体逻辑在组件）。
- * T2 版组装 NodeRuntime 起核心；UdpCom/TunnelManager/Dataplane 由后续任务接入。
+ * 全链路组装：NodeRuntime 起核心 + UdpCom 物理收发 + FrameConverter/Dataplane
+ * 数据面 + TunnelManager netconf 聚合与 TUN 建立。
  */
 internal class ZeroTierVpnService : VpnService() {
     private var scope: CoroutineScope? = null
     private var runtime: NodeRuntime? = null
     private var udpCom: UdpCom? = null
+    private var converter: FrameConverter? = null
+    private var dataplane: Dataplane? = null
+    private var tunnelManager: TunnelManager? = null
 
     companion object {
         private const val ACTION_START = "cn.imgozi.planetport.action.START"
@@ -50,7 +56,6 @@ internal class ZeroTierVpnService : VpnService() {
         return START_NOT_STICKY
     }
 
-    /** T2 版：起核心（空 sender——无物理收发，T3 接 UdpCom 后 ONLINE 才有意义） */
     private fun startTunnel() {
         TunnelStateBus.setTunnelState(TunnelState.Starting)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -71,15 +76,44 @@ internal class ZeroTierVpnService : VpnService() {
                 scope = s,
             )
             runtimeRef = r
-            val ok = r.start(sender = udp.asPacketSender())
-            if (!ok) {
+            if (!r.start(sender = udp.asPacketSender())) {
                 TunnelStateBus.setTunnelState(TunnelState.Failed("核心初始化失败", recoverable = true))
                 stopTunnel()
                 return@launch
             }
-            udp.start()
-            runtime = r
-            udpCom = udp
+            val conv = FrameConverter(r)
+            val dp = Dataplane { pkt -> conv.handlePacketsFromTun(listOf(pkt)) }
+            val tm = TunnelManager(s, r, conv, dp, store, this@ZeroTierVpnService)
+            // 帧消费：核心回调帧 → 转换 → 写 TUN（IP 包无需协议族标注，TUN 按 IP 头自识别）
+            s.launch {
+                for (ev in r.frameChannel) {
+                    val packets = conv.handleFrameFromCore(
+                        ev.nwid, ev.srcMac, ev.dstMac, ev.etherType, ev.frame
+                    )
+                    if (packets.isNotEmpty()) dp.writePackets(packets)
+                }
+            }
+            // 配置消费：netconf 事件 → TunnelManager
+            s.launch {
+                for (ev in r.configChannel) tm.onNetworkConfig(ev.nwid, ev.op, ev.conf)
+            }
+            try {
+                udp.start()
+            } catch (e: SocketException) {
+                // 9994 被占：绑定失败不可继续（无物理收发），也不能进程崩溃
+                TunnelStateBus.setTunnelState(TunnelState.Failed("UDP 9994 绑定失败", recoverable = true))
+                stopTunnel()
+                return@launch
+            }
+            runtime = r; udpCom = udp; converter = conv
+            dataplane = dp; tunnelManager = tm
+            tm.start()
+            tm.applyConfig() // 首启 join 已配置网络 + orbit moons
+            // START/STOP 竞态收敛：STOP 落在启动期时不再错置 Running
+            if (!s.isActive) {
+                stopTunnel()
+                return@launch
+            }
             TunnelStateBus.setTunnelState(TunnelState.Running)
             VpnNotification.update(this@ZeroTierVpnService, "运行中")
         }
@@ -89,10 +123,17 @@ internal class ZeroTierVpnService : VpnService() {
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
         scope?.cancel()
         scope = null
+        tunnelManager?.stop()
+        tunnelManager = null
+        dataplane?.shutdown()
+        dataplane = null
+        converter = null
         udpCom?.shutdown()
         udpCom = null
         runtime?.shutdown()
         runtime = null
+        TunnelStateBus.setNodeStatus(null)
+        TunnelStateBus.clearNetworkStatuses()
         stopForeground(true)
         stopSelf()
     }

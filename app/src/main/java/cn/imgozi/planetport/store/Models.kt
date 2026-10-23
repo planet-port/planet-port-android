@@ -80,4 +80,6 @@ data class MoonEntry(
 data class AppPrefs(
     val selectedPlanetId: String = PlanetProfile.OFFICIAL_ID,
     val activePlanetId: String? = null,
+    /** 数据面禁用 IPv6（对齐 iOS network_disable_ipv6；默认 false） */
+    val disableIpv6: Boolean = false,
 )

@@ -185,6 +185,9 @@ class AppConfigStore(val paths: StorePaths) {
         files.write(paths.networksFile, all.map { it.copy(lastActivated = false) }, networkList)
     }
 
+    /** 数据面是否禁用 IPv6（对齐 iOS network_disable_ipv6；写入口 P4 偏好页接） */
+    suspend fun disableIpv6(): Boolean = readPrefs().disableIpv6
+
     // MARK: - 文件层
 
     private suspend fun readPlanetsFile(): List<PlanetProfile>? = files.read(paths.planetsFile, planetList)

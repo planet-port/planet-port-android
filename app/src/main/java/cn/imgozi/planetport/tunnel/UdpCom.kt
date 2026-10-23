@@ -70,6 +70,9 @@ internal class UdpCom(
         generation += 1
         socket?.close() // 使阻塞的 receive 抛 SocketException 退出
         socket = null
+        // join 收包线程：close 后线程可能仍在 onPacket → processWirePacket JNI 内，
+        // 直接放行到 node.close() 会 native UAF；join(500) 上限阻塞，停机路径可接受
+        thread?.join(500)
         thread = null
     }
 
