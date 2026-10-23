@@ -72,7 +72,7 @@ planet-port-android/
   targetSdk 不升 34+（前台服务类型强制声明等行为变化不引入）。
 - ProGuard 首版关闭。
 
-vendor 源码集合（按构建脚本的实际编译依赖核定，约 2.5MB）：
+vendor 源码集合（按构建脚本的实际编译依赖核定，约 3.6MB）：
 node/（全部 .cpp/.hpp）、include/、version.h（仓库根）、osdep/、
 java/src（Java SDK）、ext/prometheus-cpp-lite-1.0/、ext/nlohmann/
 （OSUtils.hpp 硬依赖，MIT，随源码保留 LICENSE.MIT）、
