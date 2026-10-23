@@ -1,0 +1,183 @@
+package cn.imgozi.planetport.store
+
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import java.io.File
+
+/** 数据层文件布局（filesRoot 通常为 context.filesDir；自检页用 cacheDir 子目录隔离）。 */
+class StorePaths(private val filesRoot: File) {
+    val configDir: File = File(filesRoot, "config")
+    val planetsDir: File = File(filesRoot, "planets")
+    val planetsFile: File = File(configDir, "planets.json")
+    val networksFile: File = File(configDir, "networks.json")
+    val moonsFile: File = File(configDir, "moons.json")
+    val prefsFile: File = File(configDir, "prefs.json")
+
+    /** 某个 Planet 的核心状态目录（identity.*、moons.d/ 等，P2 接核心时启用）。 */
+    fun planetStateDir(planetId: String): File = File(filesRoot, "zt/$planetId")
+}
+
+/**
+ * 四份 JSON 的域 API。语义对齐 iOS AppConfigStore：
+ * - 空表/缺失一律回退 [PlanetProfile.OFFICIAL]，writePlanets 保证 official 永在且最前；
+ * - selected 仅是浏览上下文（静默）；active 是隧道实际使用的指针（P2 负责重启联动）；
+ * - writeNetworks/writeMoons 按归属 Planet 整组替换并盖戳 planetId。
+ */
+class AppConfigStore(val paths: StorePaths) {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
+    private val files = JsonFileStore(json)
+
+    private val _configChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
+    /** 配置发生需要隧道/其它读者感知的变化时发射（P2 订阅触发重配）。 */
+    val configChanges: SharedFlow<Unit> = _configChanges
+
+    private val planetList = ListSerializer(PlanetProfile.serializer())
+    private val networkList = ListSerializer(NetworkEntry.serializer())
+    private val moonList = ListSerializer(MoonEntry.serializer())
+
+    // MARK: - Planet
+
+    suspend fun readPlanets(): List<PlanetProfile> {
+        bootstrap()
+        return readPlanetsFile().orEmpty().ifEmpty { listOf(PlanetProfile.OFFICIAL) }
+    }
+
+    suspend fun writePlanets(profiles: List<PlanetProfile>) {
+        // official 永在且排最前（以固定档案为准，天然去重）
+        val normalized = listOf(PlanetProfile.OFFICIAL) +
+            profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
+        files.write(paths.planetsFile, normalized, planetList)
+    }
+
+    suspend fun selectedPlanetId(): String {
+        val prefs = readPrefs()
+        val ids = readPlanets().map { it.id }
+        return if (prefs.selectedPlanetId in ids) prefs.selectedPlanetId else PlanetProfile.OFFICIAL_ID
+    }
+
+    suspend fun activePlanetId(): String {
+        val prefs = readPrefs()
+        val stored = prefs.activePlanetId ?: return PlanetProfile.OFFICIAL_ID
+        val ids = readPlanets().map { it.id }
+        return if (stored in ids) stored else PlanetProfile.OFFICIAL_ID
+    }
+
+    /** 是否激活过任何 Planet（activePlanetId 回退 official 仅用于显示，"用过"语义以此区分）。 */
+    suspend fun hasActivatedPlanet(): Boolean = readPrefs().activePlanetId != null
+
+    /** 只改变浏览上下文：不发变更通知，更不触发隧道。 */
+    suspend fun selectPlanet(id: String) {
+        if (readPlanets().none { it.id == id }) return
+        writePrefs(readPrefs().copy(selectedPlanetId = id))
+    }
+
+    /** 设置隧道下次启动要加载的 Planet；只更新指针，重启联动由调用方（P2）负责。 */
+    suspend fun activatePlanet(id: String): Boolean {
+        if (readPlanets().none { it.id == id }) return false
+        val changed = activePlanetId() != id
+        writePrefs(readPrefs().copy(activePlanetId = id))
+        return changed
+    }
+
+    /** 删除私有 Planet 及其名下 Network/Moon/文件/状态目录；被删者正在选中或生效则回退官方。 */
+    suspend fun deletePlanet(profile: PlanetProfile) {
+        if (profile.kind != PlanetKind.custom) return
+        val wasSelected = selectedPlanetId() == profile.id
+        val wasActive = activePlanetId() == profile.id
+
+        writePlanets(readPlanets().filterNot { it.id == profile.id })
+        files.write(paths.networksFile, readNetworksFile().orEmpty().filterNot { it.planetId == profile.id }, networkList)
+        files.write(paths.moonsFile, readMoonsFile().orEmpty().filterNot { it.planetId == profile.id }, moonList)
+
+        profile.fileName?.let { File(paths.planetsDir, it).delete() }
+        paths.planetStateDir(profile.id).deleteRecursively()
+
+        if (wasSelected) selectPlanet(PlanetProfile.OFFICIAL_ID)
+        if (wasActive) activatePlanet(PlanetProfile.OFFICIAL_ID)
+        notifyConfigChanged()
+    }
+
+    // MARK: - Network（按 Planet 归组）
+
+    suspend fun readNetworks(planetId: String? = null): List<NetworkEntry> {
+        val id = planetId ?: selectedPlanetId()
+        return readNetworksFile().orEmpty().filter { it.planetId == id }
+    }
+
+    /** 一次读盘按 Planet 分组（供首页各分页并行渲染；planetId 为 null 的遗留项排除）。 */
+    suspend fun readNetworksByPlanet(): Map<String, List<NetworkEntry>> {
+        return readNetworksFile().orEmpty()
+            .filter { it.planetId != null }
+            .groupBy { it.planetId!! }
+    }
+
+    suspend fun readActiveNetworks(): List<NetworkEntry> = readNetworks(planetId = activePlanetId())
+
+    suspend fun writeNetworks(values: List<NetworkEntry>, planetId: String? = null) {
+        val id = planetId ?: selectedPlanetId()
+        val all = readNetworksFile().orEmpty().filterNot { it.planetId == id } +
+            values.map { it.copy(planetId = id) }
+        files.write(paths.networksFile, all, networkList)
+        notifyConfigChanged()
+    }
+
+    // MARK: - Moon（按 Planet 归组）
+
+    suspend fun readMoons(planetId: String? = null): List<MoonEntry> {
+        val id = planetId ?: selectedPlanetId()
+        return readMoonsFile().orEmpty().filter { it.planetId == id }
+    }
+
+    suspend fun readAllMoons(): List<MoonEntry> = readMoonsFile().orEmpty()
+
+    suspend fun readActiveMoons(): List<MoonEntry> = readMoons(planetId = activePlanetId())
+
+    suspend fun writeMoons(values: List<MoonEntry>, planetId: String? = null) {
+        val id = planetId ?: selectedPlanetId()
+        val all = readMoonsFile().orEmpty().filterNot { it.planetId == id } +
+            values.map { it.copy(planetId = id) }
+        files.write(paths.moonsFile, all, moonList)
+        notifyConfigChanged()
+    }
+
+    /** 应用启动且隧道未连接时，把所有已连接标记复位（调用时机由 P2/P5 决定）。静默。 */
+    suspend fun resetAllNetworkActivation() {
+        val all = readNetworksFile().orEmpty()
+        if (all.none { it.lastActivated }) return
+        files.write(paths.networksFile, all.map { it.copy(lastActivated = false) }, networkList)
+    }
+
+    // MARK: - 文件层
+
+    private suspend fun readPlanetsFile(): List<PlanetProfile>? = files.read(paths.planetsFile, planetList)
+    private suspend fun readNetworksFile(): List<NetworkEntry>? = files.read(paths.networksFile, networkList)
+    private suspend fun readMoonsFile(): List<MoonEntry>? = files.read(paths.moonsFile, moonList)
+
+    private suspend fun readPrefs(): AppPrefs =
+        files.read(paths.prefsFile, AppPrefs.serializer()) ?: AppPrefs()
+
+    private suspend fun writePrefs(prefs: AppPrefs) {
+        files.write(paths.prefsFile, prefs, AppPrefs.serializer())
+    }
+
+    /**
+     * 首启引导：planets.json 不存在且无 .corrupt 损坏隔离时写入官方默认；
+     * prefs.json 不引导落盘（readPrefs 缺失时回退内存默认，首次真实写才创建）。
+     * .corrupt 存在 = 上次现场待排查，不自动重建（读到 null 走内存默认）。
+     */
+    private suspend fun bootstrap() {
+        if (!paths.planetsFile.exists() && !File(paths.planetsFile.path + ".corrupt").exists()) {
+            files.write(paths.planetsFile, listOf(PlanetProfile.OFFICIAL), planetList)
+        }
+    }
+
+    private fun notifyConfigChanged() {
+        _configChanges.tryEmit(Unit)
+    }
+}
