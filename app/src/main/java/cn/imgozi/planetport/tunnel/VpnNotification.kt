@@ -1,0 +1,46 @@
+package cn.imgozi.planetport.tunnel
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.os.Build
+import cn.imgozi.planetport.R
+
+/** 前台通知：渠道幂等创建 + 状态文案更新（对齐设计文档 §4 VpnNotification 组件） */
+internal object VpnNotification {
+    private const val CHANNEL_ID = "planet_tunnel"
+    private const val NOTIFICATION_ID = 1
+
+    fun start(service: Service, text: String) {
+        createChannel(service)
+        service.startForeground(NOTIFICATION_ID, build(service, text))
+    }
+
+    fun update(context: Context, text: String) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIFICATION_ID, build(context, text))
+    }
+
+    private fun build(context: Context, text: String): Notification {
+        val builder =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL_ID)
+            else @Suppress("DEPRECATION") Notification.Builder(context)
+        return builder
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Planet Port")
+            .setContentText(text)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+    }
+
+    private fun createChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(CHANNEL_ID, "隧道状态", NotificationManager.IMPORTANCE_LOW)
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+        }
+    }
+}
