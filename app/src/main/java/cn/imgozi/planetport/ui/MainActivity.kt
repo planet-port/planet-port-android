@@ -1,60 +1,72 @@
 package cn.imgozi.planetport.ui
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 
-/**
- * P1 数据层自检页：JNI 加载 + store 全链路（隔离目录）逐项结果。
- * P4 起替换为正式首页。
- */
 class MainActivity : ComponentActivity() {
+    private lateinit var vpnPermissionLauncher: ActivityResultLauncher<Intent>
+    private lateinit var notificationPermissionLauncher: ActivityResultLauncher<String>
+    private var vpnGrantedCallback: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val jniLoaded = try {
+
+        // JNI 加载兜底（P1 保留）：加载失败仅记日志，不阻塞页面
+        try {
             System.loadLibrary("ZeroTierOneJNI")
-            true
         } catch (e: UnsatisfiedLinkError) {
             Log.e(TAG, "libZeroTierOneJNI 加载失败", e)
-            false
         }
+
+        vpnPermissionLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == RESULT_OK) {
+                vpnGrantedCallback?.invoke()
+                vpnGrantedCallback = null
+            }
+        }
+        notificationPermissionLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) {}
+
+        // API 33+ 通知运行时权限（FGS 通知可见性；拒绝不阻塞功能）
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         setContent {
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    val results by produceState(initialValue = listOf("自检中…")) {
-                        value = try {
-                            P1SelfCheck.run(this@MainActivity)
-                        } catch (e: Exception) {
-                            listOf("自检异常: ${e.message}")
-                        }
-                    }
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Spacer(modifier = Modifier.height(48.dp))
-                        Text(text = if (jniLoaded) "libZeroTierOneJNI 加载成功" else "JNI 库加载失败")
-                        results.forEach { Text(text = it) }
-                    }
+                Surface {
+                    P2SelfCheckScreen(this)
                 }
             }
+        }
+    }
+
+    /** VPN 系统授权（prepare 返回 null 表示已授权过，直接执行） */
+    fun requestVpnPermission(onGranted: () -> Unit) {
+        val prepare = VpnService.prepare(this)
+        if (prepare == null) {
+            onGranted()
+        } else {
+            vpnGrantedCallback = onGranted
+            vpnPermissionLauncher.launch(prepare)
         }
     }
 

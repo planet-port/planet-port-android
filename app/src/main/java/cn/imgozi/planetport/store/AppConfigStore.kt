@@ -46,10 +46,11 @@ class AppConfigStore(val paths: StorePaths) {
     /** 域级复合操作互斥。 */
     private val opMutex = Mutex()
 
-    private val _configChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
     /** 配置变更信号（P2 订阅触发重配）。有损合并：extraBufferCapacity=16 溢出即丢（对齐 iOS Darwin 通知
-     *  语义），订阅方必须 level-triggered——收到信号即全量重读文件，不得假设逐条精确。 */
-    val configChanges: SharedFlow<Unit> = _configChanges
+     *  语义），订阅方必须 level-triggered——收到信号即全量重读文件，不得假设逐条精确。
+     *  进程级共享：UI 与隧道可能各持实例（P2SelfCheck 写入 / TunnelManager 订阅），
+     *  事件必须跨实例互通，故流本体挂在 companion，实例属性转发。 */
+    val configChanges: SharedFlow<Unit> get() = _configChanges
 
     private val planetList = ListSerializer(PlanetProfile.serializer())
     private val networkList = ListSerializer(NetworkEntry.serializer())
@@ -214,5 +215,9 @@ class AppConfigStore(val paths: StorePaths) {
 
     private fun notifyConfigChanged() {
         _configChanges.tryEmit(Unit)
+    }
+
+    private companion object {
+        private val _configChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
     }
 }
