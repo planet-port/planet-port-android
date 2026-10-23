@@ -576,8 +576,8 @@ git commit -m "feat(store): 四份 JSON 配置的域 API 与切换/级联删除
     - `suspend fun importPlanetData(data: ByteArray, name: String): PlanetProfile`
     - `suspend fun importPlanetFromURL(urlString: String, name: String): PlanetProfile`
     - `suspend fun downloadPlanetFile(urlString: String): ByteArray`
-    - `suspend fun rename(profile: PlanetProfile, to name: String)`
-    - `suspend fun updateIcon(profile: PlanetProfile, to icon: String?)`
+    - `suspend fun rename(profile: PlanetProfile, name: String)`
+    - `suspend fun updateIcon(profile: PlanetProfile, icon: String?)`
     - `fun worldIdOf(data: ByteArray): ULong?`（companion，纯函数）
     - `suspend fun existingWorldIds(): Set<ULong>`
     - `suspend fun inspectPlanetFile(profile: PlanetProfile): PlanetFileInfo?`；`data class PlanetFileInfo(worldId: ULong, timestamp: ULong, fileSize: Int)`
@@ -661,24 +661,28 @@ class PlanetImporter(private val store: AppConfigStore) {
         }
     }
 
-    suspend fun rename(profile: PlanetProfile, to name: String) {
+    suspend fun rename(profile: PlanetProfile, name: String) {
         val normalizedName = name.trim()
         if (normalizedName.isEmpty()) throw ImportError.EmptyName()
         store.mutate {
             val profiles = store.readPlanets()
             val index = profiles.indexOfFirst { it.id == profile.id }
             if (index < 0) return@mutate
-            store.writePlanetsLocked(profiles.copy(index = index, element = profiles[index].copy(name = normalizedName)))
+            store.writePlanetsLocked(
+                profiles.toMutableList().apply { this[index] = this[index].copy(name = normalizedName) }
+            )
         }
     }
 
     /** 更新自定义图标；null 表示恢复自动生成。 */
-    suspend fun updateIcon(profile: PlanetProfile, to icon: String?) {
+    suspend fun updateIcon(profile: PlanetProfile, icon: String?) {
         store.mutate {
             val profiles = store.readPlanets()
             val index = profiles.indexOfFirst { it.id == profile.id }
             if (index < 0) return@mutate
-            store.writePlanetsLocked(profiles.copy(index = index, element = profiles[index].copy(icon = icon)))
+            store.writePlanetsLocked(
+                profiles.toMutableList().apply { this[index] = this[index].copy(icon = icon) }
+            )
         }
     }
 
