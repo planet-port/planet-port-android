@@ -4,9 +4,10 @@
 # node/C25519.cpp、node/Defaults.cpp 等），不可直接使用，故在子模块外
 # 自行维护本文件。核心源码用 GLOB 纳入，未来小幅升级无需改这里。
 #
-# JNI 绑定层（../core/jni/）来自官方 1.16.2 java/jni，其中
-# ZT_jniutils.h 采用 kaaass 版本：JNIEnvGuard 保证核心工作线程回调时
-# 自动 Attach/DetachCurrentThread（修复 ICMPv6 NS 触发的 native 崩溃）。
+# JNI 绑定层（../core/jni/）来自官方 1.16.2 java/jni：五个文件原样，
+# ZT_jniutils.h 为唯一自维护修改——配套 ZT_jniguard.h 的 GETENV 守卫，
+# 保证核心工作线程回调时自动 Attach/DetachCurrentThread
+# （修复 ICMPv6 NS 触发的 native 崩溃）。
 
 cmake_minimum_required(VERSION 3.13)
 

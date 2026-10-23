@@ -22,8 +22,10 @@ Planet Port Android 是一个 ZeroTier 网络管理客户端：多份根服务�
    代码 —— 不拷贝、不逐行翻译。
 2. **文案/字符串取自 planet-port-i**，不抄第三方翻译。
 3. **MPL-2.0 组件以 vendor 方式入仓**（源码拷贝进 `externals/`，非依赖仓库）：
-   ZeroTier C++ 核心、JNI 绑定（含 JNIEnvGuard 补丁）、Java SDK。不修改任何
-   MPL 文件，随源码携带 `LICENSE-MPL.txt` 与 `LICENSE.txt`。协议义务：这些
+   ZeroTier C++ 核心、JNI 绑定（官方原样，ZT_jniutils.h 唯一自维护修改：
+   GETENV 守卫）、Java SDK。MPL 文件保持原样，唯一例外：core/jni/ZT_jniutils.h
+   的 GETENV 守卫（防核心原生线程回调崩溃），修改版源码随仓库开源履行
+   MPL-2.0。随源码携带 `LICENSE-MPL.txt` 与 `LICENSE.txt`。协议义务：这些
    文件保持 MPL-2.0；分发 APK 时 MPL 文件源码可获得 —— 仓库开源期间由本仓库
    直接履行，若日后闭源，零修改场景下指向官方 1.16.2 tag 即满足。
 
@@ -57,7 +59,7 @@ planet-port-android/
 │     └─ util/
 ├─ core/                        # JNI 绑定模块（MPL-2.0）
 │  ├─ build.gradle              # namespace com.zerotier.sdk，srcDirs 重定向至 externals/core/java/src
-│  └─ jni/                      # 官方 JNI + JNIEnvGuard 补丁（随 MPL-2.0 保留）
+│  └─ jni/                      # 官方 java/jni 原样 + ZT_jniguard.h（自维护 GETENV 守卫，ZT_jniutils.h 唯一 MPL 修改）
 └─ externals/
    ├─ core/                     # ZeroTier 1.16.2 vendor 源码（MPL-2.0）
    └─ CMakeLists.txt            # NDK 构建脚本（含 16KB 页对齐）
@@ -100,7 +102,7 @@ VpnService 壳只做生命周期组装（≤200 行），具体逻辑在五个�
   interrupt 模型；封装在组件内（`start()` / `shutdownAndWait()`，自 join 防护
   下沉到基类），生命周期由 NodeRuntime 统一管理。
 - **回调边界**：JNI 回调（帧/事件/config）在 ZT 原生线程进入 → 投递无锁
-  Channel → 协程侧消费。JNIEnvGuard（MPL）保证 attach。
+  Channel → 协程侧消费。GETENV 守卫（自维护，官方 ScopedJNIThreadAttacher 模式）保证 attach。
 
 ### Planet 隔离
 

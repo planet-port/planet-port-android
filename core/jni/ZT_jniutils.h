@@ -24,7 +24,12 @@
 
 #include <limits> // for numeric_limits
 #include <sys/socket.h> // for sockaddr_storage
-#include <cassert> // for assert
+
+// 本文件基于官方 1.16.2 java/jni/ZT_jniutils.h（其余内容逐字节取自官方
+// fe29cd8），下面这条 include 与 GETENV 宏是本仓库对 MPL 文件的唯一修改：
+// GETENV 守卫为核心原生线程回调按需挂接 JVM，防 ICMPv6 NS 路径 native
+// 崩溃（守卫实现见 ZT_jniguard.h）。修改版源码随本仓库开源履行 MPL-2.0 §3.1。
+#include "ZT_jniguard.h"
 
 #if defined(__ANDROID__)
 
@@ -53,49 +58,19 @@
     #define LOGE(...) fprintf(stdout, __VA_ARGS__)
 #endif
 
-class JNIEnvGuard {
-public:
-    JNIEnvGuard(JavaVM *vm, const char* tag) : vm(vm), env(NULL), needDetach(false) {
-        jint ret;
-
-        assert(vm);
-        ret = vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
-
-        if (ret == JNI_EDETACHED) {
-            ret = vm->AttachCurrentThread(&env, NULL);
-            needDetach = true;
-        }
-
-        if (ret != JNI_OK) {
-            __android_log_print(ANDROID_LOG_ERROR, tag, "Error calling GetEnv: %d", ret);
-            assert(false && "Error calling GetEnv");
-        }
-    }
-
-    JNIEnv *get() {
-        return env;
-    }
-
-    ~JNIEnvGuard() {
-        if (needDetach) {
-            assert(vm);
-            vm->DetachCurrentThread();
-        }
-        env = NULL;
-    }
-
-private:
-    JavaVM *vm;
-    JNIEnv *env;
-    bool needDetach;
-};
-
 //
-// Call GetEnv and assert if there is an error
+// 获取当前线程 JNIEnv；核心原生线程可能尚未挂接 JVM，此时临时 attach，
+// 作用域结束由守卫析构自动 detach（本已挂接的线程不会被 detach），
+// 失败时记日志。本宏为本仓库对官方文件的唯一逻辑修改，背景见
+// ZT_jniguard.h。注意：展开为多条语句并使用固定局部名，
+// 每个作用域至多调用一次。
 //
 #define GETENV(env, vm) \
-    JNIEnvGuard envGuard_##__LINE__((vm), LOG_TAG); \
-    env = envGuard_##__LINE__.get()
+    ScopedJniEnv ztJniEnvScope(vm); \
+    if (ztJniEnvScope.status() != JNI_OK) { \
+        LOGE("Error calling GetEnv: %d", ztJniEnvScope.status()); \
+    } \
+    env = ztJniEnvScope.get()
 
 //
 // Call GetJavaVM and assert if there is an error
