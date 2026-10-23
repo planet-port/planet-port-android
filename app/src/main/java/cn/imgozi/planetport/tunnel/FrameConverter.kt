@@ -84,9 +84,9 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
         for (nwid in order) {
             val c = contexts[nwid] ?: continue
             lines.add(
-                "ctx %016x mac=%012x v4=[%s] routes=${c.routesV4.size}/${c.routesV6.size} " +
+                ("ctx %016x mac=%012x v4=[%s] routes=${c.routesV4.size}/${c.routesV6.size} " +
                     "出站=${c.statFwdV4} 入站=${c.statInV4} ARP问=${c.statArpReq} ARP答=${c.statArpReply} " +
-                    "保活=${c.statKeepalive} ARP表=${c.arp.count} 待决=${c.pendingV4.values.sumOf { it.size }}"
+                    "保活=${c.statKeepalive} ARP表=${c.arp.count} 待决=${c.pendingV4.values.sumOf { it.size }}")
                     .format(nwid, c.mac, c.ipv4Addresses.joinToString(",") { NetworkContextMath.dotted(it) })
             )
         }

@@ -47,14 +47,15 @@ internal class NdpTable {
             return Ipv6Address(m)
         }
 
+        /** RFC 4861 布局：ICMPv6 头(4) + flags/保留(4) + target(16) + 源 MAC 选项(8)，与 parse 对齐 */
         private fun icmpv6(type: Int, target: Ipv6Address, mac: Long, flagSolicited: Boolean): ByteArray {
-            val p = ByteArray(4 + 16 + 8)
+            val p = ByteArray(8 + 16 + 8)
             p[0] = type.toByte(); p[1] = 0
-            p[4] = if (flagSolicited) 0x60 else 0  // NA flags: Solicited+Override（RFC 4861 offset 4；NS 此处保留 0）
-            target.bytes.copyInto(p, 4)
-            p[20] = 1; p[21] = 1  // 源链路层地址选项
+            p[4] = if (flagSolicited) 0x60 else 0  // NA flags: Solicited+Override（NS 此处保留 0）
+            target.bytes.copyInto(p, 8)
+            p[24] = 1; p[25] = 1  // 源链路层地址选项
             for (shift in 40 downTo 0 step 8) {
-                p[22 + (5 - shift / 8)] = ((mac shr shift) and 0xff).toByte()
+                p[26 + (5 - shift / 8)] = ((mac shr shift) and 0xff).toByte()
             }
             return p
         }
