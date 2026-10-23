@@ -71,6 +71,8 @@ internal class TunnelManager(
      * CONFIG_UPDATE 会漏掉首次加入的网络（磁盘有缓存后控制器重推才变 2，
      * 表现为“新网络永远不生效，重开一次就好”）；DOWN(3)/DESTROY(4) 的
      * 回调可能仍带旧地址，误存会把已离开网络的残留配置塞回快照。
+     * UP/CONFIG_UPDATE 但不带地址 = 控制器剔除（吊销授权/移出网络）：
+     * 清既有快照并重聚合，让路由随下次 establish 自然剔除。
      */
     suspend fun onNetworkConfig(nwid: Long, op: VirtualNetworkConfigOperation, conf: NetConf) {
         TunnelStateBus.setNetworkStatus("%016x".format(nwid), conf.status)
@@ -80,7 +82,16 @@ internal class TunnelManager(
         if (op != VirtualNetworkConfigOperation.VIRTUAL_NETWORK_CONFIG_OPERATION_UP &&
             op != VirtualNetworkConfigOperation.VIRTUAL_NETWORK_CONFIG_OPERATION_CONFIG_UPDATE
         ) return
-        if (conf.assignedAddrs.isEmpty()) return
+        if (conf.assignedAddrs.isEmpty()) {
+            // 无地址的完整配置 = 被控制器剔除（吊销授权/移出网络）：清快照让
+            // 聚合自然剔除，否则旧快照保留会路由滞留 TUN 黑洞（对齐 iOS
+            // “应用无地址新配置即剔除”）。首启 REQUESTING 中间态删不到快照，
+            // no-op 无害；DOWN/DESTROY 已在上面过滤
+            configMutex.withLock {
+                if (snapshots.remove(nwid) != null) scheduleApplyLocked()
+            }
+            return
+        }
         configMutex.withLock {
             snapshots[nwid] = conf
             scheduleApplyLocked()
