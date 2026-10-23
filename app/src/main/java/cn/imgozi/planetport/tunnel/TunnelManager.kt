@@ -268,6 +268,14 @@ internal class TunnelManager(
                 DnsMode.none -> emptyList()
             }
         } else emptyList()
+        // 组播订阅（broadcast + ADI=各网络首个 IPv4，ARP 可靠性的关键，SDK 文档要求）。
+        // 每次都发：core 侧按组去重幂等无代价；且 leave 会连带丢弃 Network 的全部
+        // 订阅记录，rejoin 后须重订——不能只挂在 establish 分支内
+        for (item in valid) {
+            val adi = item.v4.firstOrNull()
+                ?.let { NetworkContextMath.parseIPv4(RoutePlanner.ipOnly(it)) } ?: continue
+            runtime.multicastSubscribe(item.nwid, Ethernet.BROADCAST_MAC, adi.toLong())
+        }
         // 幂等闸门：与当前 TUN 生效配置完全一致则跳过重建（CONFIG_UPDATE 60s 重推）
         val signature = "$allV4|$allV6|" +
             v4Routes.joinToString(",") { "${it.addr}/${it.prefix}" } + "|" +
@@ -291,14 +299,10 @@ internal class TunnelManager(
             TunnelStateBus.setTunnelState(TunnelState.Failed("TUN 建立失败", recoverable = true))
             return@withLock
         }
-        appliedSignature = signature
         dataplane.swap(fd)
-        // 组播订阅：broadcast + ADI=各网络首个 IPv4（ARP 可靠性的关键，SDK 文档要求）
-        for (item in valid) {
-            val adi = item.v4.firstOrNull()
-                ?.let { NetworkContextMath.parseIPv4(RoutePlanner.ipOnly(it)) } ?: continue
-            runtime.multicastSubscribe(item.nwid, Ethernet.BROADCAST_MAC, adi.toLong())
-        }
+        // swap 成功才记签名——若先记后 swap 抛异常，签名已更新而 fd 未接线，
+        // 后续 apply 全部被闸门跳过（TUN 永不重建）
+        appliedSignature = signature
         TunnelStateBus.setApplyTrace(trace)
         TunnelStateBus.log("establish 成功")
     }

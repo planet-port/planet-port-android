@@ -162,6 +162,12 @@ internal class ZeroTierVpnService : VpnService() {
         stopSelf()
     }
 
+    /** 系统撤销 VPN（快捷开关关闭/被其他 VPN 接管）——必须走完整停机清理，
+     *  否则 scope/数据面残留且 TUN 已失，60s CONFIG_UPDATE 到来时状态错乱 */
+    override fun onRevoke() {
+        stopTunnel()
+    }
+
     override fun onDestroy() {
         TunnelStateBus.setTunnelState(TunnelState.Idle)
         super.onDestroy()
