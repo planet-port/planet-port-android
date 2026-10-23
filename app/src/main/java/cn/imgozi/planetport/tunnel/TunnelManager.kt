@@ -39,6 +39,10 @@ internal class TunnelManager(
     private var orbitedMoons = HashSet<Long>()
     /** 已应用的用户侧配置（nwid → Triple(routeVia, dnsMode, customDns)），变更热重配 */
     private var appliedEntries = HashMap<Long, Triple<Boolean, DnsMode, List<String>>>()
+    /** 最近一次成功 establish 的配置签名——CONFIG_UPDATE 每 60s 重推一次完整
+     *  netconf，无变化时跳过重建（Android establish 无系统级幂等，重复 swap
+     *  会关旧 fd 开新 fd，打断在途连接并使 TUN 接口序号持续增长） */
+    private var appliedSignature: String? = null
     private var configChangesJob: Job? = null
     private var keepaliveJob: Job? = null
 
@@ -62,6 +66,7 @@ internal class TunnelManager(
         keepaliveJob?.cancel(); keepaliveJob = null
         settingsJob?.cancel(); settingsJob = null
         snapshots = HashMap()
+        appliedSignature = null
     }
 
     /**
@@ -255,28 +260,38 @@ internal class TunnelManager(
         }
 
         // Builder 组装（单网络 DNS 三模式；多网络不设——默认路由已禁用，ZT DNS 无意义）
+        val mtu = valid.map { it.conf.mtu }.filter { it > 0 }.minOrNull() ?: 2800
+        val dnsServers = if (valid.size == 1) {
+            when (valid[0].entry.dnsMode) {
+                DnsMode.network -> valid[0].conf.dns
+                DnsMode.custom -> valid[0].entry.customDns
+                DnsMode.none -> emptyList()
+            }
+        } else emptyList()
+        // 幂等闸门：与当前 TUN 生效配置完全一致则跳过重建（CONFIG_UPDATE 60s 重推）
+        val signature = "$allV4|$allV6|" +
+            v4Routes.joinToString(",") { "${it.addr}/${it.prefix}" } + "|" +
+            v6Routes.joinToString(",") { "${it.addr}/${it.prefix}" } + "|mtu=$mtu|dns=$dnsServers"
+        if (signature == appliedSignature) {
+            TunnelStateBus.setApplyTrace(trace)
+            TunnelStateBus.log("apply 幂等跳过（配置无变化）")
+            return@withLock
+        }
         val builder = vpnService.Builder()
             .setSession("Planet Port")
-            .setMtu(valid.map { it.conf.mtu }.filter { it > 0 }.minOrNull() ?: 2800)
+            .setMtu(mtu)
         for (a in allV4) builder.addAddress(RoutePlanner.ipOnly(a), RoutePlanner.prefixLen(a))
         for (a in allV6) builder.addAddress(RoutePlanner.ipOnly(a), RoutePlanner.prefixLen(a))
         for (r in v4Routes) builder.addRoute(r.addr, r.prefix)
         for (r in v6Routes) builder.addRoute(r.addr, r.prefix)
-        if (valid.size == 1) {
-            val item = valid[0]
-            val servers: List<String> = when (item.entry.dnsMode) {
-                DnsMode.network -> item.conf.dns
-                DnsMode.custom -> item.entry.customDns
-                DnsMode.none -> emptyList()
-            }
-            for (dns in servers) builder.addDnsServer(dns)
-        }
+        for (dns in dnsServers) builder.addDnsServer(dns)
         val fd = withContext(Dispatchers.IO) { builder.establish() }
         if (fd == null) {
             TunnelStateBus.log("establish 失败（Builder 拒绝，多为路由/地址冲突）")
             TunnelStateBus.setTunnelState(TunnelState.Failed("TUN 建立失败", recoverable = true))
             return@withLock
         }
+        appliedSignature = signature
         dataplane.swap(fd)
         // 组播订阅：broadcast + ADI=各网络首个 IPv4（ARP 可靠性的关键，SDK 文档要求）
         for (item in valid) {
