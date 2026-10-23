@@ -22,7 +22,7 @@ internal class NdpTable {
     )
 
     companion object {
-        /** NS/NA 的 ICMPv6 载荷（4 字节头 + 16 字节 target + 源 MAC 选项） */
+        /** NS/NA 的 ICMPv6 载荷（头4+flags/保留4+target16+源MAC选项8 共 32 字节，RFC 4861） */
         fun neighborSolicitation(target: Ipv6Address, senderMac: Long): ByteArray =
             icmpv6(135, target, senderMac, flagSolicited = false)
 

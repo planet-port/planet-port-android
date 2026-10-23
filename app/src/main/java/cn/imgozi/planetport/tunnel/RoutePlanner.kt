@@ -126,7 +126,11 @@ internal object RoutePlanner {
                     name.startsWith("rmnet") || name.startsWith("usb"))) continue
             for (ia in nif.interfaceAddresses) {
                 val a = ia.address ?: continue
-                block(a, ia.networkPrefixLength.toInt())
+                val prefix = ia.networkPrefixLength.toInt()
+                // 点对点接口返回 -1（含 0 视为无效）——IPPrefix(-1) 的 contains 恒真，
+                // 会把全部 ZT 路由挖空（iOS 从 netmask 推前缀故免疫此坑）
+                if (prefix <= 0) continue
+                block(a, prefix)
             }
         }
     }

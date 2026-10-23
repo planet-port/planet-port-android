@@ -15,6 +15,8 @@ import java.util.concurrent.Executors
 internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
     private var generation = 0
     private var currentFd: ParcelFileDescriptor? = null
+    /** 每代持有一份写流——按 task 新建会被 GC finalizer 关闭共享 fd 杀死在用 TUN */
+    private var outputStream: FileOutputStream? = null
     private var writeExecutor: ExecutorService? = null
 
     @Synchronized
@@ -22,8 +24,10 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
         generation += 1
         val gen = generation
         writeExecutor?.shutdownNow()
+        outputStream?.close()
         currentFd?.close()
         currentFd = fd
+        outputStream = FileOutputStream(fd.fileDescriptor)
         writeExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "zt-tun-write-$gen") }
         val input = FileInputStream(fd.fileDescriptor)
         Thread({
@@ -46,8 +50,7 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
         if (packets.isEmpty()) return
         val exec = writeExecutor ?: return
         exec.execute {
-            val fd = currentFd ?: return@execute
-            val out = FileOutputStream(fd.fileDescriptor)
+            val out = outputStream ?: return@execute
             try {
                 for (p in packets) out.write(p)
             } catch (_: IOException) {
@@ -61,6 +64,8 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
         generation += 1
         writeExecutor?.shutdownNow()
         writeExecutor = null
+        outputStream?.close()
+        outputStream = null
         currentFd?.close()
         currentFd = null
     }

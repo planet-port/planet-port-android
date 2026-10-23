@@ -139,7 +139,8 @@ internal object NetworkContextMath {
 
     /** "x::y" → Ipv6Address（先格式校验再 InetAddress 解析——纯字面量不触发主机名查询） */
     fun parseIPv6(s: String): Ipv6Address? {
-        if (!s.matches(Regex("^[0-9a-fA-F:.%]+$"))) return null
+        // 必须含 ':' 才是 IPv6 字面量——纯数字串交给 InetAddress 解析会触发主机名查询（DNS）
+        if (!s.contains(':') || !s.matches(Regex("^[0-9a-fA-F:.%]+$"))) return null
         return try {
             val addr = java.net.InetAddress.getByName(s)
             if (addr is java.net.Inet6Address) Ipv6Address(addr.address) else null
