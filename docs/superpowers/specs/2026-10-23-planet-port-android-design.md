@@ -72,7 +72,8 @@ planet-port-android/
 
 vendor 源码集合（按构建脚本的实际编译依赖核定，约 2.5MB）：
 node/（全部 .cpp/.hpp）、include/、version.h（仓库根）、osdep/、
-java/src（Java SDK）、ext/prometheus-cpp-lite-1.0/、
+java/src（Java SDK）、ext/prometheus-cpp-lite-1.0/、ext/nlohmann/
+（OSUtils.hpp 硬依赖，MIT，随源码保留 LICENSE.MIT）、
 ext/x64-salsa2012-asm/、ext/arm32-neon-salsa2012-asm/、
 LICENSE-MPL.txt、LICENSE.txt。不带 controller/service 桌面端/
 artwork/windows/nonfree 等无关目录。落地时以编译通过为准核对
