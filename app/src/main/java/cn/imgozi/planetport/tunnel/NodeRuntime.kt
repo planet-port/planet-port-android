@@ -82,6 +82,10 @@ internal class NodeRuntime(
 
     // MARK: - 生命周期
 
+    /** @Synchronized：start/shutdown 互斥——stopTunnel 与启动协程 finally 并发双入
+     *  shutdown 时（STOP 落在启动挂起点），无锁会双方都读到非 null node 各调一次
+     *  close() → native double free。串行化后第二次进入读到 null 自然幂等。 */
+    @Synchronized
     fun start(sender: PacketSender): Boolean {
         val n = Node(System.currentTimeMillis())
         val rc = n.init(
@@ -104,6 +108,7 @@ internal class NodeRuntime(
         return true
     }
 
+    @Synchronized
     fun shutdown() {
         // 先停后台驱动协程并等其真正退出，再 close node：协程仍处
         // processBackgroundTasks JNI 内时 close 会 native UAF。JNI 调用毫秒级，
