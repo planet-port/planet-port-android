@@ -239,6 +239,7 @@ import java.io.IOException
  * - 写 = 序列化到 <name>.tmp 后 rename 原子替换（序列化失败直接抛，不产生半截文件）；
  * - 读损坏 = 隔离为 <name>.corrupt（覆盖旧隔离）并返回 null——保留现场供排查，
  *   不自动重建；调用方决定内存默认值，文件由下一次真实写回重建。
+ * 读/写 try 块内不得引入挂起点（catch(Exception) 会吞 CancellationException 的前提）。
  */
 internal class JsonFileStore(private val json: Json) {
 
@@ -331,10 +332,12 @@ git commit -m "feat(store): 数据模型与 JSON 原子读写设施
 ```kotlin
 package cn.imgozi.planetport.store
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -376,7 +379,8 @@ class AppConfigStore(val paths: StorePaths) {
     private val opMutex = Mutex()
 
     private val _configChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
-    /** 配置发生需要隧道/其它读者感知的变化时发射（P2 订阅触发重配）。 */
+    /** 配置变更信号（P2 订阅触发重配）。有损合并：extraBufferCapacity=16 溢出即丢（对齐 iOS Darwin
+     *  通知语义），订阅方必须 level-triggered——收到信号即全量重读文件，不得假设逐条精确。 */
     val configChanges: SharedFlow<Unit> = _configChanges
 
     private val planetList = ListSerializer(PlanetProfile.serializer())
@@ -399,9 +403,9 @@ class AppConfigStore(val paths: StorePaths) {
 
     /** 不取域锁的写档（仅在已持有 opMutex 的复合段内使用，如导入器的读-追加-写）。 */
     internal suspend fun writePlanetsLocked(profiles: List<PlanetProfile>) {
-        // official 永在且排最前（以固定档案为准，天然去重）
-        val normalized = listOf(PlanetProfile.OFFICIAL) +
-            profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
+        // official 永在且排最前；档案本体以既有条目为准（保留 lastNodeId 等字段变更），缺失才用固定档案兜底
+        val official = profiles.firstOrNull { it.id == PlanetProfile.OFFICIAL_ID } ?: PlanetProfile.OFFICIAL
+        val normalized = listOf(official) + profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
         files.write(paths.planetsFile, normalized, planetList)
     }
 
@@ -453,8 +457,10 @@ class AppConfigStore(val paths: StorePaths) {
         files.write(paths.networksFile, readNetworksFile().orEmpty().filterNot { it.planetId == profile.id }, networkList)
         files.write(paths.moonsFile, readMoonsFile().orEmpty().filterNot { it.planetId == profile.id }, moonList)
 
-        profile.fileName?.let { File(paths.planetsDir, it).delete() }
-        paths.planetStateDir(profile.id).deleteRecursively()
+        withContext(Dispatchers.IO) {
+            profile.fileName?.let { File(paths.planetsDir, it).delete() }
+            paths.planetStateDir(profile.id).deleteRecursively()
+        }
 
         if (wasSelected) selectPlanetLocked(PlanetProfile.OFFICIAL_ID)
         if (wasActive) activatePlanetLocked(PlanetProfile.OFFICIAL_ID)
@@ -529,7 +535,7 @@ class AppConfigStore(val paths: StorePaths) {
      * prefs.json 不引导落盘（readPrefs 缺失时回退内存默认，首次真实写才创建）。
      * .corrupt 存在 = 上次现场待排查，不自动重建（读到 null 走内存默认）。
      */
-    private suspend fun bootstrap() {
+    private suspend fun bootstrap() = withContext(Dispatchers.IO) {
         if (!paths.planetsFile.exists() && !File(paths.planetsFile.path + ".corrupt").exists()) {
             files.write(paths.planetsFile, listOf(PlanetProfile.OFFICIAL), planetList)
         }
@@ -822,7 +828,9 @@ package cn.imgozi.planetport.ui
 
 import android.content.Context
 import cn.imgozi.planetport.store.AppConfigStore
+import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.MoonEntry
+import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.MoonImporter
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetKind
@@ -888,14 +896,62 @@ internal object P1SelfCheck {
         val active = store.activePlanetId()
         line(selected == profile.id && changed && active == profile.id && store.hasActivatedPlanet(), "select/activate 切换（$selected / $active）")
 
+        // 5.5 networks 分组盖戳（两个 planet 各写一组，互不串扰；active 取自激活 planet）
+        store.writeNetworks(
+            listOf(
+                NetworkEntry(
+                    networkId = "aabbccddeeff0011",
+                    networkName = "网A",
+                    lastActivated = true,
+                    routeViaZeroTier = true,
+                    dnsMode = DnsMode.network,
+                    customDns = listOf("1.1.1.1"),
+                )
+            ),
+            planetId = PlanetProfile.OFFICIAL_ID,
+        )
+        store.writeNetworks(
+            listOf(
+                NetworkEntry(
+                    networkId = "1122334455667788",
+                    networkName = "网B",
+                    lastActivated = true,
+                    routeViaZeroTier = false,
+                    dnsMode = DnsMode.custom,
+                    customDns = listOf("2.2.2.2", "8.8.8.8"),
+                )
+            ),
+            planetId = profile.id,
+        )
+        val byPlanet = store.readNetworksByPlanet()
+        val activeNetworks = store.readActiveNetworks()
+        line(
+            byPlanet[PlanetProfile.OFFICIAL_ID]?.size == 1 &&
+                byPlanet[profile.id]?.size == 1 &&
+                byPlanet[PlanetProfile.OFFICIAL_ID]!![0].planetId == PlanetProfile.OFFICIAL_ID &&
+                byPlanet[profile.id]!![0].planetId == profile.id &&
+                activeNetworks.size == 1 && activeNetworks[0].planetId == profile.id,
+            "networks 分组盖戳（两 planet 互不串扰）",
+        )
+
+        // 5.6 激活标记复位（静默，不发变更通知）
+        store.resetAllNetworkActivation()
+        line(
+            store.readNetworks(planetId = PlanetProfile.OFFICIAL_ID).none { it.lastActivated } &&
+                store.readNetworks(planetId = profile.id).none { it.lastActivated },
+            "networks 激活标记复位",
+        )
+
         // 6. 级联删除与回退
         store.deletePlanet(profile)
         val afterDelete = store.readPlanets()
         line(
             afterDelete.size == 1 && store.selectedPlanetId() == PlanetProfile.OFFICIAL_ID &&
                 store.activePlanetId() == PlanetProfile.OFFICIAL_ID &&
-                !File(store.paths.planetsDir, profile.fileName!!).exists(),
-            "删除级联回退 official",
+                !File(store.paths.planetsDir, profile.fileName!!).exists() &&
+                store.readNetworksByPlanet()[profile.id] == null &&
+                store.readNetworksByPlanet()[PlanetProfile.OFFICIAL_ID]?.size == 1,
+            "删除级联回退 official（含名下 networks，official 名下保留）",
         )
 
         return lines
@@ -980,7 +1036,7 @@ Run: `./gradlew assembleDebug`
 Expected: `BUILD SUCCESSFUL`
 
 Run: `adb -s 9311902b install -r app/build/outputs/apk/debug/app-debug.apk && adb -s 9311902b shell am start -n cn.imgozi.a.planetport/cn.imgozi.planetport.ui.MainActivity && sleep 3 && adb -s 9311902b exec-out screencap -p > /tmp/p1-selfcheck.png`
-Expected: 安装 Success；截图中 7 行自检全部以 `✓` 开头（JNI 加载 + 6 项 store 检查）。任何 `✗` 或异常行 = 修复后重来，不允许带病提交。
+Expected: 安装 Success；截图中 9 行自检全部以 `✓` 开头（JNI 加载 + 8 项 store 检查，含 networks 分组盖戳/激活复位/级联三项）。任何 `✗` 或异常行 = 修复后重来，不允许带病提交。
 （设备未连接时：记录说明并跳过装机，构建成功即可提交，装机验证顺延到用户在场时补做。）
 
 - [ ] **Step 4: Commit**
