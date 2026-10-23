@@ -12,22 +12,23 @@ Planet Port Android 是一个 ZeroTier 网络管理客户端：多份根服务�
 
 功能与 iOS 端 planet-port-i 完全一致。
 
-### 协议红线（硬约束）
+### 参考源与协议红线（硬约束）
 
-本工程的发布协议必须可自由指定（含闭源），因此：
+**唯一参考源：iOS 姊妹项目 planet-port-i**（作者自有）。所有功能行为、视觉
+交互、算法语义均以 planet-port-i 为规格基准；除 ZeroTier 官方 MPL-2.0 组件外，
+全部代码在本工程内从零编写。
 
 1. **GPL 血统代码零引入**：不引入 kaaass/ZerotierFix（GPLv2 血统）的任何
-   代码 —— 不拷贝、不逐行翻译。服务层/数据面行为规格来源为**作者自有资产**：
-   iOS 端实现（ZTBridge/FrameConverter 等，见 planet-port-i）与
-   `multi-network-dataplane.md` 算法文档。
-2. **自由资产仅限作者自建文件**：作者自有 Compose UI 文件、iOS 对齐期的
-   自有数据层文件可复用；任何来源不明的代码一律按规格重写。
-3. **文案/字符串取自 iOS 工程**（作者自有），不抄第三方翻译。
-4. **MPL-2.0 组件以 vendor 方式入仓**（源码拷贝进 `externals/`，非依赖仓库）：
+   代码 —— 不拷贝、不逐行翻译。
+2. **文案/字符串取自 planet-port-i**，不抄第三方翻译。
+3. **MPL-2.0 组件以 vendor 方式入仓**（源码拷贝进 `externals/`，非依赖仓库）：
    ZeroTier C++ 核心、JNI 绑定（含 JNIEnvGuard 补丁）、Java SDK。不修改任何
    MPL 文件，随源码携带 `LICENSE-MPL.txt` 与 `LICENSE.txt`。协议义务：这些
    文件保持 MPL-2.0；分发 APK 时 MPL 文件源码可获得 —— 仓库开源期间由本仓库
    直接履行，若日后闭源，零修改场景下指向官方 1.16.2 tag 即满足。
+
+满足上述约束后，本工程全部代码（MPL 文件本身除外）归作者所有，发布协议
+可自由指定（含闭源）。
 
 ## 2. 总体决策
 
@@ -37,7 +38,7 @@ Planet Port Android 是一个 ZeroTier 网络管理客户端：多份根服务�
 | 代码包 / namespace | `cn.imgozi.planetport`（与 applicationId 解耦，业内惯例） |
 | ZeroTier 核心 | 官方 1.16.2 (fe29cd8) **vendor 入仓**（对齐 iOS 端 Core/ 做法，锁定版本、免依赖仓库） |
 | 进程模型 | 单进程 VpnService + Kotlin 服务层 + StateFlow 通信 |
-| UI | 复用作者自有 Compose 资产（iOS 1:1 复刻成果），视觉不变 |
+| UI | 以 planet-port-i SwiftUI 视图树为基准 1:1 复刻为 Compose |
 | 数据迁移 | 无历史包袱，直接以 JSON 文件为唯一事实源 |
 | 测试 | 仅数据面 NAT/校验和算法附真实包级单元测试（算法正确性保险） |
 
@@ -139,15 +140,15 @@ UI 不持有服务内部对象（无 Binder、无事件总线）。ApplyTrace �
 
 ## 6. UI 层（ui/）
 
-- 复用作者自有 Compose 资产：HomeScreen、PlanetCardView、NetworkCardView 等
-  全套页面（iOS 1:1 复刻成果，视觉与交互零变化）；MainActivity/Theme/
-  ThemeManager 原样复用。
+- 以 planet-port-i 的 SwiftUI 视图树为唯一基准，1:1 复刻为 Compose：
+  HomeView、PlanetCardView、NetworkCardView、NetworkDetailView、PeerListView、
+  MoonView、PrefsView、AddPlanetForm、JoinNetworkSheet 等全套页面；
+  主题系统（预设国画色板 + 拾色器 + 状态色派生）、背景图/视差、扫码。
 - ViewModel 按页拆分：HomeViewModel、NetworkDetailVM、MoonViewModel、
   PlanetSettingsVM、PeersViewModel、PrefsViewModel，共享 StoreRepo +
   TunnelController。
 - 数据供给统一：状态从 `TunnelStateBus.collect` 读取；命令走对应 VM 方法。
 - 导航：单 Activity + 手写页面切换（6 个页面、层级浅，不引入 Navigation 库）。
-- zxing-android-embedded 扫码、PhotoPicker 背景图按既有用法接入。
 
 ## 7. 错误处理
 
@@ -172,8 +173,8 @@ UI 不持有服务内部对象（无 Binder、无事件总线）。ApplyTrace �
 | P4 | UI 全量 | 与 iOS 端视觉对照一致 |
 | P5 | 收尾 | 锁屏/切网重连、开机自启、DNS 三模式热重配 |
 
-关键路径 P2→P3；P4 自 P1 起可并行。隧道排障锚点：日志关键字表见
-`multi-network-dataplane.md` 第六节。
+关键路径 P2→P3；P4 自 P1 起可并行。隧道排障日志锚点在 P2/P3 实施中随实现建立
+（选网、源地址改写、ARP 学习、队列补发、路由下发、重建事件各设关键字）。
 
 ## 9. 不做清单
 
