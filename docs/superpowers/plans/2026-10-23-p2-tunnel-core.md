@@ -2655,3 +2655,35 @@ P2 完成标准（加入→ping 通→退出）真机验证达成。"
 5. **真机**：Mi Note 3 serial `9311902b`；截图验证用 mcp__zai-mcp-server__analyze_image 读图（P0/P1 已验证流程）。
 6. **跨任务字段名锚点**：`NetConf.assignedAddrs/routes/dns/mtu/mac/status`（T2 定义，T4/T5 消费）；`TunnelStateBus.tunnelState/nodeStatus/networkStatuses/applyTrace/eventLog`（T1 定义，T5/T6 消费）；`NodeRuntime.join/leave/orbit/networkConf/multicastSubscribe/processVirtualNetworkFrame/processWirePacket`（T2 定义，T3/T5 消费）。实现者发现签名不符时以已落地代码为准适配并在报告注明，禁止臆改已审接口。
 7. **activatePlanet 重启联动**：P1 的 activatePlanet 只写指针不发 configChanges——本计划范围内 join 场景不触发；切 planet 重启服务的完整联动留 P5（切换时隧道在跑则先 stop 再由用户手动 start）。T5 Service 组装不处理该场景。
+
+---
+
+## 附：实施差异记录（2026-10-24 终审闭合后回写，实际落地以代码为准）
+
+计划原文与实际代码的偏差，全部经任务审查/终审裁决留档（详见 .superpowers/sdd/progress.md P2 各条）：
+
+### 计划缺陷修正（实现期报出）
+
+1. `BROADCAST_MAC = -0x1000000000000L` 语义错误——`0xffffffffffffL`（2^48-1）为合法字面量并无溢出；负补码低 48 位全 0，经核心 MAC 掩码后广播帧全丢。已回正字面量（87451a6）。
+2. NDP 构造偏移错位——target 应 copyInto(p,8)、源 MAC 选项头在 24/25（RFC 4861 布局：ICMPv6 头 4 + flags 4 + target 16 + 选项 8）。已按 RFC 重排（87451a6）。
+3. `VpnService.Builder()` 写法错误——Builder 为非静态内部类（android-34 源码无 static 修饰），必须 `vpnService.Builder()` 实例语法。TunnelManager 构造因此为六参（计划 Interfaces 段为五参，增加 `vpnService: VpnService`）。
+4. `AppConfigStore.configChanges` 流本体提升至 companion——UI 与隧道各持 store 实例，实例级 SharedFlow 事件不互通，join 通路断裂；实例属性改 getter 转发，签名不变（93f6ebb）。
+
+### 审查驱动修复波（计划未含的增量）
+
+1. **四项停机修复**（T2/T3 审查合并，随 T5 落地 38cc9dc）：udp.start() SocketException 兜底→Failed；启动期 STOP 竞态 isActive 守卫；UdpCom.shutdown() 收包线程 join(500)；NodeRuntime.shutdown() supervisor cancel+runBlocking join 后再 node.close()。
+2. **数据面两 Important**（60f551f）：Dataplane 写流每代持有（swap 建立持有、换代/停机关闭——按 task 新建 FileOutputStream 会被 GC finalizer 关共享 fd 杀死在用 TUN）；RoutePlanner 物理接口 `networkPrefixLength <= 0` 跳过（点对点接口 -1 的 IPPrefix contains 恒真会挖空全部 ZT 路由）。
+3. **组装两 Important**（096619c）：startTunnel 启动体 try/finally + started 标志（未完成启动用局部引用幂等兜底清理）；onNetworkConfig 收到无地址 UP/CONFIG_UPDATE 清快照重聚合（控制器吊销授权的剔除路径）。
+4. **NodeRuntime @Synchronized**（c0dea6e，复审发现）：start/shutdown 互斥防 stopTunnel 与启动 finally 并发双入导致 native double free。
+5. **establish 幂等闸门**（40da709，T6 真机发现）：核心每 60s 重推 CONFIG_UPDATE 会重复重建 TUN（接口序号 26→39）；签名（地址/路由/MTU/DNS 内容拼接，RouteEntry 须按 addr/prefix 拼接——普通类 toString 为 identityHash）一致即跳过。
+6. **组播订阅移出闸门 + onRevoke + 签名时序**（176f88b，T6 审查发现）：leave 连带丢弃核心订阅记录，rejoin 后签名命中永不重订；订阅改为每次 apply 执行（核心按组去重幂等）。onRevoke 补完整 stopTunnel。appliedSignature 在 swap 成功后赋值。
+7. **终审停机收口**（638bb38）：Dataplane 读线程保存引用并在 shutdown join(500)；帧/配置消费协程 Job 存字段，stopTunnel 与 finally 两路径在 runtime.shutdown 前 runBlocking joinAll(500)；writePackets execute 包 RejectedExecutionException 护随。
+
+### 真机验证口径变更
+
+官方公开网络 Earth 已于 2023 被官方下线（join 返回 status=3），计划 Step 5 的公开网络预案物理不可达——改用 Mac docker 自建 controller 公开网络 66defc674a000001（172.28.100.0/24）等价验证。判定线达成：运行中 + nodeId + join 正常(1) + tun0 持 172.28.100.174/24 + applyTrace 含路由表 + 停止清理全过；ping 未通（split-tunnel 平台语义下 adb 流量不进 VPN routing domain + 对端方向组播未达，分析见账本，P3 数据面起点）。
+
+### 移交后续阶段的输入
+
+- **P3**：软件 NDP ICMPv6 校验和恒 0（iOS 同构共享问题，与真实 Linux 节点互通会被对端内核丢弃；IPv4 ARP 主路径安全）；被踢单网不拆 TUN 路由黑洞；run-as 应用 uid ping + statArpReq/Reply 计数判层为 P3 第一动作；split-tunnel 默认路由策略决策；若干停机窄窗顺手项（socket @Volatile、双 START 单实例守卫、swap 前 join 旧代读线程）。
+- **P4**：Builder 组装 try-catch（customDns 用户输入）；appliedEntries Triple 纳入 disableIpv6；leave 显式拆 TUN；store 进程单例收敛；startForegroundService 接线；Earth 下线致 P4 前需向用户索取长期私有网络做回归基线。
