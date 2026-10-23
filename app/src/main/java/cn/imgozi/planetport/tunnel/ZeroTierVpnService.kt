@@ -20,6 +20,7 @@ import java.io.File
 internal class ZeroTierVpnService : VpnService() {
     private var scope: CoroutineScope? = null
     private var runtime: NodeRuntime? = null
+    private var udpCom: UdpCom? = null
 
     companion object {
         private const val ACTION_START = "cn.imgozi.planetport.action.START"
@@ -59,19 +60,26 @@ internal class ZeroTierVpnService : VpnService() {
             val planetId = store.activePlanetId()
             val planet = store.readPlanets().firstOrNull { it.id == planetId }
                 ?: PlanetProfile.OFFICIAL
+            var runtimeRef: NodeRuntime? = null
+            val udp = UdpCom(this@ZeroTierVpnService) { data, remote ->
+                runtimeRef?.processWirePacket(data, remote)
+            }
             val r = NodeRuntime(
                 dataStoreRoot = File(filesDir, "zt"),
                 planetDir = store.paths.planetStateDir(planet.id),
                 planetFile = planet.fileName?.let { File(store.paths.planetsDir, it) },
                 scope = s,
             )
-            val ok = r.start(sender = { _, _, _, _ -> -1 })
+            runtimeRef = r
+            val ok = r.start(sender = udp.asPacketSender())
             if (!ok) {
                 TunnelStateBus.setTunnelState(TunnelState.Failed("核心初始化失败", recoverable = true))
                 stopTunnel()
                 return@launch
             }
+            udp.start()
             runtime = r
+            udpCom = udp
             TunnelStateBus.setTunnelState(TunnelState.Running)
             VpnNotification.update(this@ZeroTierVpnService, "运行中")
         }
@@ -81,6 +89,8 @@ internal class ZeroTierVpnService : VpnService() {
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
         scope?.cancel()
         scope = null
+        udpCom?.shutdown()
+        udpCom = null
         runtime?.shutdown()
         runtime = null
         stopForeground(true)
