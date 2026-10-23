@@ -321,6 +321,8 @@ git commit -m "feat(store): 数据模型与 JSON 原子读写设施
     - `fun readNetworks(planetId: String? = null): List<NetworkEntry>` / `fun readNetworksByPlanet(): Map<String, List<NetworkEntry>>` / `fun readActiveNetworks(): List<NetworkEntry>` / `fun writeNetworks(values: List<NetworkEntry>, planetId: String? = null)`
     - `fun readMoons(planetId: String? = null): List<MoonEntry>` / `fun readAllMoons(): List<MoonEntry>` / `fun readActiveMoons(): List<MoonEntry>` / `fun writeMoons(values: List<MoonEntry>, planetId: String? = null)`
     - `fun resetAllNetworkActivation()`
+    - `fun <T> mutate(block: suspend () -> T): T`（域锁内执行复合读-改-写；block 内只可用 *Locked 变体与读方法，禁调公开变更方法）
+    - `fun writePlanetsLocked(profiles: List<PlanetProfile>)`（internal，域锁内专用）
 
 - [ ] **Step 1: 写 AppConfigStore.kt**
 
@@ -331,12 +333,14 @@ package cn.imgozi.planetport.store
 
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
 /** 数据层文件布局（filesRoot 通常为 context.filesDir；自检页用 cacheDir 子目录隔离）。 */
-class StorePaths(filesRoot: File) {
+class StorePaths(private val filesRoot: File) {
     val configDir: File = File(filesRoot, "config")
     val planetsDir: File = File(filesRoot, "planets")
     val planetsFile: File = File(configDir, "planets.json")
@@ -353,6 +357,12 @@ class StorePaths(filesRoot: File) {
  * - 空表/缺失一律回退 [PlanetProfile.OFFICIAL]，writePlanets 保证 official 永在且最前；
  * - selected 仅是浏览上下文（静默）；active 是隧道实际使用的指针（P2 负责重启联动）；
  * - writeNetworks/writeMoons 按归属 Planet 整组替换并盖戳 planetId。
+ *
+ * 并发模型：公开变更方法在 opMutex 内完成整段读-改-写（跨多次文件 IO 的
+ * 复合操作串行化，防止交错覆盖丢更新）；复合操作的外层组合（如导入器的
+ * 读-追加-写）经 [mutate] 进入同一把锁。单次文件读写由 JsonFileStore 的
+ * 文件锁保证原子性；锁序恒为 opMutex → 文件锁，不反向嵌套（*Locked
+ * 变体不取 opMutex，供锁内复用；读方法不取 opMutex）。
  */
 class AppConfigStore(val paths: StorePaths) {
 
@@ -362,6 +372,9 @@ class AppConfigStore(val paths: StorePaths) {
     }
     private val files = JsonFileStore(json)
 
+    /** 域级复合操作互斥。 */
+    private val opMutex = Mutex()
+
     private val _configChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
     /** 配置发生需要隧道/其它读者感知的变化时发射（P2 订阅触发重配）。 */
     val configChanges: SharedFlow<Unit> = _configChanges
@@ -370,6 +383,9 @@ class AppConfigStore(val paths: StorePaths) {
     private val networkList = ListSerializer(NetworkEntry.serializer())
     private val moonList = ListSerializer(MoonEntry.serializer())
 
+    /** 在域锁内执行一段复合读-改-写（导入器等外部组合方使用；block 内禁调公开变更方法）。 */
+    suspend fun <T> mutate(block: suspend () -> T): T = opMutex.withLock { block() }
+
     // MARK: - Planet
 
     suspend fun readPlanets(): List<PlanetProfile> {
@@ -377,7 +393,12 @@ class AppConfigStore(val paths: StorePaths) {
         return readPlanetsFile().orEmpty().ifEmpty { listOf(PlanetProfile.OFFICIAL) }
     }
 
-    suspend fun writePlanets(profiles: List<PlanetProfile>) {
+    suspend fun writePlanets(profiles: List<PlanetProfile>) = mutate {
+        writePlanetsLocked(profiles)
+    }
+
+    /** 不取域锁的写档（仅在已持有 opMutex 的复合段内使用，如导入器的读-追加-写）。 */
+    internal suspend fun writePlanetsLocked(profiles: List<PlanetProfile>) {
         // official 永在且排最前（以固定档案为准，天然去重）
         val normalized = listOf(PlanetProfile.OFFICIAL) +
             profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
@@ -401,13 +422,21 @@ class AppConfigStore(val paths: StorePaths) {
     suspend fun hasActivatedPlanet(): Boolean = readPrefs().activePlanetId != null
 
     /** 只改变浏览上下文：不发变更通知，更不触发隧道。 */
-    suspend fun selectPlanet(id: String) {
+    suspend fun selectPlanet(id: String) = mutate {
+        selectPlanetLocked(id)
+    }
+
+    private suspend fun selectPlanetLocked(id: String) {
         if (readPlanets().none { it.id == id }) return
         writePrefs(readPrefs().copy(selectedPlanetId = id))
     }
 
     /** 设置隧道下次启动要加载的 Planet；只更新指针，重启联动由调用方（P2）负责。 */
-    suspend fun activatePlanet(id: String): Boolean {
+    suspend fun activatePlanet(id: String): Boolean = mutate {
+        activatePlanetLocked(id)
+    }
+
+    private suspend fun activatePlanetLocked(id: String): Boolean {
         if (readPlanets().none { it.id == id }) return false
         val changed = activePlanetId() != id
         writePrefs(readPrefs().copy(activePlanetId = id))
@@ -415,20 +444,20 @@ class AppConfigStore(val paths: StorePaths) {
     }
 
     /** 删除私有 Planet 及其名下 Network/Moon/文件/状态目录；被删者正在选中或生效则回退官方。 */
-    suspend fun deletePlanet(profile: PlanetProfile) {
-        if (profile.kind != PlanetKind.custom) return
+    suspend fun deletePlanet(profile: PlanetProfile) = mutate {
+        if (profile.kind != PlanetKind.custom) return@mutate
         val wasSelected = selectedPlanetId() == profile.id
         val wasActive = activePlanetId() == profile.id
 
-        writePlanets(readPlanets().filterNot { it.id == profile.id })
+        writePlanetsLocked(readPlanets().filterNot { it.id == profile.id })
         files.write(paths.networksFile, readNetworksFile().orEmpty().filterNot { it.planetId == profile.id }, networkList)
         files.write(paths.moonsFile, readMoonsFile().orEmpty().filterNot { it.planetId == profile.id }, moonList)
 
         profile.fileName?.let { File(paths.planetsDir, it).delete() }
         paths.planetStateDir(profile.id).deleteRecursively()
 
-        if (wasSelected) selectPlanet(PlanetProfile.OFFICIAL_ID)
-        if (wasActive) activatePlanet(PlanetProfile.OFFICIAL_ID)
+        if (wasSelected) selectPlanetLocked(PlanetProfile.OFFICIAL_ID)
+        if (wasActive) activatePlanetLocked(PlanetProfile.OFFICIAL_ID)
         notifyConfigChanged()
     }
 
@@ -448,7 +477,7 @@ class AppConfigStore(val paths: StorePaths) {
 
     suspend fun readActiveNetworks(): List<NetworkEntry> = readNetworks(planetId = activePlanetId())
 
-    suspend fun writeNetworks(values: List<NetworkEntry>, planetId: String? = null) {
+    suspend fun writeNetworks(values: List<NetworkEntry>, planetId: String? = null) = mutate {
         val id = planetId ?: selectedPlanetId()
         val all = readNetworksFile().orEmpty().filterNot { it.planetId == id } +
             values.map { it.copy(planetId = id) }
@@ -467,7 +496,7 @@ class AppConfigStore(val paths: StorePaths) {
 
     suspend fun readActiveMoons(): List<MoonEntry> = readMoons(planetId = activePlanetId())
 
-    suspend fun writeMoons(values: List<MoonEntry>, planetId: String? = null) {
+    suspend fun writeMoons(values: List<MoonEntry>, planetId: String? = null) = mutate {
         val id = planetId ?: selectedPlanetId()
         val all = readMoonsFile().orEmpty().filterNot { it.planetId == id } +
             values.map { it.copy(planetId = id) }
@@ -476,7 +505,7 @@ class AppConfigStore(val paths: StorePaths) {
     }
 
     /** 应用启动且隧道未连接时，把所有已连接标记复位（调用时机由 P2/P5 决定）。静默。 */
-    suspend fun resetAllNetworkActivation() {
+    suspend fun resetAllNetworkActivation() = mutate {
         val all = readNetworksFile().orEmpty()
         if (all.none { it.lastActivated }) return
         files.write(paths.networksFile, all.map { it.copy(lastActivated = false) }, networkList)
@@ -598,7 +627,10 @@ class PlanetImporter(private val store: AppConfigStore) {
         }
 
         val profile = PlanetProfile(id = id, name = normalizedName, kind = PlanetKind.custom, fileName = fileName)
-        store.writePlanets(store.readPlanets() + profile)
+        // 注册表读-追加-写整段持域锁，防止并发写丢更新
+        store.mutate {
+            store.writePlanetsLocked(store.readPlanets() + profile)
+        }
         return profile
     }
 
@@ -632,18 +664,22 @@ class PlanetImporter(private val store: AppConfigStore) {
     suspend fun rename(profile: PlanetProfile, to name: String) {
         val normalizedName = name.trim()
         if (normalizedName.isEmpty()) throw ImportError.EmptyName()
-        val profiles = store.readPlanets()
-        val index = profiles.indexOfFirst { it.id == profile.id }
-        if (index < 0) return
-        store.writePlanets(profiles.copy(index = index, element = profiles[index].copy(name = normalizedName)))
+        store.mutate {
+            val profiles = store.readPlanets()
+            val index = profiles.indexOfFirst { it.id == profile.id }
+            if (index < 0) return@mutate
+            store.writePlanetsLocked(profiles.copy(index = index, element = profiles[index].copy(name = normalizedName)))
+        }
     }
 
     /** 更新自定义图标；null 表示恢复自动生成。 */
     suspend fun updateIcon(profile: PlanetProfile, to icon: String?) {
-        val profiles = store.readPlanets()
-        val index = profiles.indexOfFirst { it.id == profile.id }
-        if (index < 0) return
-        store.writePlanets(profiles.copy(index = index, element = profiles[index].copy(icon = icon)))
+        store.mutate {
+            val profiles = store.readPlanets()
+            val index = profiles.indexOfFirst { it.id == profile.id }
+            if (index < 0) return@mutate
+            store.writePlanetsLocked(profiles.copy(index = index, element = profiles[index].copy(icon = icon)))
+        }
     }
 
     /** 已存在的 World ID 集合（含官方内置），供添加时查重。 */
