@@ -1,7 +1,7 @@
 # Planet Port Android 设计文档
 
 > 日期：2026-10-23
-> 功能基准：iOS 端 planet-port-i（功能完全一致）
+> 功能基准：iOS 端 planet-port-ios（功能完全一致）
 > 性质：全新工程，从零搭建
 
 ## 1. 项目定位
@@ -10,17 +10,17 @@ Planet Port Android 是一个 ZeroTier 网络管理客户端：多份根服务�
 随身切换、多网络同时连接、Moon 节点、按需连接、完整主题定制。不发明网络，
 只把 ZeroTier 的连接能力包装成好用、可控、可定制的 Android App。
 
-功能与 iOS 端 planet-port-i 完全一致。
+功能与 iOS 端 planet-port-ios 完全一致。
 
 ### 参考源与协议红线（硬约束）
 
-**唯一参考源：iOS 姊妹项目 planet-port-i**（作者自有）。所有功能行为、视觉
-交互、算法语义均以 planet-port-i 为规格基准；除 ZeroTier 官方 MPL-2.0 组件外，
+**唯一参考源：iOS 姊妹项目 planet-port-ios**（作者自有）。所有功能行为、视觉
+交互、算法语义均以 planet-port-ios 为规格基准；除 ZeroTier 官方 MPL-2.0 组件外，
 全部代码在本工程内从零编写。
 
 1. **GPL 血统代码零引入**：不引入 kaaass/ZerotierFix（GPLv2 血统）的任何
    代码 —— 不拷贝、不逐行翻译。
-2. **文案/字符串取自 planet-port-i**，不抄第三方翻译。
+2. **文案/字符串取自 planet-port-ios**，不抄第三方翻译。
 3. **MPL-2.0 组件以 vendor 方式入仓**（源码拷贝进 `externals/`，非依赖仓库）：
    ZeroTier C++ 核心、JNI 绑定（官方原样，ZT_jniutils.h 唯一自维护修改：
    GETENV 守卫）、Java SDK。MPL 文件保持原样，唯一例外：core/jni/ZT_jniutils.h
@@ -40,7 +40,7 @@ Planet Port Android 是一个 ZeroTier 网络管理客户端：多份根服务�
 | 代码包 / namespace | `cn.imgozi.planetport`（与 applicationId 解耦，业内惯例） |
 | ZeroTier 核心 | 官方 1.16.2 (fe29cd8) **vendor 入仓**（对齐 iOS 端 Core/ 做法，锁定版本、免依赖仓库） |
 | 进程模型 | 单进程 VpnService + Kotlin 服务层 + StateFlow 通信 |
-| UI | 以 planet-port-i SwiftUI 视图树为基准 1:1 复刻为 Compose |
+| UI | 以 planet-port-ios SwiftUI 视图树为基准 1:1 复刻为 Compose |
 | 数据迁移 | 无历史包袱，直接以 JSON 文件为唯一事实源 |
 | 测试 | 仅数据面 NAT/校验和算法附真实包级单元测试（算法正确性保险） |
 
@@ -143,7 +143,7 @@ UI 不持有服务内部对象（无 Binder、无事件总线）。ApplyTrace �
 
 ## 6. UI 层（ui/）
 
-- 以 planet-port-i 的 SwiftUI 视图树为唯一基准，1:1 复刻为 Compose：
+- 以 planet-port-ios 的 SwiftUI 视图树为唯一基准，1:1 复刻为 Compose：
   HomeView、PlanetCardView、NetworkCardView、NetworkDetailView、PeerListView、
   MoonView、PrefsView、AddPlanetForm、JoinNetworkSheet 等全套页面；
   主题系统（预设国画色板 + 拾色器 + 状态色派生）、背景图/视差、扫码。

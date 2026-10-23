@@ -17,7 +17,7 @@
 - applicationId `cn.imgozi.a.planetport`；namespace/代码包 `cn.imgozi.planetport`；rootProject.name `PlanetPort`
 - 工具链版本锁定（见 Tech Stack，与本节一致，不得偏离）
 - ZeroTier 源码：官方仓库 github.com/zerotier/ZeroTierOne @ 1.16.2 (fe29cd88886e4f58547ba7f740b2d73eb49ab222) 的 vendor 子集；MPL 文件零修改；`LICENSE-MPL.txt` 与 `LICENSE.txt` 随源码入仓
-- GPL 血统代码零引入；唯一参考源为 iOS 姊妹项目 planet-port-i
+- GPL 血统代码零引入；唯一参考源为 iOS 姊妹项目 planet-port-ios（目录已由 planet-port-i 更名）
 - 不写测试用例；验证 = 编译 + 真机冒烟
 - 真机设备 serial `10CEBT0B4S000B0`（未连接则说明并跳过装机步骤）
 - commit 信息：中文 Conventional Commits，必须写 Body，禁止任何署名尾注
