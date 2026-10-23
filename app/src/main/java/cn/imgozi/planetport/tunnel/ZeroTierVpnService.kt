@@ -8,10 +8,14 @@ import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StorePaths
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.net.SocketException
 
@@ -27,6 +31,11 @@ internal class ZeroTierVpnService : VpnService() {
     private var converter: FrameConverter? = null
     private var dataplane: Dataplane? = null
     private var tunnelManager: TunnelManager? = null
+    /** 帧/配置消费协程——停机前须 join：scope.cancel 只置取消标志不中断 JNI，
+     *  协程可能正处 handleFrameFromCore 冲刷待决包或 applyAggregated 的
+     *  join/multicastSubscribe JNI 内，runtime.shutdown 关 Node 会 native UAF */
+    private var frameJob: Job? = null
+    private var configJob: Job? = null
 
     companion object {
         private const val ACTION_START = "cn.imgozi.planetport.action.START"
@@ -89,7 +98,7 @@ internal class ZeroTierVpnService : VpnService() {
                     return@launch
                 }
                 // 帧消费：核心回调帧 → 转换 → 写 TUN（IP 包无需协议族标注，TUN 按 IP 头自识别）
-                s.launch {
+                frameJob = s.launch {
                     for (ev in r.frameChannel) {
                         val packets = conv.handleFrameFromCore(
                             ev.nwid, ev.srcMac, ev.dstMac, ev.etherType, ev.frame
@@ -98,7 +107,7 @@ internal class ZeroTierVpnService : VpnService() {
                     }
                 }
                 // 配置消费：netconf 事件 → TunnelManager
-                s.launch {
+                configJob = s.launch {
                     for (ev in r.configChannel) tm.onNetworkConfig(ev.nwid, ev.op, ev.conf)
                 }
                 try {
@@ -129,6 +138,7 @@ internal class ZeroTierVpnService : VpnService() {
                     tm.stop()
                     dp.shutdown()
                     udp.shutdown() // 先 join 收包线程再关 Node（防 native UAF，同 stopTunnel 顺序）
+                    joinConsumerJobs() // 启动失败分支同理：消费协程可能仍在 JNI 内
                     r.shutdown()
                     // 仅清自己这轮的字段：身份比对防误清新一轮 START 的装配
                     if (runtime === r) {
@@ -154,12 +164,35 @@ internal class ZeroTierVpnService : VpnService() {
         converter = null
         udpCom?.shutdown()
         udpCom = null
+        joinConsumerJobs()
         runtime?.shutdown()
         runtime = null
         TunnelStateBus.setNodeStatus(null)
         TunnelStateBus.clearNetworkStatuses()
         stopForeground(true)
         stopSelf()
+    }
+
+    /**
+     * 停机收口：等帧/配置消费协程真正退出后再关 Node。scope.cancel 只置取消标志
+     * 不中断 JNI——协程可能正处 handleFrameFromCore 冲刷待决包（逐目标逐包 JNI）或
+     * applyAggregated 的 join/multicastSubscribe JNI 内，直接 r.shutdown() 会 native
+     * UAF（同 supervisor/udp join 收口）。runBlocking 不继承外层 Job，取消态下
+     * finally 也能等完；主线程阻塞上限 500ms，叠加既有 udp/supervisor join 仍远低
+     * 于 ANR 阈值。joinAll 重抛子协程异常——协程已退出 JNI 即达目的，停机中吞掉。
+     */
+    private fun joinConsumerJobs() {
+        val jobs = listOfNotNull(frameJob, configJob)
+        frameJob = null
+        configJob = null
+        if (jobs.isEmpty()) return
+        runBlocking {
+            try {
+                withTimeoutOrNull(500) { jobs.joinAll() }
+            } catch (_: Exception) {
+                // 消费协程异常完成也算退出 JNI，停机路径吞掉
+            }
+        }
     }
 
     /** 系统撤销 VPN（快捷开关关闭/被其他 VPN 接管）——必须走完整停机清理，
