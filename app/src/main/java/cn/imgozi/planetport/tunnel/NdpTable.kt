@@ -29,6 +29,37 @@ internal class NdpTable {
         fun neighborAdvertisement(target: Ipv6Address, senderMac: Long): ByteArray =
             icmpv6(136, target, senderMac, flagSolicited = true)
 
+        /**
+         * ICMPv6 伪头校验和（RFC 4443 §8.1）：src(16B)+dst(16B)+payload 长度(32bit)+
+         * 3 零字节+nextHeader(58)，与 ICMPv6 载荷一起按 RFC 1071 互联网校验和求和，
+         * 结果取反回写 payload[2..3]。计算前先清零校验和字段。真实节点内核会校验，
+         * 恒 0 的报文被丢弃（Android↔Android 双端软件路径不校验故此前未暴露）。
+         */
+        fun icmpv6Checksum(src: Ipv6Address, dst: Ipv6Address, payload: ByteArray) {
+            payload[2] = 0; payload[3] = 0
+            var sum = 0L
+            fun add16(word: Int) { sum += word }
+            for (i in 0 until 16 step 2) {
+                add16(((src.bytes[i].toInt() and 0xff) shl 8) or (src.bytes[i + 1].toInt() and 0xff))
+            }
+            for (i in 0 until 16 step 2) {
+                add16(((dst.bytes[i].toInt() and 0xff) shl 8) or (dst.bytes[i + 1].toInt() and 0xff))
+            }
+            add16(payload.size) // 伪头 32bit 长度的高 16 位恒 0，单字相加等价
+            add16(58)
+            var i = 0
+            while (i < payload.size) {
+                val hi = payload[i].toInt() and 0xff
+                val lo = if (i + 1 < payload.size) payload[i + 1].toInt() and 0xff else 0
+                add16((hi shl 8) or lo)
+                i += 2
+            }
+            while (sum shr 16 != 0L) sum = (sum and 0xffff) + (sum shr 16)
+            val ck = sum.toInt().inv() and 0xffff
+            payload[2] = (ck shr 8).toByte()
+            payload[3] = (ck and 0xff).toByte()
+        }
+
         /** IPv6 组播地址 → 组播 MAC（0x3333 + 低 32 位） */
         fun multicastMAC(v6: Ipv6Address): Long {
             val b = v6.bytes

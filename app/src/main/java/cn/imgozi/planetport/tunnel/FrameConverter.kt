@@ -229,9 +229,12 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
         when (p.type) {
             135 -> if (ctx.ipv6Addresses.contains(p.target)) {
                 val na = NdpTable.neighborAdvertisement(p.target, ctx.mac)
+                // NA 源地址 = 被解析的本机地址（请求方问"谁持有 target"，我方持有）；
+                // 校验和伪头用真实 src/dst，恒 0 会被真实节点内核丢弃
+                NdpTable.icmpv6Checksum(p.target, srcIPv6, na)
                 runtime.processVirtualNetworkFrame(
                     ctx.nwid, ctx.mac, senderMac, Ethernet.TYPE_IPV6, 0,
-                    ipv6Packet(na, srcIPv6),
+                    ipv6Packet(na, p.target, srcIPv6),
                 )
             }
             136 -> {
@@ -271,22 +274,28 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
     }
 
     private fun sendNeighborSolicitationLocked(ctx: NetworkContext, target: Ipv6Address) {
+        val src = ctx.ipv6Addresses.firstOrNull() ?: return
         val ns = NdpTable.neighborSolicitation(target, ctx.mac)
+        // RFC 4861：NS 的 L3 目的 = 请求节点组播地址（此前误用 target 单播，组播只在 L2），
+        // 源 = 本机接口地址（:: 仅 DAD 合法）
+        val dst = NdpTable.solicitedNodeMulticast(target)
+        NdpTable.icmpv6Checksum(src, dst, ns)
         runtime.processVirtualNetworkFrame(
             ctx.nwid, ctx.mac,
-            NdpTable.multicastMAC(NdpTable.solicitedNodeMulticast(target)),
-            Ethernet.TYPE_IPV6, 0, ipv6Packet(ns, target),
+            NdpTable.multicastMAC(dst),
+            Ethernet.TYPE_IPV6, 0, ipv6Packet(ns, src, dst),
         )
     }
 
-    /** ICMPv6 载荷包成最小 IPv6 包（next header 58，hop limit 255，src ::） */
-    private fun ipv6Packet(payload: ByteArray, dst: Ipv6Address): ByteArray {
+    /** ICMPv6 载荷包成最小 IPv6 包（next header 58，hop limit 255） */
+    private fun ipv6Packet(payload: ByteArray, src: Ipv6Address, dst: Ipv6Address): ByteArray {
         val p = ByteArray(40 + payload.size)
         p[0] = 0x60
         p[4] = ((payload.size shr 8) and 0xff).toByte()
         p[5] = (payload.size and 0xff).toByte()
         p[6] = 58
         p[7] = 255.toByte()
+        src.bytes.copyInto(p, 8)
         dst.bytes.copyInto(p, 24)
         payload.copyInto(p, 40)
         return p
