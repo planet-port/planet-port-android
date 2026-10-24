@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
 import kotlinx.coroutines.CoroutineScope
@@ -75,11 +76,15 @@ internal class ZeroTierVpnService : VpnService() {
         if (scope?.isActive == true) {
             VpnNotification.start(
                 this,
-                if (TunnelStateBus.tunnelState.value is TunnelState.Running) "运行中" else "启动中",
+                if (TunnelStateBus.tunnelState.value is TunnelState.Running) {
+                    getString(R.string.tunnel_status_running)
+                } else {
+                    getString(R.string.tunnel_status_starting)
+                },
             )
             return
         }
-        VpnNotification.start(this, "启动中")
+        VpnNotification.start(this, getString(R.string.tunnel_status_starting))
         TunnelStateBus.setTunnelState(TunnelState.Starting)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = s
@@ -97,6 +102,7 @@ internal class ZeroTierVpnService : VpnService() {
                 planetDir = store.paths.planetStateDir(planet.id),
                 planetFile = planet.fileName?.let { File(store.paths.planetsDir, it) },
                 scope = s,
+                identityCollisionReason = getString(R.string.tunnel_status_fatalConflict),
             )
             runtimeRef = r
             val conv = FrameConverter(r)
@@ -107,7 +113,9 @@ internal class ZeroTierVpnService : VpnService() {
             var started = false
             try {
                 if (!r.start(sender = udp.asPacketSender())) {
-                    TunnelStateBus.setTunnelState(TunnelState.Failed("核心初始化失败", recoverable = true))
+                    TunnelStateBus.setTunnelState(
+                        TunnelState.Failed(getString(R.string.tunnel_error_coreInit), recoverable = true)
+                    )
                     stopTunnel()
                     return@launch
                 }
@@ -128,7 +136,9 @@ internal class ZeroTierVpnService : VpnService() {
                     udp.start()
                 } catch (e: SocketException) {
                     // 9994 被占：绑定失败不可继续（无物理收发），也不能进程崩溃
-                    TunnelStateBus.setTunnelState(TunnelState.Failed("UDP 9994 绑定失败", recoverable = true))
+                    TunnelStateBus.setTunnelState(
+                        TunnelState.Failed(getString(R.string.tunnel_error_udpBindFailed), recoverable = true)
+                    )
                     stopTunnel()
                     return@launch
                 }
@@ -143,7 +153,7 @@ internal class ZeroTierVpnService : VpnService() {
                 }
                 started = true
                 TunnelStateBus.setTunnelState(TunnelState.Running)
-                VpnNotification.update(this@ZeroTierVpnService, "运行中")
+                VpnNotification.update(this@ZeroTierVpnService, getString(R.string.tunnel_status_running))
             } finally {
                 if (!started) {
                     // 局部引用兜底清理（幂等，与 stopTunnel 双清安全）；finally 内全非挂起，
@@ -171,7 +181,7 @@ internal class ZeroTierVpnService : VpnService() {
         // ACTION_STOP 同样可能经 startForegroundService 下发（后台停止场景）：
         // 先起前台满足 5s 窗口义务，再走 stopForeground(true) 收口，通知随收口
         // 移除不留存。onRevoke/启动失败路径重复 startForeground 幂等无害
-        VpnNotification.start(this, "已停止")
+        VpnNotification.start(this, getString(R.string.tunnel_status_stopped))
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
         scope?.cancel()
         scope = null

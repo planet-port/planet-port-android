@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.tunnel
 
 import android.net.VpnService
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppConfigStore
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
@@ -262,7 +263,7 @@ internal class TunnelManager(
             // 与 iOS 的已知差异：iOS 同场景「未套设置」留存旧配置且 vpnRunning=false，
             // Android 保留服务存活语义、数据面按拆 TUN 处理
             if (TunnelStateBus.tunnelState.value is TunnelState.Running) {
-                VpnNotification.update(vpnService, "运行中（无网络）")
+                VpnNotification.update(vpnService, vpnService.getString(R.string.tunnel_status_runningNoNetwork))
             }
             TunnelStateBus.setApplyTrace(
                 "items=${items.size} valid=0（无可用网络，已拆 TUN）\n" + converter.debugSummary()
@@ -373,12 +374,16 @@ internal class TunnelManager(
             throw e
         } catch (e: Exception) {
             TunnelStateBus.log("TUN 组装异常: ${e.javaClass.simpleName}: ${e.message}")
-            TunnelStateBus.setTunnelState(TunnelState.Failed("TUN 组装失败", recoverable = true))
+            TunnelStateBus.setTunnelState(
+                TunnelState.Failed(vpnService.getString(R.string.tunnel_error_tunAssemble), recoverable = true),
+            )
             return@withLock
         }
         if (fd == null) {
             TunnelStateBus.log("establish 失败（Builder 拒绝，多为路由/地址冲突）")
-            TunnelStateBus.setTunnelState(TunnelState.Failed("TUN 建立失败", recoverable = true))
+            TunnelStateBus.setTunnelState(
+                TunnelState.Failed(vpnService.getString(R.string.tunnel_error_tunEstablish), recoverable = true),
+            )
             return@withLock
         }
         if (!dataplane.swap(fd)) {

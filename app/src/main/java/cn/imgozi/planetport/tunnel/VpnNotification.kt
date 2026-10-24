@@ -38,7 +38,12 @@ internal object VpnNotification {
 
     private fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "隧道状态", NotificationManager.IMPORTANCE_LOW)
+            // 渠道名随系统设置可见（Android 独有概念，iOS 无对应 key）
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.tunnel_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            )
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(channel)
         }

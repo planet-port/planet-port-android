@@ -73,6 +73,13 @@ internal class NodeRuntime(
     private val planetDir: File,
     private val planetFile: File?,
     private val scope: CoroutineScope,
+    /**
+     * 节点身份冲突（EVENT_FATAL_ERROR_IDENTITY_COLLISION）的失败原因文案。
+     * 本类不持 Context，文案由持 Context 的装配方（ZeroTierVpnService）注入；
+     * reason 经 HomeViewModel 启动失败弹窗直显用户，须为本地化资源串
+     * （iOS tunnel.status.fatalConflict 同义）。
+     */
+    private val identityCollisionReason: String,
 ) {
     val frameChannel = Channel<FrameEvent>(Channel.UNLIMITED)
     val configChannel = Channel<NetConfEvent>(Channel.UNLIMITED)
@@ -270,7 +277,7 @@ internal class NodeRuntime(
                 Event.EVENT_OFFLINE -> updateOnline(false)
                 Event.EVENT_FATAL_ERROR_IDENTITY_COLLISION -> {
                     TunnelStateBus.setTunnelState(
-                        TunnelState.Failed("节点身份冲突（同 nodeId 已在别处运行）", recoverable = false)
+                        TunnelState.Failed(identityCollisionReason, recoverable = false)
                     )
                     TunnelStateBus.log("FATAL_ERROR_IDENTITY_COLLISION")
                 }

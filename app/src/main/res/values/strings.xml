@@ -245,4 +245,10 @@
     <string name="planet_iconUpdateFailed">更新图标失败</string>
     <!-- Android 侧独有文案（iOS Localizable.xcstrings 无对应 key） -->
     <string name="home_error_vpnPermissionDenied">VPN 授权被拒</string>
+    <string name="tunnel_channel_name">隧道状态</string>
+    <string name="tunnel_status_starting">启动中</string>
+    <string name="tunnel_status_runningNoNetwork">运行中（无网络）</string>
+    <string name="tunnel_error_udpBindFailed">UDP 9994 绑定失败</string>
+    <string name="tunnel_error_tunAssemble">TUN 组装失败</string>
+    <string name="tunnel_error_tunEstablish">TUN 建立失败</string>
 </resources>
