@@ -20,7 +20,7 @@ internal class UdpCom(
     private val vpnService: VpnService,
     private val onPacket: (data: ByteArray, remote: InetSocketAddress) -> Unit,
 ) {
-    private var socket: DatagramSocket? = null
+    @Volatile private var socket: DatagramSocket? = null
     private var thread: Thread? = null
     @Volatile private var generation = 0
 

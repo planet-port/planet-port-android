@@ -199,8 +199,14 @@ internal class TunnelManager(
                 "快照=${snapshots.keys.sorted().joinToString(",") { "%016x".format(it) }}"
         )
         if (valid.isEmpty()) {
+            // 全部网络失效（被踢/无地址）：拆 TUN——fd 关闭即接口消失、系统路由自动撤销。
+            // converter 侧软清理（retainOnly）已在上面完成。iOS 同构行为是保留旧设置成
+            // 黑洞，Android 主动拆优于此（iOS 侧同步修复记 P5）。签名必须同置 null：
+            // 同配置网络恢复时若签名命中会被幂等闸门挡住不重建
+            dataplane.shutdown()
+            appliedSignature = null
             TunnelStateBus.setApplyTrace(
-                "items=${items.size} valid=0（无可用网络，未套设置）\n" + converter.debugSummary()
+                "items=${items.size} valid=0（无可用网络，已拆 TUN）\n" + converter.debugSummary()
             )
             return@withLock
         }

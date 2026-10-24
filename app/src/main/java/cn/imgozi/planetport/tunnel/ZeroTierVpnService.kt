@@ -66,6 +66,8 @@ internal class ZeroTierVpnService : VpnService() {
     }
 
     private fun startTunnel() {
+        // 双 START 守卫：二轮启动会 bind 9994 失败错置 Failed 状态；一轮存活则忽略重复指令
+        if (scope?.isActive == true) return
         TunnelStateBus.setTunnelState(TunnelState.Starting)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = s

@@ -15,6 +15,8 @@ import java.util.concurrent.RejectedExecutionException
  */
 internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
     private var generation = 0
+    /** 停机标志——拒绝停机后迟到的 swap（establish 滞留 fd 泄漏） */
+    @Volatile private var stopped = false
     private var currentFd: ParcelFileDescriptor? = null
     /** 每代持有一份写流——按 task 新建会被 GC finalizer 关闭共享 fd 杀死在用 TUN */
     private var outputStream: FileOutputStream? = null
@@ -25,8 +27,16 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
 
     @Synchronized
     fun swap(fd: ParcelFileDescriptor) {
+        if (stopped) {
+            // 停机后迟到的 establish（withContext(IO) 内不可取消）：拒绝并关闭新 fd 防泄漏
+            fd.close()
+            return
+        }
         generation += 1
         val gen = generation
+        // 旧代读循环看到 generation 变化即退出，但可能仍在 onTunPacket 的 JNI 内——
+        // 等它落地再关旧资源（终审 Minor：换代窗口残窗）
+        readThread?.join(500)
         writeExecutor?.shutdownNow()
         outputStream?.close()
         currentFd?.close()
@@ -69,6 +79,7 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
 
     @Synchronized
     fun shutdown() {
+        stopped = true
         generation += 1
         writeExecutor?.shutdownNow()
         writeExecutor = null
