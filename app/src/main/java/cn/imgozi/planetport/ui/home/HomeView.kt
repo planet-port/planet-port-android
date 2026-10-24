@@ -49,6 +49,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
@@ -412,9 +413,27 @@ private fun PlanetProfile.displayNameRes(): String =
 /**
  * 头区（iOS headerZone :178-244）：半透明背景渐变盖过状态栏。行结构 = 左 40dp
  * logo + 右列（高锁 40dp 与 logo 等高）：标题行（标题 + 活跃行星 chip + 设置
- * 入口）在顶，圆点指示器沉底 offset -2——位于标题正下方、logo 右缘起点处，
- * 非屏幕居中（此前居中行样式为视觉偏差）。
+ * 入口）在顶，圆点指示器沉底（dot 中心 ≈ logo 底上方 4dp）——位于标题正下方、
+ * 标题左缘起点处，非屏幕居中（此前居中行样式为视觉偏差）。
  */
+/** 热区行「零高度叠加」：本节点占 0 高度（不消耗父 Column 高度预算），
+ *  子内容按 [dotCenterOffset]（dot 视觉中心相对本节点原点的 y）绝对放置，
+ *  可向上/向下越界绘制与命中（父链无 clip）——iOS overlay/background
+ *  热区语义的 Compose 等价物。 */
+private fun Modifier.zeroHeightOverlayAt(dotCenterOffset: androidx.compose.ui.unit.Dp): Modifier =
+    this.then(
+        Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(
+                constraints.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity),
+            )
+            layout(placeable.width, 0) {
+                // 本节点占 0 高、放置在标题行之后；dot 中心 = 本节点原点 + dotCenterOffset
+                val top = dotCenterOffset.roundToPx() - placeable.height / 2
+                placeable.placeRelative(0, top)
+            }
+        },
+    )
+
 @Composable
 private fun HeaderZone(
     state: HomeUiState,
@@ -496,22 +515,38 @@ private fun HeaderZone(
                             )
                         }
                     }
-                    IconButton(onClick = onOpenPrefs) {
+                    // iOS :218-226：gearshape 20pt medium、36×36 热区、tint 主色。
+                    // 不用 IconButton（48dp 最小交互尺寸会撑爆右列 40dp 高度预算，
+                    // 把沉底指示器挤出可视区）
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClickLabel = stringResource(R.string.common_settings),
+                            ) { onOpenPrefs() },
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
                             contentDescription = stringResource(R.string.common_settings),
-                            tint = MaterialTheme.colorScheme.onSurface,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                // 圆点指示器（iOS indicator :289-312）：沉底右列 leading 起点，
-                // 再上提 2dp（offset 纯视觉）；选中 20×6 主色胶囊 / 未选 6×6 灰。
-                // 视觉间隙 7dp = 相邻各让 3.5；热区竖向 44dp、横向吃满间隙——
-                // iOS 用 background 44pt 热区不撑布局（可重叠），Compose 命中区
-                // 不可越布局边界，取「间隙均分」保 7dp 视觉无死角
+                // 圆点指示器（iOS indicator :289-312）：视觉中心 ≈ logo 底上 4dp、
+                // leading 起点；选中 20×6 主色胶囊 / 未选 6×6 灰。
+                // iOS 热区 = background 44pt 方形（以点为中心、不参与布局可越界）；
+                // Compose 等价 = [zeroHeightOverlayAt]：本节点占 0 高度（不消耗右列
+                // 40dp 预算），dot 行以点中心为锚绝对放置，越界绘制与命中皆可。
+                // 横向热区 = 间隙均分（相邻各让 3.5dp 相接，视觉间隙 7dp 无死角）
                 Row(
-                    modifier = Modifier.offset(y = (-2).dp),
+                    modifier = Modifier
+                        .zeroHeightOverlayAt(dotCenterOffset = (-2).dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     repeat(pageCount) { idx ->
