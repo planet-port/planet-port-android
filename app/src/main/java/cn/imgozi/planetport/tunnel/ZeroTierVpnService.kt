@@ -100,6 +100,7 @@ internal class ZeroTierVpnService : VpnService() {
             val planetId = store.activePlanetId()
             val planet = store.readPlanets().firstOrNull { it.id == planetId }
                 ?: PlanetProfile.OFFICIAL
+            TunnelStateBus.log("core start planet=${planet.id} file=${planet.fileName}")
             var runtimeRef: NodeRuntime? = null
             val udp = UdpCom(this@ZeroTierVpnService) { data, remote ->
                 runtimeRef?.processWirePacket(data, remote)

@@ -305,7 +305,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun disconnectOnConnectTimeout() {
         val s = _state.value
+        // nodeOnline 现场复核（终审 I-1 同族竞态）：_state 快照可能落后——核心恰在
+        // 6 分钟到点前达成 online 而 nodeStatus collector 尚未调度时，快照仍是
+        // false，会把刚上线的节点误判超时并断开全部启用网络
         if (!s.tunnelRunning || s.nodeOnline) return
+        if (TunnelStateBus.nodeStatus.value?.online == true) return
         // 只置空引用，不 cancel：本函数正是由该 Job 执行，cancel 自身会让
         // 下一个挂起点（readNetworks）抛 CancellationException，静默吞掉后续写盘
         connectTimeoutJob = null

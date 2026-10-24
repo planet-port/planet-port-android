@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -176,7 +177,29 @@ object TunnelController {
     fun restartIfRunning(context: Context) {
         if (!isRunning) return
         if (reconnectInFlight) {
-            TunnelStateBus.log("停启编排进行中，合并本次热重启触发")
+            // 切网自愈编排不能像丢普通热重启那样丢弃本次触发：行星切换经此路径时，
+            // 在飞编排的 START 可能已带旧指针起核（startTunnel 读盘与 activatePlanet
+            // 写盘竞态），吞掉重启会让旧 planet 文件的核心 join 新行星的网络——
+            // 经旧根服务器取不到 netconf，最终 6 分钟超时自动断开。排队等在飞编排
+            // 收口后补发：届时重读指针，确保核心按新行星装载
+            TunnelStateBus.log("停启编排进行中，排队等待收口后补发热重启")
+            val app = context.applicationContext
+            restartScope.launch {
+                // 有界等待：awaitSettled 上限 15s，20s 仍收口即放弃（进程级异常场景）
+                var waited = 0
+                while (reconnectInFlight && waited < 20_000) {
+                    delay(200)
+                    waited += 200
+                }
+                when {
+                    reconnectInFlight ->
+                        TunnelStateBus.log("等待在飞编排收口超时，放弃后补重启")
+                    // 收口后隧道又被停掉（用户主动/编排失败）：直接起核读新指针，
+                    // 授权此前已具备（触发时隧道在跑），不经授权器
+                    !isRunning -> ZeroTierVpnService.start(app)
+                    else -> restartIfRunning(app)
+                }
+            }
             return
         }
         reconnectInFlight = true
