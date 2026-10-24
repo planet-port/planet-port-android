@@ -5,6 +5,7 @@ import cn.imgozi.planetport.store.AppConfigStore
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
 import com.zerotier.sdk.VirtualNetworkConfigOperation
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -323,15 +324,28 @@ internal class TunnelManager(
             TunnelStateBus.log("apply 幂等跳过（配置无变化）")
             return@withLock
         }
-        val builder = vpnService.Builder()
-            .setSession("Planet Port")
-            .setMtu(mtu)
-        for (a in allV4) builder.addAddress(RoutePlanner.ipOnly(a), RoutePlanner.prefixLen(a))
-        for (a in allV6) builder.addAddress(RoutePlanner.ipOnly(a), RoutePlanner.prefixLen(a))
-        for (r in v4Routes) builder.addRoute(r.addr, r.prefix)
-        for (r in v6Routes) builder.addRoute(r.addr, r.prefix)
-        for (dns in dnsServers) builder.addDnsServer(dns)
-        val fd = withContext(Dispatchers.IO) { builder.establish() }
+        // Builder 组装 + establish 整段包 try-catch：customDns 是用户输入面（网络
+        // 详情页自定义 DNS 表单），非法值（空串/非 IP 字面量）会让 addDnsServer 抛
+        // IllegalArgumentException；addRoute/addAddress 同理可因畸形路由拒绝。不
+        // catch 会击穿 applyAggregated 崩进程。catch 后置 Failed 存活态（服务仍活、
+        // 可停止或改配置重试），appliedSignature 不记——下次 apply 走完整重建
+        val fd = try {
+            val builder = vpnService.Builder()
+                .setSession("Planet Port")
+                .setMtu(mtu)
+            for (a in allV4) builder.addAddress(RoutePlanner.ipOnly(a), RoutePlanner.prefixLen(a))
+            for (a in allV6) builder.addAddress(RoutePlanner.ipOnly(a), RoutePlanner.prefixLen(a))
+            for (r in v4Routes) builder.addRoute(r.addr, r.prefix)
+            for (r in v6Routes) builder.addRoute(r.addr, r.prefix)
+            for (dns in dnsServers) builder.addDnsServer(dns)
+            withContext(Dispatchers.IO) { builder.establish() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            TunnelStateBus.log("TUN 组装异常: ${e.javaClass.simpleName}: ${e.message}")
+            TunnelStateBus.setTunnelState(TunnelState.Failed("TUN 组装失败", recoverable = true))
+            return@withLock
+        }
         if (fd == null) {
             TunnelStateBus.log("establish 失败（Builder 拒绝，多为路由/地址冲突）")
             TunnelStateBus.setTunnelState(TunnelState.Failed("TUN 建立失败", recoverable = true))
