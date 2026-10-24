@@ -308,10 +308,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 应用所选行星到隧道并确保运行（对齐 iOS applySelectedPlanetAndStartVPN）：
-     * 行星变化且隧道在跑 → 热重启（核心 planet 文件只在启动时装载，必须重启）；
-     * 未跑 → 授权后启动；Failed 存活态先停再启（服务双 START 守卫会吞掉
-     * ensureStarted 的启动指令，用户无法经开关恢复）。
+     * 应用所选行星到隧道并确保运行（对齐 iOS applySelectedPlanetAndStartVPN，
+     * AppState.swift:135-153）。三分支已按等终态时序复核：
+     * - 在跑且 planetChanged → [TunnelController.restartIfRunning]：停 → 等停机
+     *   终态 → 启（替代 iOS restart 固定 1s 延迟）。核心 planet 文件/状态目录只在
+     *   服务启动时装载，applyConfig 热重载不换 planet，切行星必须整隧道重启。
+     * - 在跑且未变更 → no-op（iOS 同：running 且未变更仅回调 completion）。
+     * - 未跑 → 授权后启动；Failed 存活态先 stop 再启——Failed 态服务进程仍活
+     *   （scope 未取消），双 START 守卫会吞掉启动指令；STOP/START intent 在服务
+     *   主线程按序派发且 stopTunnel 同步收口，后续 START 必落在停完之后（iOS 无
+     *   「失败但进程存活」态，此分支为 Android 平台特有）。
      */
     private suspend fun applySelectedPlanetAndStart(selectedPlanetId: String) {
         // activatePlanet 失败只记日志：planetChanged 保持 false，后续重启联动按原

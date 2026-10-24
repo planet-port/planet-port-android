@@ -105,8 +105,19 @@ class PlanetSettingsViewModel(
     }
 
     /**
-     * 删除顺序对齐 iOS：激活中先停 VPN（TunnelController.stop），级联清理由
-     * deletePlanet 完成（网络/卫星/文件/状态目录 + 指针回退官方）。[onDeleted] 供视图退栈。
+     * 删除顺序对齐 iOS（PlanetSettingsView.deletePlanet，swift:227-236）：仅删除
+     * 激活行星时先停 VPN（TunnelController.stop），级联清理由 deletePlanet 完成
+     * （网络/卫星/文件/状态目录 + 指针回退官方 + notifyConfigChanged）。
+     * [onDeleted] 供视图退栈。
+     *
+     * 门控核对（简报侦查 §4 两疑点）：
+     * - 删非激活行星且隧道在跑：不停——核心只在启动时装载激活行星的 planet 文件，
+     *   通知触发的 applyConfig 只重读激活行星的网络/月壳（本次删除未触碰），停机
+     *   反而误伤在跑连接（iOS 同样只在删激活行星时 stop）。
+     * - 删激活行星：先 stop 再 deletePlanet，删除后不自动重启——iOS 实况无 restart
+     *   调用，隧道停在已停止待用户手动开启；且 planetDir 在服务启动期固化、热重载
+     *   不换目录，回退官方只能由下次启动装载。停机后删除触发的 configChanges 已无
+     *   隧道侧消费者（订阅随 stopTunnel 取消），不会迟到重配。
      */
     fun delete(onDeleted: () -> Unit) {
         viewModelScope.launch {

@@ -145,6 +145,12 @@ object TunnelController {
      * disableIpv6 已纳入 TunnelManager 的 appliedEntries 比较（configChanges 驱动
      * 的 applyConfig 可感知并热重套），但 writePrefs 静默不发变更信号——UI 写完
      * 偏好仍须经本方法显式触达隧道。
+     *
+     * 另一消费点是行星切换（HomeViewModel.applySelectedPlanetAndStart）：核心
+     * planet 文件与状态目录只在服务启动时装载（startTunnel 构造 NodeRuntime 时
+     * 固化 planetDir/planetFile），configChanges 驱动的 applyConfig 只重套激活
+     * 行星的网络/月壳、不换 planet——activatePlanet 换指针后必须经本方法整隧道
+     * 重启才能生效（删激活行星回退官方同理由下次启动装载，见 PlanetSettingsViewModel）。
      */
     fun restartIfRunning(context: Context) {
         if (!isRunning) return
