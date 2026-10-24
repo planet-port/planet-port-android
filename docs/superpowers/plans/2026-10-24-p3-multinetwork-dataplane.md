@@ -341,7 +341,7 @@ docker exec zt1106 zerotier-cli listnetworks
 
 - [ ] **Step 2: 单网络回归（T1-T3 后全量）**
 
-T1 判定线复验（ping 172.28.100.196 或 T1 结论的替代判定）；60s CONFIG_UPDATE 周期观察日志无重复 establish（幂等闸门有效）；被踢场景：controller 侧 deauthorize 手机 → ≤90s 内 tun0 消失（60s 重推 + 拆 TUN生效）→ reauthorize → tun0 恢复（签名置 null 后重建）。
+T1 判定线复验（ping 172.28.100.196 或 T1 结论的替代判定）；60s CONFIG_UPDATE 周期观察日志无重复 establish（幂等闸门有效）；被踢场景：controller 侧 deauthorize 手机 → ≤90s 内 tun0 消失（60s 重推 + 拆 TUN生效）→ reauthorize → tun0 恢复（签名置 null 后重建）。**被踢全链必须 logcat 盯 onRevoke/stopTunnel 链（终审 Important）**：若平台在 tun 接口消失时触发 onRevoke → stopTunnel 完整停机，闩锁解耦保住的重建能力落空（表现为 tun0 不恢复、需手动重启）——此时就地修复：拆 TUN 路径加来源标志，onRevoke 区分「系统撤销」与「自拆」（自拆不触发停机），修复后重验全链；onRevoke 未触发且 tun0 自动恢复则该 Important 关闭。
 
 - [ ] **Step 3: 双网络不串扰**
 

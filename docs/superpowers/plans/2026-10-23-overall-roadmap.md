@@ -16,8 +16,8 @@
 | P0 工程骨架 | Gradle 工程/vendor 组件接入/JNI 桥/CI/骨架页 | APK 启动 + libZeroTierOneJNI 加载成功 | ✅ 闭合（2026-10-23） |
 | P1 数据层 | 模型/JSON 存储/planet·moon 导入/自检页 | 导入 planet/moon、切换、持久化正确 | ✅ 闭合（2026-10-23） |
 | P2 隧道核心 | 单网络隧道全链路（服务壳/核心/UDP/数据面/聚合/验证页） | 加入 → 连通 → 退出 | ✅ 闭合（2026-10-24，判定线版） |
-| P3 多网络数据面 | ping 闭环 + 多网络隔离验证 + 数据面调优 | 双网络不串扰、切换不风暴、首访不丢包 | ⬜ 未开始 |
-| P4 UI 全量 | 正式 UI，替换验证脚手架 | 与 iOS 端视觉对照一致 | ⬜ 未开始（自 P1 起可并行） |
+| P3 多网络数据面 | ping 闭环 + 多网络隔离验证 + 数据面调优 | 双网络不串扰、切换不风暴、首访不丢包 | 🔶 代码面闭合（2026-10-24，终审通过）；T1 判层/T4 真机验证挂起（手机断网） |
+| P4 UI 全量 | 正式 UI，替换验证脚手架 | 与 iOS 端视觉对照一致 | 🔶 进行中（2026-10-24 启动） |
 | P5 收尾 | 稳定性生命周期功能 | 锁屏/切网重连、开机自启、DNS 三模式热重配 | ⬜ 未开始 |
 
 关键路径 P2→P3；P4 自 P1 起可并行（当前按串行推进）。
@@ -50,17 +50,17 @@
 
 **遗留（用户侧）**：真机人工点一次「停止」按钮确认（adb 模拟点击无效归为 MIUI 注入，代码链终审核实无缺陷）；P4 前提供一个可长期使用的私有网络做回归基线。
 
-## P3 多网络数据面 ⬜（下一阶段）
+## P3 多网络数据面 🔶
 
 **目标**：把 P2 的「隧道建立」推进到「数据可用」——ping/连通闭环，并验证多网络隔离设计。
 
-**范围**（输入 = 设计文档定义 + P2 移交）：
-1. ping 闭环：run-as 应用 uid 发流 + ARP 计数判层（statArpReq/Reply）定位 P2 ping 未通的对端方向问题；必要时组播订阅时机/帧路径调优。
-2. NDP ICMPv6 校验和计算（P2 发现恒 0——iOS 同构共享问题，与真实 Linux 节点 v6 互通会被对端内核丢弃；IPv4 ARP 主路径不受影响；iOS 侧同步修复跨平台互通另记）。
-3. 被踢单网拆 TUN 语义（valid.isEmpty() 显式拆除路径，消除路由黑洞滞留）。
-4. split-tunnel 默认路由策略决策（具体路由不引入 app 流量的平台语义 vs 官方 0.0.0.0/0 全接管）。
-5. 停机窄窗顺手项：UdpCom socket @Volatile、双 START 单实例守卫、swap 前 join 旧代读线程、runtime 比对 TOCTOU、establish 滞留 fd。
-6. 多网络真机验证：双网络并存不串扰（冲突检测让路）、启停切换不风暴、首访不丢包（ARP 预热/PendingPacket 重放策略）。
+**做了**（代码面 3 commits，0a7b31d/8af95ba/580ad3e）：T2 NDP 合规三件套（RFC 4443 §8.1 伪头校验和/NS solicited-node 组播/src 语义）；T3 拆 TUN 与停机收口（无闩锁 teardownTun、终局闩锁归 shutdown、swap 返回 Boolean 不变量）；停机窄窗顺手项（UdpCom @Volatile/双 START 守卫/swap 前 join/joinConsumerJobs 收口）。
+
+**结论**：代码终审 **Ready to merge: Yes**——无 Critical；校验和经审查者独立 5000 用例数值验证；「签名≡TUN 实况」四路径成立；无 GPL 引入。T3 审查曾出 Critical（拆 TUN 复用 shutdown 致恢复链路闩死），修复 580ad3e 复核 Approved。
+
+**挂起（真机验证两项，等手机网络恢复）**：T1 ping 判层（BLOCKED 于手机断 WiFi+SIM 无服务，聚合语义正确自洽；续跑步骤在 task-1-report.md Step 3）；T4 多网络验证（计划 Step 2 已补终审 Important 必验项——被踢全链 logcat 盯 onRevoke，触发则就地加来源标志；装机须用最新 HEAD）。真机验证完成后本阶段转 ✅。
+
+**移交新增**：P4 顺手项四条（DAD 响应形态组播 NA+Solicited=0、withContext(NonCancellable) establish、拆 TUN 后状态/通知保真、NdpTable 注释）；onRevoke 平台交互证据作为 release 前置闸门（并入 T4）。
 
 **不做**：正式 UI（P4）；planet 切换重启联动（P5）。
 
@@ -85,12 +85,14 @@
 | CI 首跑 | P0 | 用户侧 | 待 push |
 | configChanges level-triggered 契约 | P1 | P2（已消费） | 闭合 |
 | activatePlanet 重启联动 | P1 | P5 | 挂起 |
-| ping 判层复验 + 组播/帧路径调优 | P2 | P3 | 待接 |
-| NDP 校验和恒 0 | P2 | P3（Android）/P5（iOS 同步） | 待接 |
-| 被踢单网不拆 TUN 黑洞 | P2 | P3 | 待接 |
-| split-tunnel 默认路由策略 | P2 | P3 | 待决策 |
-| 停机窄窗五项 | P2 | P3 顺手 | 待接 |
-| Builder try-catch / appliedEntries+disableIpv6 / leave 拆 TUN / store 单例 / startForegroundService | P2 | P4 | 待接 |
+| ping 判层复验 + 组播/帧路径调优 | P2 | P3 | T1 BLOCKED 挂起（真机网络） |
+| NDP 校验和恒 0 | P2 | P3（Android）/P5（iOS 同步） | Android 侧闭合（0a7b31d） |
+| 被踢单网不拆 TUN 黑洞 | P2 | P3 | 闭合（8af95ba/580ad3e） |
+| split-tunnel 默认路由策略 | P2 | P3 | 已决策：与 iOS 同构语义（单网 routeVia 才接管，物理网段挖洞），非缺陷 |
+| 停机窄窗五项 | P2 | P3 顺手 | 闭合 |
+| Builder try-catch / appliedEntries+disableIpv6 / leave 拆 TUN / store 单例 / startForegroundService | P2 | P4 | leave 拆 TUN 已在 P3 闭合，余项待接 |
+| P4 顺手四项（DAD 形态/NonCancellable establish/拆 TUN 状态保真/NdpTable 注释） | P3 终审 | P4 | 待接 |
+| onRevoke 平台交互证据 | P3 终审 | T4 | 待验（release 前置闸门） |
 | planet 下载上限 / moon worldId 查重 | P1 终审 | P4 | 待接 |
 | 停止按钮人工确认 / 长期回归网络 | P2 | 用户侧 | 待确认 |
 | iOS NDP 构造错位（跨平台 v6 互通） | P2 | P5 备忘 | 待接 |
