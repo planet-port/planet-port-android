@@ -359,7 +359,12 @@ private fun PlanetPage(
                 .height(0.5.dp)
                 .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)),
         )
-        val connectedCount = networks.count { it.lastActivated }
+        // 已连接数剔除冲突网络（iOS networkHeader：lastActivated 且不在冲突表；
+        // lastConflict 非空 = 已收敛断开的网络，同样不计）
+        val connectedCount = networks.count {
+            it.lastActivated && it.lastConflict == null &&
+                state.networkConflicts[it.networkId] == null
+        }
         Text(
             text = buildString {
                 append("网络 · ${networks.size}")
