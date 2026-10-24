@@ -201,9 +201,10 @@ internal class TunnelManager(
         if (valid.isEmpty()) {
             // 全部网络失效（被踢/无地址）：拆 TUN——fd 关闭即接口消失、系统路由自动撤销。
             // converter 侧软清理（retainOnly）已在上面完成。iOS 同构行为是保留旧设置成
-            // 黑洞，Android 主动拆优于此（iOS 侧同步修复记 P5）。签名必须同置 null：
-            // 同配置网络恢复时若签名命中会被幂等闸门挡住不重建
-            dataplane.shutdown()
+            // 黑洞，Android 主动拆优于此（iOS 侧同步修复记 P5）。teardownTun 不带停机
+            // 闩锁（后续恢复可继续 swap）；签名必须同置 null：同配置网络恢复时若签名
+            // 命中会被幂等闸门挡住不重建
+            dataplane.teardownTun()
             appliedSignature = null
             TunnelStateBus.setApplyTrace(
                 "items=${items.size} valid=0（无可用网络，已拆 TUN）\n" + converter.debugSummary()
@@ -305,7 +306,12 @@ internal class TunnelManager(
             TunnelStateBus.setTunnelState(TunnelState.Failed("TUN 建立失败", recoverable = true))
             return@withLock
         }
-        dataplane.swap(fd)
+        if (!dataplane.swap(fd)) {
+            // swap 被拒（已停机的迟到 establish）：TUN 实际不存在，不记签名——
+            // 否则幂等闸门会把「无 TUN」状态误认为已应用
+            TunnelStateBus.log("swap 被拒（Dataplane 已停机），本次应用作废")
+            return@withLock
+        }
         // swap 成功才记签名——若先记后 swap 抛异常，签名已更新而 fd 未接线，
         // 后续 apply 全部被闸门跳过（TUN 永不重建）
         appliedSignature = signature

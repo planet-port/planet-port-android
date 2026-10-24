@@ -56,18 +56,17 @@ internal class ZeroTierVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> {
-                VpnNotification.start(this, "启动中")
-                startTunnel()
-            }
+            ACTION_START -> startTunnel()
             ACTION_STOP -> stopTunnel()
         }
         return START_NOT_STICKY
     }
 
     private fun startTunnel() {
-        // 双 START 守卫：二轮启动会 bind 9994 失败错置 Failed 状态；一轮存活则忽略重复指令
+        // 双 START 守卫：二轮启动会 bind 9994 失败错置 Failed 状态；一轮存活则忽略
+        // 重复指令（通知在守卫之后——否则运行中被重复 START 会把常驻通知改回"启动中"）
         if (scope?.isActive == true) return
+        VpnNotification.start(this, "启动中")
         TunnelStateBus.setTunnelState(TunnelState.Starting)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = s

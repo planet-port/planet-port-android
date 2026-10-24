@@ -25,21 +25,23 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
      *  onTunPacket → processVirtualNetworkFrame JNI 内，直接关 Node 会 native UAF */
     private var readThread: Thread? = null
 
+    /** 换代：拒绝（已停机）返回 false 且关闭新 fd；成功返回 true。调用方须以
+     *  返回值为准决定是否记录「已应用」状态——被拒时 TUN 实际不存在 */
     @Synchronized
-    fun swap(fd: ParcelFileDescriptor) {
+    fun swap(fd: ParcelFileDescriptor): Boolean {
         if (stopped) {
             // 停机后迟到的 establish（withContext(IO) 内不可取消）：拒绝并关闭新 fd 防泄漏
             fd.close()
-            return
+            return false
         }
         generation += 1
         val gen = generation
-        // 旧代读循环看到 generation 变化即退出，但可能仍在 onTunPacket 的 JNI 内——
-        // 等它落地再关旧资源（终审 Minor：换代窗口残窗）
-        readThread?.join(500)
         writeExecutor?.shutdownNow()
         outputStream?.close()
-        currentFd?.close()
+        currentFd?.close() // 先关旧 fd——阻塞在 read() 的旧读线程随即退出
+        // join 旧代读线程：fd 关闭唤醒 read 退出；若正处 onTunPacket 的 JNI 内，
+        // 等 JNI 返回落地（终审 Minor：换代窗口残窗）
+        readThread?.join(500)
         currentFd = fd
         outputStream = FileOutputStream(fd.fileDescriptor)
         writeExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "zt-tun-write-$gen") }
@@ -57,6 +59,7 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
             }
             try { input.close() } catch (_: IOException) {}
         }, "zt-tun-read-$gen").also { it.start() }
+        return true
     }
 
     /** 上行 IP 包写入 tun（消费协程投递，专职写线程顺序化） */
@@ -77,20 +80,27 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
         }
     }
 
+    /**
+     * 拆 TUN（全部网络失效时）：关 fd 即接口消失、系统路由自动撤销，实例保持
+     * 可用——后续网络恢复可继续 swap 重建。不带停机闩锁（teardown ≠ 终局）。
+     */
     @Synchronized
-    fun shutdown() {
-        stopped = true
+    fun teardownTun() {
         generation += 1
         writeExecutor?.shutdownNow()
         writeExecutor = null
         outputStream?.close()
         outputStream = null
-        currentFd?.close() // 先关 fd 让读循环退出
+        currentFd?.close()
         currentFd = null
-        // join 读线程：关 fd 后线程可能已进入 onTunPacket → processVirtualNetworkFrame
-        // JNI 内，不等待就放行 node.close() 会 native UAF（同 supervisor/udp join 收口）。
-        // join 期间持本锁无碍——读线程不回取本锁
         readThread?.join(500)
         readThread = null
+    }
+
+    /** 终局停机：置闩锁拒绝一切后续 swap（服务生命周期收口专用，拆 TUN 用 teardownTun） */
+    @Synchronized
+    fun shutdown() {
+        stopped = true
+        teardownTun()
     }
 }
