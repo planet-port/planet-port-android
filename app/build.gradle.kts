@@ -53,6 +53,12 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     // 语言切换（AppCompatDelegate.setApplicationLocales）需要 AppCompatActivity 承载
     implementation(libs.androidx.appcompat)
+    // 扫码加入网络（预览 + 逐帧 zxing 解码）
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+    implementation(libs.zxing.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 }

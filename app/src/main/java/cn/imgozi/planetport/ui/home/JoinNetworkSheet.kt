@@ -54,6 +54,7 @@ internal fun JoinNetworkSheet(
     var dnsMode by remember { mutableStateOf(DnsMode.none) }
     var dnsServers by remember { mutableStateOf(listOf<String>()) }
     var duplicateAlert by remember { mutableStateOf(false) }
+    var showScanner by remember { mutableStateOf(false) }
 
     val idValid = networkId.length == 16 && networkId.all { c ->
         c.isDigit() || c in 'a'..'f' || c in 'A'..'F'
@@ -115,8 +116,8 @@ internal fun JoinNetworkSheet(
                         capitalization = KeyboardCapitalization.Characters,
                     ),
                     trailingIcon = {
-                        // 扫码回填（iOS QRScannerView）T7 接 CameraX + zxing，先占位禁用
-                        IconButton(onClick = {}, enabled = false) {
+                        // 扫码回填（iOS QRScannerView）：识别到 16 位 hex 即填入
+                        IconButton(onClick = { showScanner = true }) {
                             Icon(
                                 imageVector = Icons.Outlined.QrCodeScanner,
                                 contentDescription = stringResource(R.string.join_a11yScan),
@@ -168,6 +169,17 @@ internal fun JoinNetworkSheet(
                 )
             }
         }
+    }
+
+    // 扫码弹层：识别回填 ID 并关闭（对齐 iOS JoinNetworkSheet sheet(QRScannerView) 接线）
+    if (showScanner) {
+        QrScannerSheet(
+            onScanned = { id ->
+                networkId = id
+                showScanner = false
+            },
+            onDismiss = { showScanner = false },
+        )
     }
 
     if (duplicateAlert) {
