@@ -17,11 +17,9 @@ data class NetworkCardStatus(
 /**
  * ZT_VirtualNetworkStatus 原始码 → 文案（iOS Shared/Models.swift:16-54 全集）。
  * [code] 取值 0..6；-1 与其他未知值归入「未知」。
- *
- * 注：P2 脚手架页（ui/P2SelfCheck.kt）退役前，其文件内私有 ztStatusText 与本函数
- * 同包同名冲突，故此处更名；T3 换挂删除脚手架页后即为唯一文案映射入口。
+ * 全 UI 唯一网络状态文案映射入口（自 P2 脚手架页上移恢复原名）。
  */
-fun ztNetworkStatusText(code: Int): String = when (code) {
+fun ztStatusText(code: Int): String = when (code) {
     0 -> "正在初始化"
     1 -> "在线"
     2 -> "拒绝访问"
@@ -33,7 +31,7 @@ fun ztNetworkStatusText(code: Int): String = when (code) {
     else -> "未知"
 }
 
-/** 隧道宏观状态文案（自 ui/P2SelfCheck.kt:39-46 上移，T3 换挂后脚手架页退役）。 */
+/** 隧道宏观状态文案（自 P2 脚手架页上移，脚手架页已退役）。 */
 fun tunnelStateText(state: TunnelState): String = when (state) {
     is TunnelState.Idle -> "空闲"
     is TunnelState.Starting -> "启动中"
@@ -90,7 +88,7 @@ fun deriveNetworkCardStatus(
             return NetworkCardStatus("待授权", StatusColor.Warn)
         }
         return NetworkCardStatus(
-            label = ztNetworkStatusText(statusCode),
+            label = ztStatusText(statusCode),
             color = if (statusCode == 1) StatusColor.Good else StatusColor.Warn,
         )
     }
