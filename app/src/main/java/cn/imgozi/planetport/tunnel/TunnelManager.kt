@@ -45,6 +45,7 @@ internal class TunnelManager(
     private var appliedSignature: String? = null
     private var configChangesJob: Job? = null
     private var keepaliveJob: Job? = null
+    private var peersJob: Job? = null
 
     fun start() {
         // 配置变更订阅：P1 configChanges 有损合并（16 溢出即丢），
@@ -59,14 +60,28 @@ internal class TunnelManager(
                 converter.sendKeepalive()
             }
         }
+        // Peer 快照轮询：5s 周期，仅隧道 Running 态推流（对齐 iOS pollRuntime 的
+        // 5s 拉取节奏；下拉刷新另有 NodeRuntime.peersNow 直查，不依赖此流）
+        peersJob = scope.launch {
+            while (isActive) {
+                delay(5_000)
+                if (TunnelStateBus.tunnelState.value is TunnelState.Running) {
+                    TunnelStateBus.setPeers(runtime.peersNow())
+                }
+            }
+        }
     }
 
     fun stop() {
         configChangesJob?.cancel(); configChangesJob = null
         keepaliveJob?.cancel(); keepaliveJob = null
+        peersJob?.cancel(); peersJob = null
         settingsJob?.cancel(); settingsJob = null
         snapshots = HashMap()
         appliedSignature = null
+        // 总线镜像同步清空（网络配置快照与 Peer 列表都只在隧道存活期有意义）
+        TunnelStateBus.clearNetworkConfigs()
+        TunnelStateBus.clearPeers()
     }
 
     /**
@@ -93,12 +108,16 @@ internal class TunnelManager(
             // “应用无地址新配置即剔除”）。首启 REQUESTING 中间态删不到快照，
             // no-op 无害；DOWN/DESTROY 已在上面过滤
             configMutex.withLock {
-                if (snapshots.remove(nwid) != null) scheduleApplyLocked()
+                if (snapshots.remove(nwid) != null) {
+                    syncNetworkConfigsLocked()
+                    scheduleApplyLocked()
+                }
             }
             return
         }
         configMutex.withLock {
             snapshots[nwid] = conf
+            syncNetworkConfigsLocked()
             scheduleApplyLocked()
         }
     }
@@ -132,6 +151,7 @@ internal class TunnelManager(
             joinedNetworks.remove(nwid)
             converter.removeNetwork(nwid)
             snapshots.remove(nwid)
+            syncNetworkConfigsLocked()
             TunnelStateBus.log("leave %016x".format(nwid))
             scheduleApplyLocked()
         }
@@ -160,7 +180,13 @@ internal class TunnelManager(
         TunnelStateBus.setNetworkStatus("%016x".format(nwid), conf.status)
         if (conf.assignedAddrs.isEmpty()) return
         snapshots[nwid] = conf
+        syncNetworkConfigsLocked()
         scheduleApplyLocked()
+    }
+
+    /** 快照 → 总线镜像（须在 configMutex 锁内调用；HashMap 读取无并发写即可） */
+    private fun syncNetworkConfigsLocked() {
+        TunnelStateBus.setNetworkConfigs(snapshots)
     }
 
     /** 聚合应用：冲突检测 → 转换器上下文 → 合并地址/路由/MTU/DNS → 单次 establish */

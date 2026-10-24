@@ -82,4 +82,20 @@ data class AppPrefs(
     val activePlanetId: String? = null,
     /** 数据面禁用 IPv6（对齐 iOS network_disable_ipv6；默认 false） */
     val disableIpv6: Boolean = false,
+    // ---- P4 偏好页字段（对齐 iOS PrefsView）。全部带默认值：旧 prefs.json 缺字段
+    // 按 kotlinx.serialization 默认值语义反序列化，旧文件无需迁移 ----
+    /** 主题主色（ARGB）。null = 预设第 0 色（官方红）；自定义色存 [themeColorCustom]。 */
+    val themeColor: Long? = null,
+    /** 拾色器自定义主色（ARGB）；非 null 时优先于 [themeColor]。 */
+    val themeColorCustom: Long? = null,
+    /** 状态成功色是否随主色派生（对齐 iOS successDerived；默认 true）。 */
+    val successDerived: Boolean = true,
+    /** 界面语言（"zh"/"zh-rTW"/"en"）。null = 跟随系统。 */
+    val language: String? = null,
+    /** 首页背景图是否已设置（图本体存应用私有目录，P4 落地）。 */
+    val backgroundImage: Boolean = false,
+    /** 背景图重力视差动画开关（对齐 iOS parallax；默认 true，无背景图时无效）。 */
+    val parallax: Boolean = true,
+    /** 同时连接网络软上限（对齐 iOS maxNetworks，2..6；默认 2）。 */
+    val maxNetworks: Int = 2,
 )

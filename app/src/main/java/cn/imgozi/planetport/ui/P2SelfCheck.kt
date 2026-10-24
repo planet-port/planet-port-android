@@ -21,10 +21,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cn.imgozi.planetport.store.AppConfigStore
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
-import cn.imgozi.planetport.store.StorePaths
+import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
 import cn.imgozi.planetport.tunnel.ZeroTierVpnService
@@ -82,7 +81,7 @@ internal fun P2SelfCheckScreen(activity: MainActivity) {
                 enabled = nwid.length == 16 &&
                     nwid.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' },
                 onClick = {
-                    val s = AppConfigStore(StorePaths(activity.filesDir))
+                    val s = StoreRepo.store
                     scope.launch {
                         val planetId = s.activePlanetId()
                         val existing = s.readNetworks(planetId).filter { it.networkId != nwid.lowercase() }

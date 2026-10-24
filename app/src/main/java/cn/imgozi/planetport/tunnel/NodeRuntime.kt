@@ -23,15 +23,18 @@ import java.io.File
 import java.io.IOException
 import java.net.InetSocketAddress
 
-/** 网络配置快照（字段契约对齐 iOS ZTNetworkConfigData；status/type 存原始码） */
+/** 网络配置快照（字段契约对齐 iOS ZTNetworkConfigData；status 存原始码，type 为枚举名） */
 internal class NetConf(
     val nwid: Long,
     val name: String,
     val status: Int,
-    val type: Int,
+    /** "PRIVATE"/"PUBLIC"（ZT_VirtualNetworkType 枚举名去 NETWORK_TYPE_ 前缀；未知为空串） */
+    val type: String,
     val mac: Long,
     val mtu: Int,
     val broadcastEnabled: Boolean,
+    val bridge: Boolean,
+    val dhcp: Boolean,
     /** "ip/prefix"（prefix 在 InetSocketAddress.port 字段，SDK JNI 已转主机序数值） */
     val assignedAddrs: List<String>,
     /** "dest/prefix" 或 "dest/prefix via gw" */
@@ -176,6 +179,33 @@ internal class NodeRuntime(
     /** 当前网络配置快照（applyConfig 热重配路径用，对齐 iOS bridge.networkConfig） */
     fun networkConf(nwid: Long): NetConf? = node?.networkConfig(nwid)?.toNetConf()
 
+    /**
+     * 当前 peer 快照（JNI 直查，对齐 iOS bridge.peers）。node 未启动返回空列表。
+     * PeerListView 下拉刷新直查此入口；5s 周期推流见 TunnelManager.peersJob。
+     */
+    fun peersNow(): List<PeerInfo> {
+        val n = node ?: return emptyList()
+        val peers = n.peers() ?: return emptyList()
+        return peers.mapNotNull { p ->
+            if (p == null) return@mapNotNull null
+            PeerInfo(
+                address = p.address,
+                // 对齐 iOS ZTBridge.peers：版本三段直拼（未知 -1 时为 "v-1.-1.-1"，
+                // 与 iOS 同构；语义为「版本未知」，UI 层自行判别）
+                version = "v${p.versionMajor}.${p.versionMinor}.${p.versionRev}",
+                latency = p.latency,
+                // ZT_PeerRole 枚举名去 PEER_ROLE_ 前缀："LEAF"/"MOON"/"PLANET"
+                //（iOS 传输层为小写 leaf/moon/planet，UI 层展示时自行大小写处理）
+                role = p.role?.name?.removePrefix("PEER_ROLE_") ?: "",
+                // 物理路径 "ip:port"；空列表 = relay 中转（对齐 iOS path 空串语义）
+                paths = p.paths?.mapNotNull { pp ->
+                    val host = pp?.address?.address?.hostAddress ?: return@mapNotNull null
+                    "$host:${pp.address.port}"
+                } ?: emptyList(),
+            )
+        }
+    }
+
     // MARK: - dataStore 文件映射（Global Constraints 路径契约）
 
     /**
@@ -307,10 +337,12 @@ internal class NodeRuntime(
             nwid = nwid,
             name = name ?: "",
             status = status?.ordinal ?: -1,
-            type = type?.ordinal ?: -1,
+            type = type?.name?.removePrefix("NETWORK_TYPE_") ?: "",
             mac = mac,
             mtu = mtu,
             broadcastEnabled = isBroadcastEnabled,
+            bridge = isBridge,
+            dhcp = isDhcp,
             assignedAddrs = addrs,
             routes = routeList,
             dns = dnsList,

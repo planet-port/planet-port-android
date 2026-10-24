@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import cn.imgozi.planetport.store.StoreRepo
 
 class MainActivity : ComponentActivity() {
     private lateinit var vpnPermissionLauncher: ActivityResultLauncher<Intent>
@@ -29,6 +30,9 @@ class MainActivity : ComponentActivity() {
         } catch (e: UnsatisfiedLinkError) {
             Log.e(TAG, "libZeroTierOneJNI 加载失败", e)
         }
+
+        // store 进程单例首处初始化（P4 收敛：UI 与隧道共用同一 AppConfigStore 实例）
+        StoreRepo.init(this)
 
         vpnPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()

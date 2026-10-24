@@ -24,6 +24,20 @@ data class NodeStatusInfo(
 )
 
 /**
+ * Peer 快照（对齐 iOS PeerEntry）。address 为 ZT 40 位节点地址原值；
+ * version 形如 "v1.14.0"（版本未知时为 "v-1.-1.-1"，与 iOS 同构）；
+ * role 取值为 "LEAF"/"MOON"/"PLANET"；paths 为物理路径 "ip:port" 列表，
+ * 空列表 = relay 中转（对齐 iOS path 空串语义）。
+ */
+data class PeerInfo(
+    val address: Long,
+    val version: String,
+    val latency: Int,
+    val role: String,
+    val paths: List<String>,
+)
+
+/**
  * 隧道状态总线（对齐 iOS StatusStore；同进程内存态，服务写、UI 读）。
  *
  * networkStatuses 存 ZT_VirtualNetworkStatus 原始码（0..6，键为 16 位十六进制 nwid）——
@@ -41,6 +55,17 @@ object TunnelStateBus {
     private val _networkStatuses = MutableStateFlow<Map<String, Int>>(emptyMap())
     val networkStatuses: StateFlow<Map<String, Int>> = _networkStatuses.asStateFlow()
 
+    /** 网络配置快照（键为 16 位十六进制 nwid；对齐 iOS StatusStore.networkConfigs）。
+     *  来源 = TunnelManager 聚合快照的同步镜像，仅供 UI 展示（详情页类型/桥接/广播/
+     *  DHCP、地址/路由/DNS 列表）；不参与数据面聚合。停机清空。
+     *  internal：元素类型 NetConf 是隧道模块内部契约（UI 同在 :app 模块，可正常订阅）。 */
+    private val _networkConfigs = MutableStateFlow<Map<String, NetConf>>(emptyMap())
+    internal val networkConfigs: StateFlow<Map<String, NetConf>> = _networkConfigs.asStateFlow()
+
+    /** Peer 快照（5s 周期推流 + 停机清空；PeerListView 下拉刷新走 NodeRuntime.peersNow 直查） */
+    private val _peers = MutableStateFlow<List<PeerInfo>>(emptyList())
+    val peers: StateFlow<List<PeerInfo>> = _peers.asStateFlow()
+
     /** 聚合应用诊断快照（排查“已连接但不通”，对齐 iOS StatusStore.applyTrace） */
     private val _applyTrace = MutableStateFlow("")
     val applyTrace: StateFlow<String> = _applyTrace.asStateFlow()
@@ -57,6 +82,17 @@ object TunnelStateBus {
     }
 
     fun clearNetworkStatuses() { _networkStatuses.value = emptyMap() }
+
+    /** 网络配置快照全量同步（键 Long → 16 位十六进制字符串，与 networkStatuses 一致） */
+    internal fun setNetworkConfigs(snapshots: Map<Long, NetConf>) {
+        _networkConfigs.value = snapshots.mapKeys { "%016x".format(it.key) }
+    }
+
+    fun clearNetworkConfigs() { _networkConfigs.value = emptyMap() }
+
+    fun setPeers(peers: List<PeerInfo>) { _peers.value = peers }
+
+    fun clearPeers() { _peers.value = emptyList() }
 
     fun setApplyTrace(trace: String) { _applyTrace.value = trace }
 

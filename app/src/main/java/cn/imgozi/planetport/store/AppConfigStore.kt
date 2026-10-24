@@ -101,7 +101,7 @@ class AppConfigStore(val paths: StorePaths) {
 
     private suspend fun selectPlanetLocked(id: String) {
         if (readPlanets().none { it.id == id }) return
-        writePrefs(readPrefs().copy(selectedPlanetId = id))
+        writePrefsLocked(readPrefs().copy(selectedPlanetId = id))
     }
 
     /** 设置隧道下次启动要加载的 Planet；只更新指针，重启联动由调用方（P2）负责。 */
@@ -112,7 +112,7 @@ class AppConfigStore(val paths: StorePaths) {
     private suspend fun activatePlanetLocked(id: String): Boolean {
         if (readPlanets().none { it.id == id }) return false
         val changed = activePlanetId() != id
-        writePrefs(readPrefs().copy(activePlanetId = id))
+        writePrefsLocked(readPrefs().copy(activePlanetId = id))
         return changed
     }
 
@@ -186,8 +186,49 @@ class AppConfigStore(val paths: StorePaths) {
         files.write(paths.networksFile, all.map { it.copy(lastActivated = false) }, networkList)
     }
 
-    /** 数据面是否禁用 IPv6（对齐 iOS network_disable_ipv6；写入口 P4 偏好页接） */
+    /** 数据面是否禁用 IPv6（对齐 iOS network_disable_ipv6；写入口见 [writePrefs]） */
     suspend fun disableIpv6(): Boolean = readPrefs().disableIpv6
+
+    /** 删除单个网络条目（读全量 → 过滤 → 写回），通知语义与 writeNetworks 一致。
+     *  networkId 须与存储一致（16 位小写十六进制）；只删归属 Planet 的条目，
+     *  其它 Planet 下同 ID 网络不受影响。 */
+    suspend fun deleteNetwork(networkId: String, planetId: String? = null) = mutate {
+        val id = planetId ?: selectedPlanetId()
+        files.write(
+            paths.networksFile,
+            readNetworksFile().orEmpty().filterNot { it.planetId == id && it.networkId == networkId },
+            networkList,
+        )
+        notifyConfigChanged()
+    }
+
+    /** 删除单条 Moon 入轨记录（读全量 → 过滤 → 写回），通知语义与 writeMoons 一致。
+     *  只删记录不 deorbit（对齐 iOS MoonView 删除入轨语义）。 */
+    suspend fun deleteMoon(worldId: ULong, planetId: String? = null) = mutate {
+        val id = planetId ?: selectedPlanetId()
+        files.write(
+            paths.moonsFile,
+            readMoonsFile().orEmpty().filterNot { it.planetId == id && it.worldId == worldId },
+            moonList,
+        )
+        notifyConfigChanged()
+    }
+
+    // MARK: - Prefs
+
+    /** 读取 prefs（文件缺失/损坏隔离时回退内存默认）。 */
+    suspend fun readPrefs(): AppPrefs =
+        files.read(paths.prefsFile, AppPrefs.serializer()) ?: AppPrefs()
+
+    /**
+     * 偏好写入入口（读-改-写整段持域锁）：`writePrefs { it.copy(disableIpv6 = true) }`。
+     * 静默（不发 configChanges）——隧道侧唯一消费项 disableIpv6 由 UI 经
+     * TunnelController.restartIfRunning 显式热重启（对齐 iOS PrefsView 语义），
+     * 其余偏好均为 UI 本地态，与隧道无关。
+     */
+    suspend fun writePrefs(mutate: (AppPrefs) -> AppPrefs) = opMutex.withLock {
+        writePrefsLocked(mutate(readPrefs()))
+    }
 
     // MARK: - 文件层
 
@@ -195,10 +236,8 @@ class AppConfigStore(val paths: StorePaths) {
     private suspend fun readNetworksFile(): List<NetworkEntry>? = files.read(paths.networksFile, networkList)
     private suspend fun readMoonsFile(): List<MoonEntry>? = files.read(paths.moonsFile, moonList)
 
-    private suspend fun readPrefs(): AppPrefs =
-        files.read(paths.prefsFile, AppPrefs.serializer()) ?: AppPrefs()
-
-    private suspend fun writePrefs(prefs: AppPrefs) {
+    /** 不取域锁的写档（仅在已持有 opMutex 的复合段内使用，如 selectPlanetLocked）。 */
+    private suspend fun writePrefsLocked(prefs: AppPrefs) {
         files.write(paths.prefsFile, prefs, AppPrefs.serializer())
     }
 

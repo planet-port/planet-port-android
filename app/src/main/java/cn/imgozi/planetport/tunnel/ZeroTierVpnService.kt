@@ -3,9 +3,8 @@ package cn.imgozi.planetport.tunnel
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
-import cn.imgozi.planetport.store.AppConfigStore
 import cn.imgozi.planetport.store.PlanetProfile
-import cn.imgozi.planetport.store.StorePaths
+import cn.imgozi.planetport.store.StoreRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -70,7 +69,7 @@ internal class ZeroTierVpnService : VpnService() {
         TunnelStateBus.setTunnelState(TunnelState.Starting)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = s
-        val store = AppConfigStore(StorePaths(filesDir))
+        val store = StoreRepo.store
         s.launch {
             val planetId = store.activePlanetId()
             val planet = store.readPlanets().firstOrNull { it.id == planetId }
