@@ -1,29 +1,22 @@
 package cn.imgozi.planetport.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import cn.imgozi.planetport.ui.detail.NetworkDetailView
+import cn.imgozi.planetport.ui.diag.ApplyTraceView
 import cn.imgozi.planetport.ui.home.HomeView
+import cn.imgozi.planetport.ui.moon.MoonView
+import cn.imgozi.planetport.ui.peers.PeerListView
+import cn.imgozi.planetport.ui.planet.PlanetSettingsView
+import cn.imgozi.planetport.ui.prefs.PrefsView
 
 /**
- * 全 App 页面路由目标（对齐 iOS HomeRoute + 全页清单）。T3 建全集：
- * Home 由本任务实现，其余页的 Composable 由 T4/T5 提供，AppRoot 的对应
- * when 分支届时替换（占位期为纯文本「页面建设中」，不引用未存在的类）。
+ * 全 App 页面路由目标（对齐 iOS HomeRoute + 全页清单）。
+ * 全部页面已接线（T3 主页 + T4 详情/设置/诊断 + T5 Moon/Peers）。
  */
 sealed interface Page {
     data object Home : Page
@@ -69,34 +62,21 @@ fun AppRoot(activity: MainActivity) {
     CompositionLocalProvider(LocalNavigator provides navigator) {
         when (val page = stack.last()) {
             Page.Home -> HomeView(activity)
-            is Page.NetworkDetail -> PlaceholderPage("网络详情")
-            Page.Prefs -> PlaceholderPage("设置")
-            is Page.PlanetSettings -> PlaceholderPage("行星设置")
-            Page.Peers -> PlaceholderPage("节点列表")
-            is Page.Moon -> PlaceholderPage("卫星节点")
-            Page.ApplyTrace -> PlaceholderPage("数据面诊断")
-        }
-    }
-}
-
-/** T4/T5 页面接入前的占位（纯文本；分支替换点归各页任务，AppRoot 独占维护）。 */
-@Composable
-private fun PlaceholderPage(title: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "页面建设中",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            is Page.NetworkDetail -> NetworkDetailView(page.nwid, onBack = navigator::pop)
+            Page.Prefs -> PrefsView(onBack = navigator::pop)
+            is Page.PlanetSettings -> PlanetSettingsView(
+                planetId = page.planetId,
+                onBack = navigator::pop,
+                navToPeers = { navigator.navTo(Page.Peers) },
+                navToMoon = { navigator.navTo(Page.Moon(page.planetId)) },
+                navToApplyTrace = { navigator.navTo(Page.ApplyTrace) },
             )
+            Page.Peers -> PeerListView(onBack = navigator::pop)
+            // planetId 与 selectedPlanetId 的一致性依赖进入前已 selectPlanet
+            //（HomeView 整卡点击/pager 切换）——MoonImporter 落盘目录与遗留
+            // 记录归属都取 selectedPlanetId（T5 审查 concern c 前提，见 HomeView）
+            is Page.Moon -> MoonView(planetId = page.planetId, onBack = navigator::pop)
+            Page.ApplyTrace -> ApplyTraceView(onBack = navigator::pop)
         }
     }
 }

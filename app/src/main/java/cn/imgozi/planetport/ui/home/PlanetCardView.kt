@@ -2,7 +2,6 @@ package cn.imgozi.planetport.ui.home
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -41,9 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
+import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import cn.imgozi.planetport.ui.theme.PlanetFonts
@@ -276,38 +274,5 @@ private fun IdLine(nodeId: String, moonCount: Int, isPreview: Boolean, tertiary:
 
 /**
  * 官方行星整块磁贴（iOS 资产 OfficialPlanetIcon：线稿带环行星 · 石绿底，浅深自适应）。
- * 本任务约束不改 res 资源结构，故以 Canvas 复刻（圆角矩形石绿底 + 白描边球体/高光/环带）；
- * 后续若引入 vector 资产可整体替换本实现。
+ * 图标本体已提升至 ui.components.OfficialPlanetIcon 与行星设置页共用。
  */
-@Composable
-private fun OfficialPlanetIcon(modifier: Modifier = Modifier) {
-    val bg = if (isSystemInDarkTheme()) Color(0xFF4FC0BF) else Color(0xFF2FA8A7)
-    Canvas(modifier.clip(RoundedCornerShape((HomeMetrics.iconTileSize * 0.24f)))) {
-        val s = size.minDimension
-        val center = Offset(size.width / 2f, size.height / 2f)
-        drawRoundRect(color = bg, cornerRadius = CornerRadius(s * 0.24f))
-        drawCircle(
-            color = Color.White,
-            radius = s * 0.26f,
-            center = center,
-            style = Stroke(width = s * 0.036f),
-        )
-        drawArc(
-            color = Color.White.copy(alpha = 0.35f),
-            startAngle = -55f,
-            sweepAngle = 105f,
-            useCenter = false,
-            topLeft = Offset(center.x - s * 0.19f, center.y - s * 0.19f),
-            size = Size(s * 0.38f, s * 0.38f),
-            style = Stroke(width = s * 0.055f, cap = StrokeCap.Round),
-        )
-        rotate(-20f, pivot = center) {
-            drawOval(
-                color = Color.White,
-                topLeft = Offset(center.x - s * 0.46f, center.y - s * 0.15f),
-                size = Size(s * 0.92f, s * 0.30f),
-                style = Stroke(width = s * 0.030f),
-            )
-        }
-    }
-}

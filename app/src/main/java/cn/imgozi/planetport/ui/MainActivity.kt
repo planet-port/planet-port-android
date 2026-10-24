@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.ui.theme.PlanetTheme
+import cn.imgozi.planetport.ui.theme.ThemeManager
 
 class MainActivity : ComponentActivity() {
     private lateinit var vpnPermissionLauncher: ActivityResultLauncher<Intent>
@@ -36,6 +37,14 @@ class MainActivity : ComponentActivity() {
 
         // store 进程单例首处初始化（P4 收敛：UI 与隧道共用同一 AppConfigStore 实例）
         StoreRepo.init(this)
+
+        // 主题启动 seed：持久化偏好灌入 ThemeManager 内存态（无持久化，缺 seed 则
+        // 冷启动首帧恒默认红）。runBlocking 仅此一处——读 prefs.json 毫秒级，须在
+        // setContent 前完成以保证首帧主题正确（iOS 在 App init 同步读 UserDefaults 等价）
+        runCatching {
+            val prefs = kotlinx.coroutines.runBlocking { StoreRepo.store.readPrefs() }
+            ThemeManager.applyPrefs(prefs.themeColor, prefs.themeColorCustom, prefs.successDerived)
+        }
 
         vpnPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()

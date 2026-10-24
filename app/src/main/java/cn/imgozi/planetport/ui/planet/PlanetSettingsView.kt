@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Nightlight
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
+import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.theme.ThemeManager
@@ -310,14 +310,8 @@ private fun IconRow(
         Text("图标", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.weight(1f))
         if (isOfficial) {
-            // 官方磁贴占位（iOS OfficialPlanetIcon 资产，石绿线稿行星）：
-            // T3 首页磁贴资产落地后，此处与首页共用同一 painter
-            Icon(
-                Icons.Filled.Public,
-                contentDescription = null,
-                tint = Color(0xFF57C3C2),
-                modifier = Modifier.size(24.dp),
-            )
+            // 官方磁贴（与首页共用 ui.components.OfficialPlanetIcon，石绿线稿行星）
+            OfficialPlanetIcon(modifier = Modifier.size(24.dp))
         } else {
             Icon(
                 imageVector = planetIconVector(planetIconSymbol(planet)),
