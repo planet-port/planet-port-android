@@ -12,9 +12,10 @@ const val CONFLICT_TIMEOUT = "timeout"
 
 /**
  * 「连接服务器」阶段（核心连行星根服务器）的超时阈值：到点仍未 online 判定
- * 物理网络故障，全部启用网络自动断开（iOS AppState.connectTimeout = 30s）。
+ * 物理网络故障，全部启用网络自动断开（iOS AppState.connectTimeout 基础上
+ * 放宽至 6 分钟，兼容慢速行星服务器/弱网环境）。
  */
-const val CONNECT_TIMEOUT_MS = 30_000L
+const val CONNECT_TIMEOUT_MS = 360_000L
 
 /** 网络状态语义色（M3 ColorScheme 无状态槽位，映射见 ui.theme.PlanetStatusColors）。 */
 enum class StatusColor { Good, Warn, Neutral, Danger }
