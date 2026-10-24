@@ -79,13 +79,10 @@ fun QrScannerSheet(
                 PackageManager.PERMISSION_GRANTED,
         )
     }
-    var asked by remember { mutableStateOf(false) }
-
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { ok ->
         granted = ok
-        asked = true
     }
 
     // 进入即请求（iOS .task checkPermission 同机）；曾拒绝 → 引导态
@@ -125,7 +122,6 @@ fun QrScannerSheet(
                 )
             } else {
                 DeniedGuide(
-                    canRetry = asked,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(360.dp),
@@ -137,7 +133,7 @@ fun QrScannerSheet(
 
 /** 权限被拒引导态（iOS denied 分支：图标 40 + 标题 + 说明 + 前往设置）。 */
 @Composable
-private fun DeniedGuide(canRetry: Boolean, modifier: Modifier = Modifier) {
+private fun DeniedGuide(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Column(
         modifier = modifier.padding(horizontal = 24.dp),

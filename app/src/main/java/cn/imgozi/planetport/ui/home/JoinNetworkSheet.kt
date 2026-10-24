@@ -96,7 +96,7 @@ internal fun JoinNetworkSheet(
                                 dnsMode = dnsMode,
                                 customDns = if (dnsMode == DnsMode.custom) dnsServers else emptyList(),
                             ),
-                        ) { duplicateAlert = true }
+                        )
                         onDismiss()
                     },
                 ) { Text(stringResource(R.string.join_action)) }

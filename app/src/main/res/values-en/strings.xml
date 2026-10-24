@@ -21,6 +21,7 @@
     <string name="bg_download">Download</string>
     <string name="bg_error_download">Download failed: %1$s</string>
     <string name="bg_error_emptyContent">Download failed: empty content</string>
+    <string name="bg_error_generic">Failed to apply background image</string>
     <string name="bg_error_invalidUrl">Invalid URL</string>
     <string name="bg_title">Background</string>
     <string name="bg_urlHeader">Download from URL</string>

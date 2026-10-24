@@ -21,6 +21,7 @@
     <string name="bg_download">下载</string>
     <string name="bg_error_download">下载失败：%1$s</string>
     <string name="bg_error_emptyContent">下载失败：无内容</string>
+    <string name="bg_error_generic">无法应用背景图</string>
     <string name="bg_error_invalidUrl">URL 无效</string>
     <string name="bg_title">背景图</string>
     <string name="bg_urlHeader">从 URL 下载</string>

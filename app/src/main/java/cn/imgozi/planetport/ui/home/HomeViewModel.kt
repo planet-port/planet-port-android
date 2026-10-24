@@ -91,7 +91,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // 启动时隧道未存活：上次标记为已连接的网络实际已离线，复位避免
             // 「等待 VPN 连接」悬置与下次启动悄悄重连（iOS resetStaleNetworksIfNeeded）
-            if (!TunnelController.isRunning) StoreRepo.store.resetAllNetworkActivation()
+            if (!TunnelController.isRunning) {
+                storeWrite("resetAllNetworkActivation") {
+                    StoreRepo.store.resetAllNetworkActivation()
+                }
+            }
             reload()
         }
         viewModelScope.launch { StoreRepo.configChanges.collect { reload() } }
@@ -129,6 +133,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // MARK: - 状态聚合
+
+    /**
+     * store 写点兜底：写盘 IOException 等异常不崩进程，只记日志（不弹 UI——
+     * 首页无提示基建，为低概率磁盘故障扩张不值），对齐 MoonViewModel 既有
+     * runCatching 范式。失败后 UI 态与磁盘态由下次 reload / configChanges 收敛。
+     */
+    private suspend fun <T> storeWrite(tag: String, block: suspend () -> T) {
+        runCatching { block() }.onFailure { Log.w(TAG, "$tag 写盘失败", it) }
+    }
 
     /** store 全量重读（level-triggered；任何写路径后亦显式调用）。 */
     private suspend fun reload() {
@@ -201,7 +214,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** 只切换浏览上下文，不触碰隧道（iOS AppState.selectPlanet）。 */
     fun selectPlanet(id: String) {
         viewModelScope.launch {
-            StoreRepo.store.selectPlanet(id)
+            storeWrite("selectPlanet") { StoreRepo.store.selectPlanet(id) }
             reload()
         }
     }
@@ -242,7 +255,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (index < 0) return
         val updated = networks.toMutableList()
         updated[index] = updated[index].copy(lastActivated = false)
-        store.writeNetworks(updated, planetId)
+        storeWrite("writeNetworks") { store.writeNetworks(updated, planetId) }
         val selected = store.selectedPlanetId()
         if (planetId == selected && selected == store.activePlanetId() &&
             updated.none { it.lastActivated }
@@ -271,7 +284,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 routeViaTurnedOff = true
             }
         }
-        store.writeNetworks(updated, planetId)
+        storeWrite("writeNetworks") { store.writeNetworks(updated, planetId) }
         if (routeViaTurnedOff) {
             emitNotice(
                 appContext.getString(R.string.home_error_multiNetworkTitle),
@@ -301,7 +314,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * ensureStarted 的启动指令，用户无法经开关恢复）。
      */
     private suspend fun applySelectedPlanetAndStart(selectedPlanetId: String) {
-        val planetChanged = StoreRepo.store.activatePlanet(selectedPlanetId)
+        // activatePlanet 失败只记日志：planetChanged 保持 false，后续重启联动按原
+        // 语义照走（指针未换成功时不重启与磁盘态一致；即便触发重启亦无害幂等）
+        var planetChanged = false
+        storeWrite("activatePlanet") {
+            planetChanged = StoreRepo.store.activatePlanet(selectedPlanetId)
+        }
         _state.update { it.copy(activePlanetId = StoreRepo.store.activePlanetId()) }
         when {
             TunnelController.isRunning ->
@@ -347,19 +365,17 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     // MARK: - 加入网络
 
     /**
-     * 加入网络（仅保存不连接，iOS JoinNetworkSheet.join）：
-     * 当前行星内按 ID 查重，重复经 [onDuplicate] 回调由 UI 弹窗。
+     * 加入网络（仅保存不连接，iOS JoinNetworkSheet.join）：重复 ID 静默忽略——
+     * 查重归属 UI 侧自查（JoinNetworkSheet 点按前已拦截并弹窗），此处仅兜底
+     * 防并发/绕过路径重复写库。
      */
-    fun joinNetwork(entry: NetworkEntry, onDuplicate: () -> Unit) {
+    fun joinNetwork(entry: NetworkEntry) {
         viewModelScope.launch {
             val store = StoreRepo.store
             val planetId = store.selectedPlanetId()
             val existing = store.readNetworks(planetId)
-            if (existing.any { it.networkId == entry.networkId }) {
-                onDuplicate()
-                return@launch
-            }
-            store.writeNetworks(existing + entry, planetId)
+            if (existing.any { it.networkId == entry.networkId }) return@launch
+            storeWrite("writeNetworks") { store.writeNetworks(existing + entry, planetId) }
         }
     }
 
@@ -382,7 +398,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             }
             result.fold(
                 onSuccess = { profile ->
-                    StoreRepo.store.selectPlanet(profile.id)
+                    storeWrite("selectPlanet") { StoreRepo.store.selectPlanet(profile.id) }
                     reload()
                     onDone(profile, null)
                 },
@@ -449,17 +465,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val store = StoreRepo.store
         for ((planetId, networks) in store.readNetworksByPlanet()) {
             if (networks.none { it.lastActivated && conflicts[it.networkId] != null }) continue
-            store.writeNetworks(
-                networks.map { entry ->
-                    val code = conflicts[entry.networkId]
-                    if (entry.lastActivated && code != null) {
-                        entry.copy(lastConflict = code, lastActivated = false)
-                    } else {
-                        entry
-                    }
-                },
-                planetId,
-            )
+            storeWrite("writeNetworks") {
+                store.writeNetworks(
+                    networks.map { entry ->
+                        val code = conflicts[entry.networkId]
+                        if (entry.lastActivated && code != null) {
+                            entry.copy(lastConflict = code, lastActivated = false)
+                        } else {
+                            entry
+                        }
+                    },
+                    planetId,
+                )
+            }
         }
     }
 
@@ -472,7 +490,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         if (index < 0 || planets[index].lastNodeId == nodeId) return
         val updated = planets.toMutableList()
         updated[index] = updated[index].copy(lastNodeId = nodeId)
-        store.writePlanets(updated)
+        storeWrite("writePlanets") { store.writePlanets(updated) }
         reload()
     }
 
@@ -492,7 +510,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 entry
             }
         }
-        if (changed) store.writeNetworks(updated, planetId)
+        if (changed) storeWrite("writeNetworks") { store.writeNetworks(updated, planetId) }
     }
 
     // MARK: - 交互辅助

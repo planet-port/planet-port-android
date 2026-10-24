@@ -50,7 +50,7 @@ fun HomeParallaxBackground(
 
     val motion = remember { GravityParallax() }
     val density = LocalDensity.current
-    val parallaxRangePx = with(density) { HomeMetrics.parallaxRange.toPx() }
+    val parallaxRangePx = with(density) { ParallaxMetrics.parallaxRange.toPx() }
 
     Box(modifier.fillMaxSize()) {
         // 出血 1.12：图片预放大 12%，偏移在余量内裁剪（最小屏每边 6% ≥ 20dp 上限）
@@ -61,8 +61,8 @@ fun HomeParallaxBackground(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    scaleX = HomeMetrics.bleed
-                    scaleY = HomeMetrics.bleed
+                    scaleX = ParallaxMetrics.bleed
+                    scaleY = ParallaxMetrics.bleed
                     translationX = motion.offsetX * parallaxRangePx
                     translationY = motion.offsetY * parallaxRangePx
                 },
@@ -99,7 +99,11 @@ fun HomeParallaxBackground(
     }
 }
 
-private object HomeMetrics {
+/**
+ * 视差背景局部常量（iOS HomeParallaxBackground 同名）：仅本文件消费，就近内聚，
+ * 不并入 ui/theme/HomeMetrics 布局常量表（消除同名遮蔽即改名 ParallaxMetrics）。
+ */
+private object ParallaxMetrics {
     /** 视差最大偏移（iOS parallaxRange 20pt）。 */
     val parallaxRange = 20.dp
 

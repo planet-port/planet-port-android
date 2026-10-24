@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.prefs
 
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -121,10 +122,11 @@ fun BackgroundImagePickerSheet(
             }
             downloading = false
             when {
-                result.isFailure -> errorText = context.getString(
-                    R.string.bg_error_download,
-                    result.exceptionOrNull()?.message ?: "",
-                )
+                // 恒定资源文案：HTTP 码/系统异常 message 不直显（T7b 范式），细节进日志
+                result.isFailure -> {
+                    Log.w("BgImage", "apply 失败", result.exceptionOrNull())
+                    errorText = context.getString(R.string.bg_error_generic)
+                }
                 result.getOrDefault(ByteArray(0)).isEmpty() -> errorText =
                     context.getString(R.string.bg_error_emptyContent)
                 else -> applyImage(result.getOrThrow())

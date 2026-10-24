@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.prefs
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
@@ -57,7 +58,9 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 应用背景图（相册/URL 字节统一入口，T7）：store 校验并落文件后，
      * 同步 AppPrefs.backgroundImage 布尔（视差行 enabled 门控）与内存快照。
-     * 失败回调本地化文案（资源在 VM 层解析，sheet 非 composable 回调直接用）。
+     * 失败回调本地化文案（资源在 VM 层解析，sheet 非 composable 回调直接用）；
+     * TooLarge/NotImage 专用文案，未知异常走通用文案、异常 message 进日志
+     * （恒定资源文案 + Log.w，T7b 范式）。
      */
     fun applyBackgroundImage(data: ByteArray, onResult: (String?) -> Unit) {
         viewModelScope.launch {
@@ -69,8 +72,10 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
                     getApplication<Application>().getString(R.string.error_bg_tooLarge)
                 is BackgroundImageStore.Error.NotImage ->
                     getApplication<Application>().getString(R.string.error_bg_notImage)
-                else -> getApplication<Application>()
-                    .getString(R.string.bg_error_download, failure.message ?: "")
+                else -> {
+                    Log.w("BgImage", "apply 失败", failure)
+                    getApplication<Application>().getString(R.string.bg_error_generic)
+                }
             }
             if (message == null) write({ it.copy(backgroundImage = true) })
             onResult(message)
