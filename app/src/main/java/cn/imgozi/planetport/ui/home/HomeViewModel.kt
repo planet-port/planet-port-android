@@ -97,6 +97,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 val networks = StoreRepo.store.readActiveNetworks()
                 if (StoreRepo.store.connectOnDemand() && networks.any { it.lastActivated }) {
                     TunnelStateBus.log("按需连接开启，启动时自动恢复隧道")
+                    // Failed 存活态先 stop 再启：Failed 态服务进程仍活（scope 未取消），
+                    // isRunning 判为不在跑放行 START，但服务侧双 START 守卫只刷新通知
+                    // 就 return，核心不会重启——与 applySelectedPlanetAndStart 兜底一致
+                    if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                        TunnelController.stop(appContext)
+                    }
                     TunnelController.ensureStarted(
                         appContext,
                         requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
@@ -302,9 +308,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
-        val selected = store.selectedPlanetId()
+        // 应用目标全程锚定网络归属行星（iOS performNetworkActivate →
+        // applyPlanetAndStartVPN(planetId) 同构）：不重读 selectedPlanetId——
+        // 滑页竞态下选中态先行变化，以 selected 应用会激活错行星
         val wasRunning = TunnelController.isRunning
-        val fastPath = planetId == selected && selected == store.activePlanetId() && wasRunning
+        // 快速路径=网络所属行星就是隧道行星且隧道在跑（iOS 同构）：writeNetworks
+        // 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈不重启
+        val fastPath = planetId == store.activePlanetId() && wasRunning
         _pending.value = _pending.value + entry.networkId
         if (fastPath) {
             // 给隧道一个响应窗口，避免开关上的加载圈一闪而过（iOS 600ms 同构）
@@ -312,7 +322,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             clearPending(entry.networkId)
             return
         }
-        applySelectedPlanetAndStart(selected)
+        applySelectedPlanetAndStart(planetId)
         waitTunnelSettled(requireLeaveRunning = wasRunning)
         clearPending(entry.networkId)
     }

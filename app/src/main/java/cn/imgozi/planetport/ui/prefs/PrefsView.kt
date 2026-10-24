@@ -99,6 +99,7 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
     vm.attachPermissionRequester(activity::requestVpnPermission)
     val prefs by vm.prefs.collectAsState()
     val node by vm.nodeStatus.collectAsState()
+    val coreVersion by vm.coreVersion.collectAsState()
 
     // 背景图选取弹层（T7 实装）
     var showBgPicker by remember { mutableStateOf(false) }
@@ -265,7 +266,7 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                 SelectionContainer {
                     FormRow(
                         title = "ZeroTier Core",
-                        value = node?.coreVersion?.takeIf { it.isNotBlank() }
+                        value = coreVersion.takeIf { it.isNotBlank() }
                             ?: stringResource(R.string.common_unknown),
                     )
                 }

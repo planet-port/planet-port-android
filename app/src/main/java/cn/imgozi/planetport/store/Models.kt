@@ -90,8 +90,8 @@ data class AppPrefs(
     val themeColor: Long? = null,
     /** 拾色器自定义主色（ARGB）；非 null 时优先于 [themeColor]。 */
     val themeColorCustom: Long? = null,
-    /** 状态成功色是否随主色派生（对齐 iOS successDerived；默认 true）。 */
-    val successDerived: Boolean = true,
+    /** 状态成功色是否随主色派生（对齐 iOS successDerived；默认 false，状态色保持语义色）。 */
+    val successDerived: Boolean = false,
     /** 界面语言（"zh"/"zh-rTW"/"en"）。null = 跟随系统。 */
     val language: String? = null,
     /** 首页背景图是否已设置（图本体存应用私有目录，P4 落地）。 */

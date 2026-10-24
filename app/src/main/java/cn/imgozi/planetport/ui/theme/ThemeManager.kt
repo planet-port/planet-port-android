@@ -31,8 +31,8 @@ object ThemeManager {
     /** 当前主色（ARGB，预设或拾色器自定义值统一存这里）。 */
     val accent = MutableStateFlow(0xFFD44037)
 
-    /** 状态色是否随主色三角派生（iOS deriveStatusColor，默认开）。 */
-    val successDerived = MutableStateFlow(true)
+    /** 状态色是否随主色三角派生（iOS deriveStatusColor，默认关：状态色保持绿/橙/红语义）。 */
+    val successDerived = MutableStateFlow(false)
 
     /**
      * 偏好灌入口（T4 PrefsView 双写接线用）：仅赋内存值，不落盘。

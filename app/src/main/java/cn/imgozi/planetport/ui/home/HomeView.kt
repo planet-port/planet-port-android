@@ -377,6 +377,8 @@ private fun PlanetPage(
                     NetworkCardView(
                         entry = entry,
                         status = deriveNetworkCardStatus(
+                            // 非当前隧道行星一律「未连接」（iOS NetworkCardView 第一级）
+                            isActivePlanet = isActivePage,
                             vpnRunning = running,
                             lastActivated = entry.lastActivated,
                             lastConflict = entry.lastConflict,

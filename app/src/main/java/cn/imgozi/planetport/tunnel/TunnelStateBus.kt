@@ -53,6 +53,14 @@ object TunnelStateBus {
     private val _nodeStatus = MutableStateFlow<NodeStatusInfo?>(null)
     val nodeStatus: StateFlow<NodeStatusInfo?> = _nodeStatus.asStateFlow()
 
+    /**
+     * Core 版本缓存（编译期随核心二进制定死的静态常量，停机不清——对齐 iOS
+     * StatusStore.coreVersion：核心启动时写入一次，stopTunnel 不清除，停机后
+     * UI 仍显示最后已知版本）。随每份节点快照灌入（见 setNodeStatus）。
+     */
+    private val _coreVersion = MutableStateFlow("")
+    val coreVersion: StateFlow<String> = _coreVersion.asStateFlow()
+
     private val _networkStatuses = MutableStateFlow<Map<String, Int>>(emptyMap())
     val networkStatuses: StateFlow<Map<String, Int>> = _networkStatuses.asStateFlow()
 
@@ -72,7 +80,7 @@ object TunnelStateBus {
     private val _networkConfigs = MutableStateFlow<Map<String, NetConf>>(emptyMap())
     internal val networkConfigs: StateFlow<Map<String, NetConf>> = _networkConfigs.asStateFlow()
 
-    /** Peer 快照（5s 周期推流 + 停机清空；PeerListView 下拉刷新走 NodeRuntime.peersNow 直查） */
+    /** Peer 快照（5s 周期推流 + 停机清空；Peers 页只订阅此流，无直查入口） */
     private val _peers = MutableStateFlow<List<PeerInfo>>(emptyList())
     val peers: StateFlow<List<PeerInfo>> = _peers.asStateFlow()
 
@@ -85,7 +93,11 @@ object TunnelStateBus {
     val eventLog: StateFlow<String> = _eventLog.asStateFlow()
 
     fun setTunnelState(state: TunnelState) { _tunnelState.value = state }
-    fun setNodeStatus(info: NodeStatusInfo?) { _nodeStatus.value = info }
+    /** 置 null（停机/启动失败）只清 nodeStatus，coreVersion 缓存留存供 UI 展示 */
+    fun setNodeStatus(info: NodeStatusInfo?) {
+        info?.coreVersion?.takeIf { it.isNotBlank() }?.let { _coreVersion.value = it }
+        _nodeStatus.value = info
+    }
 
     fun setNetworkStatus(nwidHex: String, status: Int) {
         _networkStatuses.value = _networkStatuses.value + (nwidHex to status)

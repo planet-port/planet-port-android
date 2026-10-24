@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetImporter
+import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.planet.IconPickerSheet
 import cn.imgozi.planetport.ui.planet.PlanetIcon
 import cn.imgozi.planetport.ui.theme.HomeMetrics
@@ -364,7 +365,7 @@ private fun AddPlanetForm(
                 val ready = pendingData
                 if (ready != null) {
                     Text(
-                        stringResource(R.string.addplanet_ready, fileSizeLabel(ready.size)),
+                        stringResource(R.string.addplanet_ready, fileSizeText(ready.size)),
                         style = MaterialTheme.typography.bodySmall,
                         color = cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors.current.good,
                     )
@@ -515,11 +516,4 @@ private fun FormField(
         },
         modifier = modifier,
     )
-}
-
-/** 文件大小可读化（iOS locFileSize 同构）。 */
-private fun fileSizeLabel(bytes: Int): String = when {
-    bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / (1024f * 1024f))
-    bytes >= 1024 -> "%.1f KB".format(bytes / 1024f)
-    else -> "$bytes B"
 }

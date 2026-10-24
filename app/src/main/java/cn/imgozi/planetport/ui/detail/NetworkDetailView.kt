@@ -209,12 +209,17 @@ private fun NetworkDetailContent(
             MonoListOrEmpty(
                 snapshot?.assignedAddrs.orEmpty(),
                 labelRes = R.string.network_addrLabel,
+                emptyLabelRes = R.string.network_addr,
                 copyable = true,
             )
         }
 
         FormSection(header = stringResource(R.string.network_managedRoutes)) {
-            MonoListOrEmpty(snapshot?.routes.orEmpty(), labelRes = R.string.network_routeLabel)
+            MonoListOrEmpty(
+                snapshot?.routes.orEmpty(),
+                labelRes = R.string.network_routeLabel,
+                emptyLabelRes = R.string.network_route,
+            )
         }
 
         FormSection(
@@ -435,22 +440,37 @@ private fun qrImage(content: String, size: Int = 420): ImageBitmap? {
 }
 
 /**
- * 等宽列表（地址/路由），空表显示「—」（对齐 iOS ForEach / Text("—")）。
+ * 等宽列表（地址/路由），空表仍渲染标签行 +「—」（对齐 iOS row(loc("network.addr"), "—")）。
  * 每行左「地址/路由 N」标签（[labelRes]，iOS network.addrLabel / network.routeLabel）、
  * 右等宽值（FormRow 同构：值右对齐）；地址行值可复制。
+ * 空表行标签用 [emptyLabelRes]（iOS network.addr / network.route，不带序号）。
  */
 @Composable
 private fun MonoListOrEmpty(
     values: List<String>,
     @StringRes labelRes: Int,
+    @StringRes emptyLabelRes: Int,
     copyable: Boolean = false,
 ) {
     if (values.isEmpty()) {
-        Text(
-            "—",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(vertical = 10.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(emptyLabelRes),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "—",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         return
     }
     Column {

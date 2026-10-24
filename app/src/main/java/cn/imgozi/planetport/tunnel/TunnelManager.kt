@@ -73,7 +73,8 @@ internal class TunnelManager(
             }
         }
         // Peer 快照轮询：5s 周期，仅隧道 Running 态推流（对齐 iOS pollRuntime 的
-        // 5s 拉取节奏；下拉刷新另有 NodeRuntime.peersNow 直查，不依赖此流）
+        // 5s 拉取节奏；Peers 页只订阅此流展示当前值——「下拉刷新」语义即等下一
+        // 个推流周期，不做 NodeRuntime.peersNow JNI 直查）
         peersJob = scope.launch {
             while (isActive) {
                 delay(5_000)
@@ -322,6 +323,23 @@ internal class TunnelManager(
             }
             append("includedV4=" + v4Routes.joinToString(",") { "${it.addr}/${it.prefix}" } + "\n")
             append("includedV6=" + v6Routes.joinToString(",") { "${it.addr}/${it.prefix}" } + "\n")
+            // 核心侧 peer 可达性摘要（对齐 iOS applyTrace 末行 PacketTunnelProvider
+            // 438-444）：leaf/moon/planet 计数 + leaf 前 10 条逐 peer 展示
+            // 「地址(延迟ms,路径)」——路径取首条物理路径，无路径即 relay 中转；
+            // 与数据面计数同屏对照（ARP 无回应时先看对端路径是否还活着）。
+            // peersNow 是 JNI 直查（node 未起返回空表），本协程在 configMutex
+            // 锁内串行执行，线程安全性与 peersJob 推流同源（C 核心内部有锁）
+            run {
+                val peers = runtime.peersNow()
+                val leafs = peers.filter { it.role == "LEAF" }
+                val leafLine = leafs.take(10).joinToString(" ") { p ->
+                    "%010x(%dms,%s)".format(p.address, p.latency, p.paths.firstOrNull() ?: "relay")
+                }
+                append(
+                    "peers leaf=${leafs.size} moon=${peers.count { it.role == "MOON" }} " +
+                        "planet=${peers.count { it.role == "PLANET" }} [$leafLine]\n"
+                )
+            }
             append(converter.debugSummary())
         }
 

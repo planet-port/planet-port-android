@@ -39,14 +39,19 @@ fun ztStatusLabel(code: Int): Int = when (code) {
 /**
  * 网络卡片状态五级判定（优先级严格对齐 iOS 侦查 §2.5 / NetworkCardView.swift:8-52）：
  *
- * 1. `!vpnRunning` → lastActivated ? 「建立隧道」橙 : 「未连接」中性
- * 2. 实时冲突（liveConflict: "address"/"subnet"）→ 红「地址冲突/网段冲突」
- * 3. `!lastActivated` → 有 lastConflict 则红「<冲突原因>，断开」，否则「未连接」
- * 4. 有实时状态码（[hasStatus]）→ 待授权(2/6) 橙「待授权」；ok(1) 绿；其余橙（状态文案）
- * 5. 兜底「等待节点响应」中性
+ * 1. 非当前隧道行星（[isActivePlanet]）→ 一律「未连接」中性（开关为关，打开即
+ *    切换行星，无需中间状态）
+ * 2. `!vpnRunning` → lastActivated ? 「建立隧道」橙 : 「未连接」中性
+ * 3. 实时冲突（liveConflict: "address"/"subnet"）→ 红「地址冲突/网段冲突」
+ * 4. `!lastActivated` → 有 lastConflict 则红「<冲突原因>，断开」，否则「未连接」
+ * 5. 有实时状态码（[hasStatus]）→ 待授权(2/6) 橙「待授权」；ok(1) 绿；其余橙（状态文案）
+ * 6. 兜底「等待节点响应」中性
  *
  * 纯函数模型：只产出资源 ID，文案解析在 UI 层（stringResource）。
  *
+ * @param isActivePlanet 卡片归属行星是否当前隧道行星；false 时无视其余参数直接
+ *                       「未连接」（对齐 iOS 第一级——隧道运行中滑回残留
+ *                       lastActivated 的旁页，不误显「等待节点响应」）
  * @param liveConflict 当前会话的冲突原因码，null = 无冲突
  * @param lastConflict 上次会话遗留的冲突原因码，null = 无记录
  * @param statusCode   TunnelStateBus.networkStatuses 的实时原始码，null = 暂无
@@ -54,6 +59,7 @@ fun ztStatusLabel(code: Int): Int = when (code) {
  *                     iOS「networkStatuses[nwid] 存在」的判定语义（调用方持有状态表时可用）
  */
 fun deriveNetworkCardStatus(
+    isActivePlanet: Boolean,
     vpnRunning: Boolean,
     lastActivated: Boolean,
     lastConflict: String?,
@@ -61,6 +67,9 @@ fun deriveNetworkCardStatus(
     statusCode: Int?,
     hasStatus: Boolean = statusCode != null,
 ): NetworkCardStatus {
+    if (!isActivePlanet) {
+        return NetworkCardStatus(R.string.status_disconnected, StatusColor.Neutral)
+    }
     if (!vpnRunning) {
         return if (lastActivated) {
             NetworkCardStatus(R.string.status_establishing, StatusColor.Warn)

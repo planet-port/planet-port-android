@@ -62,6 +62,7 @@ import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.components.CopyableRow
 import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
+import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.theme.PlanetFonts
@@ -428,22 +429,6 @@ private fun NavRow(
             modifier = Modifier.size(20.dp),
         )
     }
-}
-
-/** 文件大小（十进制 KB=1000，国际单位不随语言变化——对齐 iOS locFileSize）。 */
-private fun fileSizeText(bytes: Int): String {
-    val units = listOf(
-        1_000_000_000_000L to "TB",
-        1_000_000_000L to "GB",
-        1_000_000L to "MB",
-        1_000L to "KB",
-    )
-    for ((factor, unit) in units) {
-        if (bytes >= factor) {
-            return String.format(Locale.US, "%.1f %s", bytes.toDouble() / factor, unit)
-        }
-    }
-    return "$bytes B"
 }
 
 /**

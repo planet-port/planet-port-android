@@ -1,5 +1,6 @@
 package cn.imgozi.planetport.ui.home
 
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -77,6 +79,8 @@ fun NetworkCardView(
     )
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val copiedLabel = stringResource(R.string.common_copied)
 
     Row(
         modifier = modifier
@@ -93,7 +97,10 @@ fun NetworkCardView(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onTap,
-                    onLongClick = { clipboard.setText(AnnotatedString(entry.networkId)) },
+                    onLongClick = {
+                        clipboard.setText(AnnotatedString(entry.networkId))
+                        Toast.makeText(context, copiedLabel, Toast.LENGTH_SHORT).show()
+                    },
                 ),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {

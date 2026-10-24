@@ -50,6 +50,7 @@ import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import kotlinx.coroutines.delay
+import java.util.Locale
 
 /** 语义状态圆点（iOS NetworkCardView 状态行，默认 6pt）。 */
 @Composable
@@ -235,4 +236,20 @@ fun EmptyStateCard(
             )
         }
     }
+}
+
+/** 文件大小可读化（iOS locFileSize 同构：十进制 KB=1000，国际单位不随语言变化）。 */
+fun fileSizeText(bytes: Int): String {
+    val units = listOf(
+        1_000_000_000_000L to "TB",
+        1_000_000_000L to "GB",
+        1_000_000L to "MB",
+        1_000L to "KB",
+    )
+    for ((factor, unit) in units) {
+        if (bytes >= factor) {
+            return String.format(Locale.US, "%.1f %s", bytes.toDouble() / factor, unit)
+        }
+    }
+    return "$bytes B"
 }

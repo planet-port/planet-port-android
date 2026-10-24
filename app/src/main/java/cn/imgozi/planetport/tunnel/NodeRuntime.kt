@@ -199,7 +199,8 @@ internal class NodeRuntime(
 
     /**
      * 当前 peer 快照（JNI 直查，对齐 iOS bridge.peers）。node 未启动返回空列表。
-     * PeerListView 下拉刷新直查此入口；5s 周期推流见 TunnelManager.peersJob。
+     * 数据源仅供隧道侧：5s 周期推流见 TunnelManager.peersJob，applyTrace 摘要行
+     * 同样直查此入口（Peers 页无下拉刷新直查，只订阅推流）。
      */
     fun peersNow(): List<PeerInfo> {
         val n = node ?: return emptyList()

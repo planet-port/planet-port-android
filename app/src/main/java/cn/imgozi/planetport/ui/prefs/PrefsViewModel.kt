@@ -9,6 +9,7 @@ import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.TunnelController
+import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
 import cn.imgozi.planetport.ui.theme.ThemeManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,10 +61,18 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
             if (on && !TunnelController.isRunning) {
                 viewModelScope.launch {
                     val hasActive = StoreRepo.store.readActiveNetworks().any { it.lastActivated }
-                    if (hasActive) TunnelController.ensureStarted(
-                        getApplication(),
-                        requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
-                    )
+                    // Failed 存活态先 stop 再启：Failed 态服务进程仍活（scope 未取消），
+                    // isRunning 判为不在跑放行 START，但服务侧双 START 守卫只刷新通知
+                    // 就 return，核心不会重启——与 HomeViewModel 按需恢复兜底一致
+                    if (hasActive) {
+                        if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                            TunnelController.stop(getApplication())
+                        }
+                        TunnelController.ensureStarted(
+                            getApplication(),
+                            requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
+                        )
+                    }
                 }
             }
         })
@@ -148,8 +157,11 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         write({ it.copy(language = code) })
     }
 
-    /** 节点快照（Core 版本取 nodeStatus?.coreVersion；停机为 null → 视图显示「未知」）。 */
+    /** 节点快照（停机为 null；nodeId/online 归位，Core 版本走 [coreVersion] 缓存）。 */
     val nodeStatus: StateFlow<cn.imgozi.planetport.tunnel.NodeStatusInfo?> get() = TunnelStateBus.nodeStatus
+
+    /** Core 版本（编译期静态常量，停机不清——对齐 iOS StatusStore.coreVersion 语义）。 */
+    val coreVersion: StateFlow<String> get() = TunnelStateBus.coreVersion
 
     /** App 版本（versionName (versionCode)，对齐 iOS CFBundleShortVersionString 拼装）。 */
     val appVersion: String by lazy {
