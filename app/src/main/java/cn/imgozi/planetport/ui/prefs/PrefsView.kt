@@ -267,6 +267,7 @@ fun PrefsView(onBack: () -> Unit) {
 
     if (showBgPicker) {
         BackgroundImagePickerSheet(
+            vm = vm,
             hasImage = prefs.backgroundImage,
             onApplied = { showBgPicker = false },
             onDismiss = { showBgPicker = false },

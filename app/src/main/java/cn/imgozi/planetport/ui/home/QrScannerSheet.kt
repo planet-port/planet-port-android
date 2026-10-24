@@ -57,6 +57,7 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.NotFoundException
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -185,9 +186,14 @@ private fun ScannerContent(
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     // 「识别一次即停」（iOS stopScanning）：analyzer 线程置位，命中后不再上报
     val stopped = remember { AtomicBoolean(false) }
+    // 相机资源句柄（provider 异步就绪后写入）：弹层离组统一解绑 + 回收线程
+    val camera = remember { ScannerCamera() }
 
     DisposableEffect(Unit) {
-        onDispose { stopped.set(true) }
+        onDispose {
+            stopped.set(true)
+            camera.release()
+        }
     }
 
     AndroidView(
@@ -195,6 +201,7 @@ private fun ScannerContent(
         factory = { ctx ->
             val previewView = PreviewView(ctx)
             val executor = Executors.newSingleThreadExecutor()
+            camera.executor = executor
             val reader = MultiFormatReader().apply {
                 setHints(
                     mapOf(
@@ -224,6 +231,10 @@ private fun ScannerContent(
             ProcessCameraProvider.getInstance(ctx).addListener({
                 try {
                     val provider = ProcessCameraProvider.getInstance(ctx).get()
+                    // 弹层先于 provider 就绪关闭：已释放则不再绑定（否则绑上后无人解绑，
+                    // 隐私指示灯常亮直到下次绑定）
+                    if (camera.released) return@addListener
+                    camera.provider = provider
                     provider.unbindAll()
                     provider.bindToLifecycle(
                         lifecycleOwner,
@@ -239,6 +250,26 @@ private fun ScannerContent(
             previewView
         },
     )
+}
+
+/**
+ * 扫码相机资源句柄：provider 经 getInstance 异步回调持有（不在主线程阻塞 get），
+ * 解码 executor 与组合同生命周期——弹层离组 [release] 解绑相机并停线程，
+ * 重开扫码层时随组合新建实例，无线程残留。onDispose 与 getInstance 回调
+ * 均投递主线程执行，无需加锁。
+ */
+private class ScannerCamera {
+    var released = false
+    var provider: ProcessCameraProvider? = null
+    var executor: ExecutorService? = null
+
+    fun release() {
+        released = true
+        provider?.unbindAll()
+        provider = null
+        executor?.shutdown()
+        executor = null
+    }
 }
 
 /**

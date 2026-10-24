@@ -39,7 +39,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.imgozi.planetport.R
-import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.ui.components.SectionCard
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -49,8 +48,11 @@ import java.net.URL
 /**
  * 背景图选择弹层（iOS BackgroundImagePickerSheet 等价）：相册
  * （PickVisualMedia，无需相册权限）或 URL 下载；已设置时追加「清除背景图」。
- * 成功后回调 [onApplied]（调用方关闭弹层并刷新缩略图），失败 footer 红字提示。
+ * 保存/清除统一走 [vm]（AppPrefs.backgroundImage 是视差行门控的唯一事实源，
+ * 直写 store 会导致该布尔恒 false），成功后回调 [onApplied]（调用方关闭弹层
+ * 并刷新缩略图），失败 footer 红字提示（文案由 VM 层本地化）。
  *
+ * @param vm 偏好 VM：store 校验落盘 + AppPrefs 双写 + 错误文案本地化
  * @param hasImage 当前是否已设置背景图（决定清除区显隐）
  * @param onApplied 应用成功回调
  * @param onDismiss 关闭回调
@@ -58,6 +60,7 @@ import java.net.URL
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackgroundImagePickerSheet(
+    vm: PrefsViewModel,
     hasImage: Boolean,
     onApplied: () -> Unit,
     onDismiss: () -> Unit,
@@ -69,19 +72,11 @@ fun BackgroundImagePickerSheet(
     var downloading by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
 
-    // 相册/URL 数据统一入口：store 校验（大小/可解码）→ 落盘 → 成功关闭
+    // 相册/URL 数据统一入口：VM 落盘（store 校验 + AppPrefs.backgroundImage 双写），
+    // 失败回调本地化文案，成功关闭
     fun applyImage(data: ByteArray) {
-        scope.launch {
-            val failure = runCatching { BackgroundImageStore.save(context, data) }
-                .exceptionOrNull()
-            errorText = when (failure) {
-                is BackgroundImageStore.Error.TooLarge ->
-                    context.getString(R.string.error_bg_tooLarge)
-                is BackgroundImageStore.Error.NotImage ->
-                    context.getString(R.string.error_bg_notImage)
-                null -> null
-                else -> context.getString(R.string.bg_error_download, failure.message ?: "")
-            }
+        vm.applyBackgroundImage(data) { failure ->
+            errorText = failure
             if (failure == null) onApplied()
         }
     }
@@ -246,10 +241,9 @@ fun BackgroundImagePickerSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClickLabel = clearLabel) {
-                            scope.launch {
-                                BackgroundImageStore.clear(context)
-                                onApplied()
-                            }
+                            // 清除走 VM：删文件 + AppPrefs.backgroundImage 归位（无失败分支）
+                            vm.clearBackgroundImage()
+                            onApplied()
                         },
                 ) {
                     Text(

@@ -142,9 +142,11 @@ private class GravityParallax : SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type != Sensor.TYPE_GRAVITY) return
+        // 归一化到 ±1：TYPE_GRAVITY 单位 m/s²（±GRAVITY_EARTH），iOS CoreMotion
+        // gravity 单位 g（±1）——不除会放大 ~10 倍偏移冲出 1.12 出血余量（T7 审查 I-1）
         // 手机右倾（gravity.x 增大）→ 背景向左移；y 直接取重力分量（iOS :69-71）
-        val targetX = -event.values[0]
-        val targetY = event.values[1]
+        val targetX = -event.values[0] / SensorManager.GRAVITY_EARTH
+        val targetY = event.values[1] / SensorManager.GRAVITY_EARTH
         val alpha = 0.1f
         offsetX += (targetX - offsetX) * alpha
         offsetY += (targetY - offsetY) * alpha
