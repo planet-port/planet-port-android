@@ -33,13 +33,22 @@ internal class TunnelManager(
     // Builder 是 VpnService 的非静态内部类，构造必须挂在外层实例上（UdpCom 同模式）
     private val vpnService: VpnService,
 ) {
+    /** 用户侧配置比较键：routeVia/DNS 三模式为每网络值，IPv6 禁用位为全局偏好
+     *  （进每网络键以让任一网络的重配循环都能感知全局位变化） */
+    private data class AppliedNetConf(
+        val routeVia: Boolean,
+        val dnsMode: DnsMode,
+        val customDns: List<String>,
+        val disableIpv6: Boolean,
+    )
+
     private val configMutex = Mutex()
     private var snapshots = HashMap<Long, NetConf>()
     private var settingsJob: Job? = null
     private var joinedNetworks = HashSet<Long>()
     private var orbitedMoons = HashSet<Long>()
-    /** 已应用的用户侧配置（nwid → Triple(routeVia, dnsMode, customDns)），变更热重配 */
-    private var appliedEntries = HashMap<Long, Triple<Boolean, DnsMode, List<String>>>()
+    /** 已应用的用户侧配置（nwid → [AppliedNetConf]），任一字段变更即热重配 */
+    private var appliedEntries = HashMap<Long, AppliedNetConf>()
     /** 最近一次成功 establish 的配置签名——CONFIG_UPDATE 每 60s 重推一次完整
      *  netconf，无变化时跳过重建（Android establish 无系统级幂等，重复 swap
      *  会关旧 fd 开新 fd，打断在途连接并使 TUN 接口序号持续增长） */
@@ -168,12 +177,16 @@ internal class TunnelManager(
                 orbitedMoons.add(worldId)
             }
         }
-        // 用户侧配置（默认路由/DNS）变更 → 用核心当前配置热重套（对齐 iOS appliedEntries）
+        // 用户侧配置（默认路由/DNS/IPv6 禁用位）变更 → 用核心当前配置热重套
+        //（对齐 iOS appliedEntries；IPv6 禁用位为 Android 领先项——iOS 不在比较
+        //  键内，靠 PrefsView 显式热重启生效。禁用位是全局偏好，进每个网络的比较
+        //  值，变更即触发全部已 join 网络重套，聚合时 v6 过滤随新值生效）
+        val disableIpv6 = store.disableIpv6()
         for (nwid in joinedNetworks) {
             val entry = networks.firstOrNull {
                 it.networkId.toULongOrNull(16)?.toLong() == nwid
             } ?: continue
-            val applied = Triple(entry.routeViaZeroTier, entry.dnsMode, entry.customDns)
+            val applied = AppliedNetConf(entry.routeViaZeroTier, entry.dnsMode, entry.customDns, disableIpv6)
             if (appliedEntries[nwid] != applied) {
                 appliedEntries[nwid] = applied
                 runtime.networkConf(nwid)?.let { upsertSnapshotLocked(nwid, it) }
