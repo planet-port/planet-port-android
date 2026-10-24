@@ -68,6 +68,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.store.NetworkEntry
+import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.LocalNavigator
 import cn.imgozi.planetport.ui.MainActivity
@@ -401,6 +402,11 @@ private fun PlanetPage(
     }
 }
 
+/** 显示名：官方行星显示侧本地化（iOS PlanetProfile.displayName 同构，存储名不翻译）。 */
+@Composable
+private fun PlanetProfile.displayNameRes(): String =
+    if (kind == PlanetKind.official) stringResource(R.string.planet_official_name) else name
+
 /**
  * 头区（iOS headerZone）：半透明背景渐变盖过状态栏，左 40dp logo + 标题，
  * 非当前隧道行星浏览且隧道在跑时显示「跳回活跃行星」链接 chip，右侧设置入口；
@@ -455,7 +461,8 @@ private fun HeaderZone(
             }
         }
         if (!browsingActive && state.tunnelRunning) {
-            val activeName = state.planets.firstOrNull { it.id == state.activePlanetId }?.name
+            val activeName = state.planets.firstOrNull { it.id == state.activePlanetId }
+                ?.displayNameRes()
                 ?: stringResource(R.string.planet_official_name)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -503,7 +510,7 @@ private fun HeaderZone(
                 // 无障碍标签：行星页 = 浏览 X，末位 = 添加行星（iOS dot(isSelected:label:)）
                 val planet = state.planets.getOrNull(idx)
                 val dotLabel = planet
-                    ?.let { stringResource(R.string.home_a11y_browsePlanet, it.name) }
+                    ?.let { stringResource(R.string.home_a11y_browsePlanet, it.displayNameRes()) }
                     ?: stringResource(R.string.planet_add_title)
                 Box(
                     modifier = Modifier
