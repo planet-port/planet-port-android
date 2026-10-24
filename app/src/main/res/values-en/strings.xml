@@ -19,7 +19,6 @@
     <string name="bg_choosePhoto">Choose Photo</string>
     <string name="bg_clear">Remove Background Image</string>
     <string name="bg_download">Download</string>
-    <string name="bg_error_download">Download failed: %1$s</string>
     <string name="bg_error_emptyContent">Download failed: empty content</string>
     <string name="bg_error_generic">Failed to apply background image</string>
     <string name="bg_error_invalidUrl">Invalid URL</string>
@@ -31,7 +30,6 @@
     <string name="card_conflict_subnet">Subnet Conflict</string>
     <string name="common_allowed">Allowed</string>
     <string name="common_cancel">Cancel</string>
-    <string name="common_copyId">Copy ID</string>
     <string name="common_copyIp">Copy IP</string>
     <string name="common_done">Done</string>
     <string name="common_forbidden">Blocked</string>
@@ -50,7 +48,6 @@
     <string name="common_unknown">Unknown</string>
     <string name="common_yes">Yes</string>
     <string name="dns_invalid">Invalid DNS address format</string>
-    <string name="dns_mode">Mode</string>
     <string name="dns_mode_custom">Custom</string>
     <string name="dns_mode_network">Use Network DNS</string>
     <string name="dns_mode_none">None</string>
@@ -65,21 +62,13 @@
     <string name="error_moon_readFailed">Failed to read file</string>
     <string name="error_planet_badHeader">Not a valid planet file (header check failed)</string>
     <string name="error_planet_emptyName">Please enter a planet name</string>
-    <string name="error_planet_reservedName">Planet names may not contain “ZeroTier” or “Zero Tier” (trademark protection)</string>
     <string name="fab_addNetwork">Add Network</string>
-    <string name="home_a11y_activePlanetHint">Switch to the current planet page</string>
     <string name="home_a11y_browsePlanet">Browse %1$s</string>
-    <string name="home_alert_cellularDeniedMessage">PlanetPort has no wireless data permission, so the VPN cannot connect. Go to Settings → Cellular → PlanetPort and choose "WLAN &amp; Cellular Data".</string>
-    <string name="home_alert_goSettings">Go to Settings</string>
-    <string name="home_alert_gotIt">Got It</string>
     <string name="home_alert_limitConfirm">Connecting multiple networks at once increases battery drain. Still enable "%1$s"?</string>
     <string name="home_alert_networkStatus">Network %1$s: %2$s</string>
     <string name="home_alert_networkStatusError">Network Status Issue</string>
-    <string name="home_alert_noNetworkAccess">Cannot Use Network</string>
     <string name="home_alert_openAnyway">Enable Anyway</string>
     <string name="home_alert_openMore">Enable More Networks</string>
-    <string name="home_error_cellularMessage">Currently on cellular data, which is not allowed in Settings</string>
-    <string name="home_error_cellularTitle">Cellular Data Not Enabled</string>
     <string name="home_error_multiNetworkMessage">"Route via ZeroTier (default route)" was turned off automatically: it is unavailable while multiple networks are connected</string>
     <string name="home_error_multiNetworkTitle">Multiple Networks</string>
     <string name="home_error_vpnStartTitle">Could Not Start VPN</string>
@@ -138,7 +127,6 @@
     <string name="network_status_unknown">Unknown</string>
     <string name="peers_emptyTitle">No peers on "%1$s"</string>
     <string name="peers_loading">Loading Peers…</string>
-    <string name="peers_refreshHint">Pull to refresh and retry</string>
     <string name="peers_relay">Relayed</string>
     <string name="peers_tunnelDown">Tunnel Not Running</string>
     <string name="peers_tunnelDownHint">Turn on a network to see live connections</string>
@@ -171,13 +159,10 @@
     <string name="prefs_appearance_sectionHeader">Appearance</string>
     <string name="prefs_language_sectionHeader">Language</string>
     <string name="prefs_language_system">Follow System</string>
-    <string name="prefs_network_allowCellular">Allow Cellular Data</string>
     <string name="prefs_network_disableIPv6">Disable IPv6</string>
     <string name="prefs_network_footer">Connecting multiple networks at once increases battery drain; you will be asked to confirm beyond the limit, but can still force-enable.</string>
     <string name="prefs_network_multiConnectLimit">Simultaneous connection limit: %1$d</string>
     <string name="prefs_network_sectionHeader">Network</string>
-    <string name="prefs_ondemand">Connect On Demand</string>
-    <string name="prefs_ondemand_footer">When enabled, the system brings up the VPN automatically whenever the network is available; which planet is used is still decided by the network switches.</string>
     <string name="prefs_support_donate">Donate</string>
     <string name="prefs_support_sectionHeader">Support</string>
     <string name="prefs_theme_a11yPreset">Accent %1$s</string>
@@ -188,11 +173,8 @@
     <string name="qr_deniedMessage">Please allow PlanetPort to use the camera in system Settings and try again</string>
     <string name="qr_deniedTitle">Camera Unavailable</string>
     <string name="qr_title">Scan to Join</string>
-    <string name="status_connected">Connected</string>
-    <string name="status_connecting">Connecting</string>
     <string name="status_disconnected">Not Connected</string>
     <string name="status_establishing">Establishing Tunnel</string>
-    <string name="status_pendingAdd">To Add</string>
     <string name="status_pendingAuth">Pending Approval</string>
     <string name="status_waitingNode">Waiting for Node</string>
     <string name="theme_preset_bamboo">Bamboo Green</string>
@@ -210,18 +192,10 @@
     <string name="trace_title">Data Plane Diagnostics</string>
     <string name="tunnel_error_coreDriver">ZeroTier core runtime error</string>
     <string name="tunnel_error_coreInit">ZeroTier Core initialization failed</string>
-    <string name="tunnel_error_socketBind">Failed to bind UDP port (errno=%1$d: %2$s)</string>
-    <string name="tunnel_error_socketCreate">Failed to create UDP socket (errno=%1$d: %2$s)</string>
-    <string name="tunnel_status_applyFailed">Failed to apply tunnel settings: %1$s</string>
     <string name="tunnel_status_fatalConflict">Fatal error: node address conflict</string>
-    <string name="tunnel_status_reconnectFailed">Reconnect failed: %1$s</string>
     <string name="tunnel_status_reconnecting">Network changed, reconnecting</string>
     <string name="tunnel_status_running">Running</string>
-    <string name="tunnel_status_startFailed">Start failed: %1$s</string>
     <string name="tunnel_status_stopped">Stopped</string>
-    <string name="vpn_error_save">Failed to save VPN configuration: %1$s</string>
-    <string name="vpn_error_start">Failed to start VPN: %1$s</string>
-    <string name="vpn_error_startFallback">Failed to start VPN</string>
     <string name="app_name">Planet Port</string>
     <string name="common_back">Back</string>
     <string name="common_copy">Copy</string>

@@ -19,7 +19,6 @@
     <string name="bg_choosePhoto">選擇照片</string>
     <string name="bg_clear">清除背景圖</string>
     <string name="bg_download">下載</string>
-    <string name="bg_error_download">下載失敗：%1$s</string>
     <string name="bg_error_emptyContent">下載失敗：無內容</string>
     <string name="bg_error_generic">無法套用背景圖</string>
     <string name="bg_error_invalidUrl">URL 無效</string>
@@ -31,7 +30,6 @@
     <string name="card_conflict_subnet">網段衝突</string>
     <string name="common_allowed">允許</string>
     <string name="common_cancel">取消</string>
-    <string name="common_copyId">複製 ID</string>
     <string name="common_copyIp">複製 IP</string>
     <string name="common_done">完成</string>
     <string name="common_forbidden">禁止</string>
@@ -50,7 +48,6 @@
     <string name="common_unknown">未知</string>
     <string name="common_yes">是</string>
     <string name="dns_invalid">DNS 位址格式不正確</string>
-    <string name="dns_mode">模式</string>
     <string name="dns_mode_custom">自訂</string>
     <string name="dns_mode_network">使用網路 DNS</string>
     <string name="dns_mode_none">不使用</string>
@@ -65,21 +62,13 @@
     <string name="error_moon_readFailed">檔案讀取失敗</string>
     <string name="error_planet_badHeader">不是有效的 planet 檔案（檔案頭校驗失敗）</string>
     <string name="error_planet_emptyName">請輸入行星名稱</string>
-    <string name="error_planet_reservedName">行星名稱不能包含 “ZeroTier”或 “Zero Tier”（商標保護）</string>
     <string name="fab_addNetwork">新增網路</string>
-    <string name="home_a11y_activePlanetHint">切換到目前行星分頁</string>
     <string name="home_a11y_browsePlanet">瀏覽 %1$s</string>
-    <string name="home_alert_cellularDeniedMessage">PlanetPort 未取得無線數據權限，VPN 將無法連線。請到 設定 → 蜂窩網路 → PlanetPort，選擇「WLAN 與蜂窩網路」。</string>
-    <string name="home_alert_goSettings">前往設定</string>
-    <string name="home_alert_gotIt">知道了</string>
     <string name="home_alert_limitConfirm">同時連線多個網路會增加耗電，仍要開啟「%1$s」？</string>
     <string name="home_alert_networkStatus">網路 %1$s：%2$s</string>
     <string name="home_alert_networkStatusError">網路狀態異常</string>
-    <string name="home_alert_noNetworkAccess">無法使用網路</string>
     <string name="home_alert_openAnyway">仍要開啟</string>
     <string name="home_alert_openMore">開啟更多網路</string>
-    <string name="home_error_cellularMessage">目前使用行動數據，未在設定中允許行動數據</string>
-    <string name="home_error_cellularTitle">行動數據未開啟</string>
     <string name="home_error_multiNetworkMessage">已自動關閉「經 ZeroTier 路由（預設路由）」：多網路同時連線時不可用</string>
     <string name="home_error_multiNetworkTitle">多網路連線</string>
     <string name="home_error_vpnStartTitle">無法啟動 VPN</string>
@@ -138,7 +127,6 @@
     <string name="network_status_unknown">未知</string>
     <string name="peers_emptyTitle">「%1$s」暫無 Peers</string>
     <string name="peers_loading">正在查詢 Peers…</string>
-    <string name="peers_refreshHint">下拉刷新重試</string>
     <string name="peers_relay">中轉 relay</string>
     <string name="peers_tunnelDown">隧道未運行</string>
     <string name="peers_tunnelDownHint">開啟網路後可檢視即時連線</string>
@@ -171,13 +159,10 @@
     <string name="prefs_appearance_sectionHeader">外觀</string>
     <string name="prefs_language_sectionHeader">語言</string>
     <string name="prefs_language_system">跟隨系統</string>
-    <string name="prefs_network_allowCellular">允許行動數據</string>
     <string name="prefs_network_disableIPv6">停用 IPv6</string>
     <string name="prefs_network_footer">同時連線多個網路會增加耗電；超出上限時會提示確認，仍可強制開啟。</string>
     <string name="prefs_network_multiConnectLimit">同時連線上限：%1$d</string>
     <string name="prefs_network_sectionHeader">網路</string>
-    <string name="prefs_ondemand">按需連線（Connect On Demand）</string>
-    <string name="prefs_ondemand_footer">開啟後系統在網路可用時自動建立 VPN；實際使用哪個行星仍由網路開關決定。</string>
     <string name="prefs_support_donate">捐贈</string>
     <string name="prefs_support_sectionHeader">支援</string>
     <string name="prefs_theme_a11yPreset">主色 %1$s</string>
@@ -188,11 +173,8 @@
     <string name="qr_deniedMessage">請在系統設定中允許 PlanetPort 使用相機後重試</string>
     <string name="qr_deniedTitle">無法存取相機</string>
     <string name="qr_title">掃碼加入</string>
-    <string name="status_connected">已連線</string>
-    <string name="status_connecting">連線中</string>
     <string name="status_disconnected">未連線</string>
     <string name="status_establishing">建立隧道</string>
-    <string name="status_pendingAdd">待新增</string>
     <string name="status_pendingAuth">待授權</string>
     <string name="status_waitingNode">等待節點回應</string>
     <string name="theme_preset_bamboo">竹青</string>
@@ -210,18 +192,10 @@
     <string name="trace_title">資料面診斷</string>
     <string name="tunnel_error_coreDriver">ZeroTier Core 執行異常</string>
     <string name="tunnel_error_coreInit">ZeroTier Core 初始化失敗</string>
-    <string name="tunnel_error_socketBind">UDP 連接埠綁定失敗（errno=%1$d: %2$s）</string>
-    <string name="tunnel_error_socketCreate">UDP socket 建立失敗（errno=%1$d: %2$s）</string>
-    <string name="tunnel_status_applyFailed">隧道設定失敗: %1$s</string>
     <string name="tunnel_status_fatalConflict">致命錯誤：節點位址衝突</string>
-    <string name="tunnel_status_reconnectFailed">重連失敗: %1$s</string>
     <string name="tunnel_status_reconnecting">網路切換，重連中</string>
     <string name="tunnel_status_running">運行中</string>
-    <string name="tunnel_status_startFailed">啟動失敗: %1$s</string>
     <string name="tunnel_status_stopped">已停止</string>
-    <string name="vpn_error_save">儲存 VPN 設定失敗: %1$s</string>
-    <string name="vpn_error_start">VPN 啟動失敗: %1$s</string>
-    <string name="vpn_error_startFallback">VPN 啟動失敗</string>
     <string name="app_name">Planet Port</string>
     <string name="common_back">返回</string>
     <string name="common_copy">複製</string>
