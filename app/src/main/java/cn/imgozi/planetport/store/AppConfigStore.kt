@@ -189,6 +189,10 @@ class AppConfigStore(val paths: StorePaths) {
     /** 数据面是否禁用 IPv6（对齐 iOS network_disable_ipv6；写入口见 [writePrefs]） */
     suspend fun disableIpv6(): Boolean = readPrefs().disableIpv6
 
+    /** 按需连接（对齐 iOS prefConnectOnDemand；写入口见 [writePrefs]，
+     *  消费点 HomeViewModel.init 的启动复位/自动恢复判定） */
+    suspend fun connectOnDemand(): Boolean = readPrefs().connectOnDemand
+
     /** 删除单个网络条目（读全量 → 过滤 → 写回），通知语义与 writeNetworks 一致。
      *  networkId 须与存储一致（16 位小写十六进制）；只删归属 Planet 的条目，
      *  其它 Planet 下同 ID 网络不受影响。 */

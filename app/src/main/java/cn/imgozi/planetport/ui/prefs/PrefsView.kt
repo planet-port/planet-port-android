@@ -50,7 +50,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -61,6 +60,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.BackgroundImageStore
+import cn.imgozi.planetport.ui.MainActivity
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
@@ -69,19 +69,22 @@ import cn.imgozi.planetport.ui.theme.ThemeManager
 
 /**
  * 全局设置页（iOS PrefsView.swift 可适用项移植）：
- * 网络（禁用 IPv6 热重启 / 同时连接上限）、语言（本任务只建 UI + 持久化，切换接线归 T7）、
+ * 网络（禁用 IPv6 热重启 / 同时连接上限）、按需连接（app 启动自动恢复隧道；
+ * iOS NEOnDemandRuleConnect 的 Android 落地）、语言（本任务只建 UI + 持久化，切换接线归 T7）、
  * 外观（背景图入口壳——选取器归 T7；视差无图禁用）、主题色（8 预设色板 + 自定义拾色 +
  * 派生开关，双写 ThemeManager 与 AppPrefs）、关于（Core 版本 / App 版本 +
  * MPL-2.0 归属声明 footer）。
- * iOS 的「允许移动数据」「按需连接」无 Android 等价，不移植；捐赠 Section 以 if(false) 隐藏对齐。
+ * iOS 的「允许移动数据」无 Android 等价，不移植；捐赠 Section 以 if(false) 隐藏对齐。
  *
+ * @param activity 授权请求宿主（on-demand 自动拉起的 VPN 授权弹窗，HomeView 同范式）
  * @param onBack 页面退栈回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrefsView(onBack: () -> Unit) {
-    val app = LocalContext.current.applicationContext as Application
+fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
+    val app = activity.application
     val vm: PrefsViewModel = viewModel(key = "prefs") { PrefsViewModel(app) }
+    vm.attachPermissionRequester(activity::requestVpnPermission)
     val prefs by vm.prefs.collectAsState()
     val node by vm.nodeStatus.collectAsState()
 
@@ -129,6 +132,15 @@ fun PrefsView(onBack: () -> Unit) {
                     value = prefs.maxNetworks,
                     range = 2..6,
                     onChange = vm::setMaxNetworks,
+                )
+            }
+
+            // 按需连接（iOS 独立 Section：网络区与语言区之间，PrefsView.swift:33-42）
+            FormSection(footer = stringResource(R.string.prefs_ondemand_footer)) {
+                FormToggleRow(
+                    title = stringResource(R.string.prefs_ondemand),
+                    checked = prefs.connectOnDemand,
+                    onCheckedChange = vm::setConnectOnDemand,
                 )
             }
 

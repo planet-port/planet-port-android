@@ -90,10 +90,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             // 启动时隧道未存活：上次标记为已连接的网络实际已离线，复位避免
-            // 「等待 VPN 连接」悬置与下次启动悄悄重连（iOS resetStaleNetworksIfNeeded）
+            // 「等待 VPN 连接」悬置与下次启动悄悄重连（iOS resetStaleNetworksIfNeeded）。
+            // 例外=按需连接开启（iOS NEOnDemandRuleConnect 语义：保持持久在线）：
+            // Android 无系统级钩子，落地为不复位 + 自动拉起，兑现「重启后按需连接」
             if (!TunnelController.isRunning) {
-                storeWrite("resetAllNetworkActivation") {
-                    StoreRepo.store.resetAllNetworkActivation()
+                val networks = StoreRepo.store.readActiveNetworks()
+                if (StoreRepo.store.connectOnDemand() && networks.any { it.lastActivated }) {
+                    TunnelStateBus.log("按需连接开启，启动时自动恢复隧道")
+                    TunnelController.ensureStarted(
+                        appContext,
+                        requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
+                    )
+                } else {
+                    storeWrite("resetAllNetworkActivation") {
+                        StoreRepo.store.resetAllNetworkActivation()
+                    }
                 }
             }
             reload()
@@ -256,10 +267,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val updated = networks.toMutableList()
         updated[index] = updated[index].copy(lastActivated = false)
         storeWrite("writeNetworks") { store.writeNetworks(updated, planetId) }
-        val selected = store.selectedPlanetId()
-        if (planetId == selected && selected == store.activePlanetId() &&
-            updated.none { it.lastActivated }
-        ) {
+        // 停隧道判定只锚 planetId==activePlanetId（iOS 19f7681：不再叠加
+        // selectedPlanetId——滑页过半时选中态先行变化，叠加判定会漏停隧道）
+        if (planetId == store.activePlanetId() && updated.none { it.lastActivated }) {
             TunnelController.stop(appContext)
         }
     }
@@ -484,6 +494,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     planetId,
                 )
             }
+        }
+        // 空跑收敛（iOS 19f7681 stopVPNIfNoActiveNetworks）：冲突断开可能清空
+        // 活跃行星的全部启用网络，隧道不得无网络空跑
+        if (store.readActiveNetworks().none { it.lastActivated }) {
+            TunnelController.stop(appContext)
         }
     }
 

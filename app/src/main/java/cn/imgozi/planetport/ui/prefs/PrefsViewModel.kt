@@ -49,6 +49,33 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         write({ it.copy(maxNetworks = value) })
     }
 
+    /**
+     * 按需连接（对齐 iOS PrefsView onDemand Toggle→VPNManager.updateOnDemand：
+     * iOS 只改系统偏好不直接操作隧道，拉起由系统评估规则完成）。Android 落地：
+     * 开启时若隧道未跑且有已连接标记网络，立即拉起兑现「持久在线」语义
+     * （footer 文案承诺）；关闭时不停隧道（iOS 同——on-demand 开关≠隧道开关）。
+     */
+    fun setConnectOnDemand(on: Boolean) {
+        write({ it.copy(connectOnDemand = on) }, onPersisted = {
+            if (on && !TunnelController.isRunning) {
+                viewModelScope.launch {
+                    val hasActive = StoreRepo.store.readActiveNetworks().any { it.lastActivated }
+                    if (hasActive) TunnelController.ensureStarted(
+                        getApplication(),
+                        requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
+                    )
+                }
+            }
+        })
+    }
+
+    /** VPN 授权请求器（MainActivity.requestVpnPermission，组合期注入；HomeViewModel 同范式）。 */
+    private var permissionRequester: ((onGranted: () -> Unit) -> Unit)? = null
+
+    fun attachPermissionRequester(requester: (onGranted: () -> Unit) -> Unit) {
+        permissionRequester = requester
+    }
+
     /** 视差动画开关（无背景图时视图侧禁用，这里照写不拦）；同步首页内存态。 */
     fun setParallax(on: Boolean) {
         write({ it.copy(parallax = on) })

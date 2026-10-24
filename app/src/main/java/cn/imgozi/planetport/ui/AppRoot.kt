@@ -73,7 +73,7 @@ fun AppRoot(activity: MainActivity) {
         when (val page = stack.last()) {
             Page.Home -> HomeView(activity)
             is Page.NetworkDetail -> NetworkDetailView(page.nwid, onBack = navigator::pop)
-            Page.Prefs -> PrefsView(onBack = navigator::pop)
+            Page.Prefs -> PrefsView(activity, onBack = navigator::pop)
             is Page.PlanetSettings -> PlanetSettingsView(
                 planetId = page.planetId,
                 onBack = navigator::pop,
