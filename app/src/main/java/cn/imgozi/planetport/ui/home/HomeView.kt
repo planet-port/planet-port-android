@@ -156,70 +156,13 @@ fun HomeView(activity: MainActivity) {
             parallaxEnabled = background.parallax,
         )
 
-        Column(Modifier.fillMaxSize()) {
-            HeaderZone(
-                state = state,
-                browsingActive = planetAtIndex(pagerState.settledPage)?.id == state.activePlanetId,
-                onOpenActive = {
-                    val idx = indexOfPlanet(state.activePlanetId)
-                    if (idx >= 0) scope.launch { pagerState.animateScrollToPage(idx) }
-                },
-                onOpenPrefs = { navigator.navTo(Page.Prefs) },
-            )
-
-            // 圆点指示器：选中 20×6 主色胶囊 / 未选 6×6 灰，44dp 热区（iOS :349-378）
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                repeat(pageCount) { idx ->
-                    val selected = pagerState.settledPage == idx
-                    // 颜色在组合期取值，draw lambda 非 composable 上下文
-                    val dotColor = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                    }
-                    // 无障碍标签：行星页 = 浏览 X，末位 = 添加行星（iOS dot(isSelected:label:)）
-                    val planet = planetAtIndex(idx)
-                    val dotLabel = planet?.let { stringResource(R.string.home_a11y_browsePlanet, it.name) }
-                        ?: stringResource(R.string.planet_add_title)
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { scope.launch { pagerState.animateScrollToPage(idx) } }
-                            .padding(12.dp)
-                            .semantics { contentDescription = dotLabel },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Canvas(
-                            Modifier.size(
-                                width = if (selected) 20.dp else 6.dp,
-                                height = 6.dp,
-                            ),
-                        ) {
-                            drawRoundRect(
-                                color = dotColor,
-                                cornerRadius = CornerRadius(size.height),
-                            )
-                        }
-                    }
-                }
-            }
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.weight(1f),
-                // 保持全部分页组合存活：各页网络列表/开关状态不因滑走而丢失（iOS TabView(.page)）
-                beyondViewportPageCount = pageCount,
-            ) { idx ->
+        // 主容器整页（iOS TabView 全屏 + headerZone overlay：内容从头区下方滚过）
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            // 保持全部分页组合存活：各页网络列表/开关状态不因滑走而丢失（iOS TabView(.page)）
+            beyondViewportPageCount = pageCount,
+        ) { idx ->
                 val planet = planetAtIndex(idx)
                 if (planet == null) {
                     AddPlanetPage(
@@ -251,38 +194,26 @@ fun HomeView(activity: MainActivity) {
                     )
                 }
             }
-        }
 
-        // FAB：非添加页显示（iOS FabButton：56pt 圆、阴影 black 0.25 r10 y5）
+        // 顶部 overlay 头区（iOS .overlay(alignment: .top) headerZone）：标题 +
+        // chip + 设置 + 圆点指示器，分页内容从其下方滚过
+        HeaderZone(
+            state = state,
+            browsingActive = planetAtIndex(pagerState.settledPage)?.id == state.activePlanetId,
+            onOpenActive = {
+                val idx = indexOfPlanet(state.activePlanetId)
+                if (idx >= 0) scope.launch { pagerState.animateScrollToPage(idx) }
+            },
+            onOpenPrefs = { navigator.navTo(Page.Prefs) },
+            pageCount = pageCount,
+            currentPage = pagerState.settledPage,
+            onSelectPage = { idx -> scope.launch { pagerState.animateScrollToPage(idx) } },
+        )
+
+        // FAB：非添加页显示（iOS FabButton：可拖动 + 左右吸附 + 位置记忆）
         val onAddPage = planetAtIndex(pagerState.settledPage) == null
         if (!onAddPage) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
-                    .padding(end = 22.dp, bottom = 54.dp)
-                    .size(56.dp)
-                    .shadow(
-                        elevation = 10.dp,
-                        shape = CircleShape,
-                        ambientColor = Color.Black.copy(alpha = 0.25f),
-                        spotColor = Color.Black.copy(alpha = 0.25f),
-                    )
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { showJoin = true },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = stringResource(R.string.fab_addNetwork),
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp),
-                )
-            }
+            FabLayer(onClick = { showJoin = true })
         }
     }
 
@@ -359,8 +290,9 @@ private fun PlanetPage(
     Column(
         Modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .padding(top = HomeMetrics.pageTopPadding - 24.dp)
+            // 头区为顶部 overlay（固定 88dp 内容顶，对齐 iOS pageTopPadding；
+            // 不叠加 statusBarsPadding——双计导致机型间头区高度漂移，审查移交项）
+            .padding(top = HomeMetrics.pageTopPadding)
             .padding(horizontal = HomeMetrics.pageHMargin),
     ) {
         // 行星身份卡：整卡可点（无涟漪），按压缩放由卡片自持
@@ -368,7 +300,7 @@ private fun PlanetPage(
         Box(
             Modifier
                 .fillMaxWidth()
-                .padding(top = 20.dp, bottom = 24.dp)
+                .padding(bottom = 24.dp)
                 .clickable(
                     interactionSource = cardSource,
                     indication = null,
@@ -468,7 +400,8 @@ private fun PlanetPage(
 
 /**
  * 头区（iOS headerZone）：半透明背景渐变盖过状态栏，左 40dp logo + 标题，
- * 非当前隧道行星浏览且隧道在跑时显示「跳回活跃行星」链接 chip，右侧设置入口。
+ * 非当前隧道行星浏览且隧道在跑时显示「跳回活跃行星」链接 chip，右侧设置入口；
+ * 圆点指示器随头区固定（iOS indicator 沉底 logo 右列，Android 保持居中行样式）。
  */
 @Composable
 private fun HeaderZone(
@@ -476,6 +409,9 @@ private fun HeaderZone(
     browsingActive: Boolean,
     onOpenActive: () -> Unit,
     onOpenPrefs: () -> Unit,
+    pageCount: Int,
+    currentPage: Int,
+    onSelectPage: (Int) -> Unit,
 ) {
     val bg = MaterialTheme.colorScheme.background
     Column(
@@ -537,6 +473,54 @@ private fun HeaderZone(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
+            }
+        }
+
+        // 圆点指示器：选中 20×6 主色胶囊 / 未选 6×6 灰，44dp 热区（iOS :349-378）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            repeat(pageCount) { idx ->
+                val selected = currentPage == idx
+                // 颜色在组合期取值，draw lambda 非 composable 上下文
+                val dotColor = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                }
+                // 无障碍标签：行星页 = 浏览 X，末位 = 添加行星（iOS dot(isSelected:label:)）
+                val planet = state.planets.getOrNull(idx)
+                val dotLabel = planet
+                    ?.let { stringResource(R.string.home_a11y_browsePlanet, it.name) }
+                    ?: stringResource(R.string.planet_add_title)
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onSelectPage(idx) }
+                        .padding(12.dp)
+                        .semantics { contentDescription = dotLabel },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(
+                        Modifier.size(
+                            width = if (selected) 20.dp else 6.dp,
+                            height = 6.dp,
+                        ),
+                    ) {
+                        drawRoundRect(
+                            color = dotColor,
+                            cornerRadius = CornerRadius(size.height),
+                        )
+                    }
+                }
             }
         }
     }
