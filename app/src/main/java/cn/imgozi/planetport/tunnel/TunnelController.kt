@@ -61,11 +61,15 @@ object TunnelController {
     }
 
     /**
-     * 在跑则热重启（disableIpv6 等仅重启生效的偏好用，对齐 iOS VPNManager
+     * 在跑则热重启（disableIpv6 等偏好的可靠生效路径，对齐 iOS VPNManager
      * restartIfRunning）：停 + 1s 后启；未跑 no-op（偏好已落盘，下次启动自然生效）。
      * 停机是异步收口（join 消费协程/关 Node），1s 窗口保证 UDP 9994 释放与
      * native 资源落定。窗口内用户手动停止则会被这次迟到启动顶回（与 iOS 同构的
      * 既有竞态，窗口短可接受）。
+     *
+     * disableIpv6 已纳入 TunnelManager 的 appliedEntries 比较（configChanges 驱动
+     * 的 applyConfig 可感知并热重套），但 writePrefs 静默不发变更信号——UI 写完
+     * 偏好仍须经本方法显式触达隧道。
      */
     fun restartIfRunning(context: Context) {
         if (!isRunning) return
