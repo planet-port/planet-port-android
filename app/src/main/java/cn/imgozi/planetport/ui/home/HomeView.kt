@@ -178,7 +178,9 @@ fun HomeView(activity: MainActivity) {
                         state = state,
                         pending = pending,
                         planet = planet,
-                        isActivePage = state.selectedPlanetId == state.activePlanetId,
+                        // iOS 19f7681：锚定本页行星而非全局选中页——滑页过半时选中先变，
+                        // 旁页卡片会瞬时取错「隧道行星」身份（状态/地址串台）
+                        isActivePage = planet.id == state.activePlanetId,
                         // 整卡点击先 selectPlanet 再入设置（iOS HomeView.swift:372-375 同序；
                         // Moon 页归属与 moon 文件落盘目录都取 selectedPlanetId，此序是一致性前提）
                         onOpenPlanetSettings = {

@@ -111,7 +111,10 @@ fun NetworkDetailView(
         NetworkDetailContent(
             entry = entry,
             snapshot = ui.snapshot,
-            routeViaLocked = ui.selectedPlanetId == ui.activePlanetId && ui.otherActivatedExists,
+            // 锁定判定锚定本网络归属行星（iOS 19f7681）：只有隧道行星下才存在
+            // 「同时连接」的其他网络；全局选中页锚定在滑页竞态下会瞬时翻转
+            routeViaLocked = ui.entryPlanetId != null &&
+                ui.entryPlanetId == ui.activePlanetId && ui.otherActivatedExists,
             onApplyDns = vm::applyDns,
             onSetRouteVia = vm::setRouteVia,
             onDelete = { vm.delete(onBack) },

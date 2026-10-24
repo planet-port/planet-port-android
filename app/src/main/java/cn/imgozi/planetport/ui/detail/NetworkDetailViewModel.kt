@@ -8,6 +8,7 @@ import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.NetConf
+import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelStateBus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,7 +45,8 @@ data class NetworkDetailUiState(
     /** 首次 store 读取已完成（entry 仍为 null 时视图渲染「不存在」而非转圈） */
     val loaded: Boolean = false,
     val snapshot: NetworkSnapshot? = null,
-    val selectedPlanetId: String = PlanetProfile.OFFICIAL_ID,
+    /** 条目归属行星（iOS 19f7681：判定锚定 entry.planetId，不用全局选中页） */
+    val entryPlanetId: String? = null,
     val activePlanetId: String? = null,
     /** 同行星下是否还有其它已启用网络（routeVia 锁定判定的第二个条件） */
     val otherActivatedExists: Boolean = false,
@@ -71,9 +73,15 @@ class NetworkDetailViewModel(
             StoreRepo.configChanges.collect { reloadStoreState() }
         }
         viewModelScope.launch {
-            // 快照侧：推模式订阅（停机清空 → 页面回退显示「—」）
+            // 快照侧：推模式订阅（停机清空 → 页面回退显示「—」）。实时快照只对
+            // 隧道行星的网络有意义：不同行星可加入同 ID 网络，总线 networkConfigs
+            // 键无行星维度，非隧道行星直取会拿到隧道行星同名网络的配置（iOS 19f7681
+            // refresh 同款串台防护）
             TunnelStateBus.networkConfigs.collect { configs ->
-                _ui.update { it.copy(snapshot = configs[nwid]?.toSnapshot()) }
+                _ui.update { st ->
+                    val onActivePlanet = st.entryPlanetId != null && st.entryPlanetId == st.activePlanetId
+                    st.copy(snapshot = if (onActivePlanet) configs[nwid]?.toSnapshot() else null)
+                }
             }
         }
     }
@@ -93,13 +101,12 @@ class NetworkDetailViewModel(
             break
         }
         // 挂起读先算完再赋值：不把挂起调用放进 StateFlow.update 的 CAS 重试循环
-        val selected = store.selectedPlanetId()
         val active = store.activePlanetId()
         _ui.update {
             it.copy(
                 entry = hitEntry,
                 loaded = true,
-                selectedPlanetId = selected,
+                entryPlanetId = hitPlanetId,
                 activePlanetId = active,
                 otherActivatedExists = others,
             )
@@ -123,6 +130,11 @@ class NetworkDetailViewModel(
         viewModelScope.launch {
             val planetId = _ui.value.entry?.planetId
             StoreRepo.store.deleteNetwork(networkId = nwid, planetId = planetId)
+            // 空跑收敛（iOS 19f7681 stopVPNIfNoActiveNetworks）：删的可能是
+            // 活跃行星最后一个启用网络，隧道不得无网络空跑。stop 幂等，未跑直过
+            if (StoreRepo.store.readActiveNetworks().none { it.lastActivated }) {
+                TunnelController.stop(getApplication())
+            }
             onDeleted()
         }
     }
