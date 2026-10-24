@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.LocalNavigator
@@ -144,7 +145,17 @@ fun HomeView(activity: MainActivity) {
         vm.events.collect { notice = it as HomeEvent.Notice }
     }
 
+    // 背景图（T7）：首组合读盘刷新内存态；设置页换图/清图后 store 流即时驱动重组
+    val background by BackgroundImageStore.state.collectAsState()
+    LaunchedEffect(Unit) { BackgroundImageStore.refresh(activity.applicationContext) }
+
     Box(Modifier.fillMaxSize()) {
+        // 最底层背景（图 + 蒙纱 + 重力视差；无图退化为页面底色）
+        HomeParallaxBackground(
+            image = background.bitmap,
+            parallaxEnabled = background.parallax,
+        )
+
         Column(Modifier.fillMaxSize()) {
             HeaderZone(
                 state = state,

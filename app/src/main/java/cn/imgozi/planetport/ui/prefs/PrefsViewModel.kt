@@ -3,7 +3,9 @@ package cn.imgozi.planetport.ui.prefs
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppPrefs
+import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelStateBus
@@ -46,9 +48,41 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         write({ it.copy(maxNetworks = value) })
     }
 
-    /** 视差动画开关（无背景图时视图侧禁用，这里照写不拦）。 */
+    /** 视差动画开关（无背景图时视图侧禁用，这里照写不拦）；同步首页内存态。 */
     fun setParallax(on: Boolean) {
         write({ it.copy(parallax = on) })
+        BackgroundImageStore.syncParallax(on)
+    }
+
+    /**
+     * 应用背景图（相册/URL 字节统一入口，T7）：store 校验并落文件后，
+     * 同步 AppPrefs.backgroundImage 布尔（视差行 enabled 门控）与内存快照。
+     * 失败回调本地化文案（资源在 VM 层解析，sheet 非 composable 回调直接用）。
+     */
+    fun applyBackgroundImage(data: ByteArray, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val failure = runCatching { BackgroundImageStore.save(getApplication(), data) }
+                .exceptionOrNull()
+            val message = when (failure) {
+                null -> null
+                is BackgroundImageStore.Error.TooLarge ->
+                    getApplication<Application>().getString(R.string.error_bg_tooLarge)
+                is BackgroundImageStore.Error.NotImage ->
+                    getApplication<Application>().getString(R.string.error_bg_notImage)
+                else -> getApplication<Application>()
+                    .getString(R.string.bg_error_download, failure.message ?: "")
+            }
+            if (message == null) write({ it.copy(backgroundImage = true) })
+            onResult(message)
+        }
+    }
+
+    /** 清除背景图：删文件 + AppPrefs.backgroundImage 布尔归位。 */
+    fun clearBackgroundImage() {
+        viewModelScope.launch {
+            BackgroundImageStore.clear(getApplication())
+            write({ it.copy(backgroundImage = false) })
+        }
     }
 
     /** 选预设主色：清自定义色（对齐 iOS「色板即当前主色」语义）。 */

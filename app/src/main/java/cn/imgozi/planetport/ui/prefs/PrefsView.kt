@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -57,6 +60,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
@@ -79,6 +83,9 @@ fun PrefsView(onBack: () -> Unit) {
     val vm: PrefsViewModel = viewModel(key = "prefs") { PrefsViewModel(app) }
     val prefs by vm.prefs.collectAsState()
     val node by vm.nodeStatus.collectAsState()
+
+    // 背景图选取弹层（T7 实装）
+    var showBgPicker by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -140,13 +147,12 @@ fun PrefsView(onBack: () -> Unit) {
                 header = stringResource(R.string.prefs_appearance_sectionHeader),
                 footer = stringResource(R.string.prefs_appearance_footer),
             ) {
-                // 背景图入口壳：选取器（BackgroundImagePickerSheet）实现在 T7，
-                // 本任务只渲染「未设置」态；AppPrefs.backgroundImage 持久化字段由 T7 写
+                // 背景图行：点击开选取弹层；已设置显示 44dp 缩略图（store 内存位图，
+                // 与首页视差层同源，换图/清除后即时刷新）
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // 占位点击：T7 在此打开背景图选取弹窗
-                        .clickable(enabled = false) {}
+                        .clickable { showBgPicker = true }
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -155,12 +161,16 @@ fun PrefsView(onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Spacer(Modifier.weight(1f))
-                    if (prefs.backgroundImage) {
-                        Box(
-                            Modifier
+                    val bgBitmap by BackgroundImageStore.state.collectAsState()
+                    val thumb = bgBitmap.bitmap
+                    if (thumb != null) {
+                        Image(
+                            bitmap = thumb.asImageBitmap(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
                                 .size(44.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                .clip(RoundedCornerShape(8.dp)),
                         )
                     } else {
                         Text(
@@ -253,6 +263,14 @@ fun PrefsView(onBack: () -> Unit) {
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (showBgPicker) {
+        BackgroundImagePickerSheet(
+            hasImage = prefs.backgroundImage,
+            onApplied = { showBgPicker = false },
+            onDismiss = { showBgPicker = false },
+        )
     }
 }
 
