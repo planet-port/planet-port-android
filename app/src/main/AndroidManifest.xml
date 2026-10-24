@@ -12,7 +12,8 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/Theme.PlanetPort">
+        android:theme="@style/Theme.PlanetPort"
+        android:usesCleartextTraffic="true">
 
         <!-- per-app locale 持久化（autoStoreLocales）：appcompat 自管存储，
              系统重启/系统「应用语言」入口均自动恢复 -->

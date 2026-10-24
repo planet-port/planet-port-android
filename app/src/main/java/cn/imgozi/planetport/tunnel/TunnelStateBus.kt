@@ -1,5 +1,6 @@
 package cn.imgozi.planetport.tunnel
 
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -112,8 +113,11 @@ object TunnelStateBus {
 
     fun setApplyTrace(trace: String) { _applyTrace.value = trace }
 
-    /** 低频事件直写（配置回调/聚合决策/错误），高频帧不走这里 */
+    /** 低频事件直写（配置回调/聚合决策/错误），高频帧不走这里。
+     *  同步透传 logcat（tag=PlanetPort）：eventLog 仅存内存 StateFlow，落 logcat
+     *  后真机排查可直接 adb logcat，无需进诊断页看 UI（T7 用户裁定） */
     fun log(line: String) {
+        Log.d("PlanetPort", line)
         val stamp = SimpleDateFormat("HH:mm:ss.SSS").format(Date())
         val current = _eventLog.value
         val lines = (if (current.isEmpty()) emptyList() else current.split('\n')) + "$stamp $line"
