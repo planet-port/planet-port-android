@@ -22,8 +22,10 @@ data class PlanetProfile(
     val kind: PlanetKind,
     /** 私有 Planet 在 planets/ 下的文件名；官方 Planet 使用核心内置默认。 */
     val fileName: String? = null,
-    /** 自定义图标标识；null 时按 id 哈希自动生成（P4）。 */
+    /** 自定义动物图标 key（如 "cat"；有效值永久生效，null/旧值按名称哈希回退）。 */
     val icon: String? = null,
+    /** 自定义底色 "#RRGGBB"；null/解析失败按 id 哈希回退主题装饰盘。 */
+    val iconColor: String? = null,
     /** 该行星下本机节点 ID 缓存（隧道运行时回写，离线可显示；P2）。 */
     val lastNodeId: String? = null,
 ) {

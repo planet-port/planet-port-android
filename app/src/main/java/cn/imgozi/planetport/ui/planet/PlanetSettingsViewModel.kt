@@ -93,9 +93,9 @@ class PlanetSettingsViewModel(
     }
 
     /** 图标变更；null = 恢复自动生成。 */
-    fun updateIcon(symbol: String?, onError: (String) -> Unit) {
+    fun updateIcon(animal: String, color: String?, onError: (String) -> Unit) {
         viewModelScope.launch {
-            runCatching { StoreRepo.planetImporter.updateIcon(requirePlanet(), symbol) }
+            runCatching { StoreRepo.planetImporter.updateIcon(requirePlanet(), animal, color) }
                 .onFailure {
                     // 写盘失败等技术串不透出用户，进日志（T7b 审查 I-1）
                     Log.w(TAG, "updateIcon 失败", it)

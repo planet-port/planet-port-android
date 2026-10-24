@@ -2,6 +2,7 @@ package cn.imgozi.planetport.ui.planet
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,6 +49,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
@@ -230,9 +234,10 @@ fun PlanetSettingsView(
 
     if (showIconPicker && planet != null) {
         IconPickerSheet(
-            current = planetIconSymbol(planet),
-            onSelect = { symbol ->
-                vm.updateIcon(symbol) { alertText = it }
+            animal = PlanetIcon.animalKey(planet),
+            color = planet.iconColor,
+            onSelect = { animal, color ->
+                vm.updateIcon(animal, color) { alertText = it }
             },
             onDismiss = { showIconPicker = false },
         )
@@ -324,7 +329,7 @@ private fun NameRow(
     }
 }
 
-/** 图标行：官方显示内置磁贴占位（不可点）；私有显示 tint 符号 + chevron。 */
+/** 图标行：官方显示内置磁贴占位（不可点）；私有显示 24dp 磁贴（14dp 白动物）+ chevron（iOS :89-113）。 */
 @Composable
 private fun IconRow(
     planet: PlanetProfile,
@@ -332,8 +337,8 @@ private fun IconRow(
     onClick: () -> Unit,
 ) {
     val accentHex by ThemeManager.accent.collectAsState()
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
-    val tint = remember(planet.id, accentHex, dark) { ThemeManager.planetTint(planet.id) }
+    val context = LocalContext.current
+    val tint = remember(planet.id, planet.iconColor, accentHex) { PlanetIcon.tint(planet) }
 
     Row(
         modifier = Modifier
@@ -349,12 +354,22 @@ private fun IconRow(
             // 官方磁贴（与首页共用 ui.components.OfficialPlanetIcon，石绿线稿行星）
             OfficialPlanetIcon(modifier = Modifier.size(24.dp))
         } else {
-            Icon(
-                imageVector = planetIconVector(planetIconSymbol(planet)),
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(24.dp),
-            )
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(tint),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(
+                        PlanetIcon.drawableId(context, PlanetIcon.animalKey(planet)),
+                    ),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = null,

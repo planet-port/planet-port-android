@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import cn.imgozi.planetport.ui.planet.PlanetIcon
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.max
 import kotlin.math.min
@@ -93,16 +94,14 @@ object ThemeManager {
 
     /**
      * 行星磁贴装饰色：seed（planet id）djb2 哈希进 8 色装饰盘，
-     * 同一 Planet 永远同色（对齐 iOS PlanetIcon.tint 的 hashIndex）。
+     * 同一 Planet 永远同色。哈希链路 = 先 % 1_000_003 再 % 表长
+     * （iOS 963a96f 统一链路，与 PlanetIcon.djb2 共用——取模链路不同
+     * 会导致同一行星两端颜色不同）。
      */
     fun planetTint(seed: String): Color {
         val tints = planetTints()
-        var hash = 5381L
-        for (byte in seed.toByteArray(Charsets.UTF_8)) {
-            hash = hash * 33L + (byte.toInt() and 0xFF)
-        }
-        val index = Math.floorMod(hash, tints.size.toLong())
-        return tints[index.toInt()]
+        val index = PlanetIcon.djb2(seed).mod(tints.size.toLong()).toInt()
+        return tints[index]
     }
 
     // MARK: - 色彩数学（HSL，Compose 无现成 API，手写对齐 iOS 私有实现）

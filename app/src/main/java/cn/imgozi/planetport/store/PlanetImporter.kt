@@ -27,7 +27,12 @@ class PlanetImporter(private val store: AppConfigStore) {
     }
 
     /** 校验并落盘一份 planet 文件，注册为新的自定义 Planet。 */
-    suspend fun importPlanetData(data: ByteArray, name: String): PlanetProfile {
+    suspend fun importPlanetData(
+        data: ByteArray,
+        name: String,
+        icon: String? = null,
+        iconColor: String? = null,
+    ): PlanetProfile {
         if (data.isEmpty() || data[0] != PLANET_TYPE_BYTE) throw ImportError.BadHeader()
         val normalizedName = name.trim()
         if (normalizedName.isEmpty()) throw ImportError.EmptyName()
@@ -45,7 +50,10 @@ class PlanetImporter(private val store: AppConfigStore) {
             }
         }
 
-        val profile = PlanetProfile(id = id, name = normalizedName, kind = PlanetKind.custom, fileName = fileName)
+        val profile = PlanetProfile(
+            id = id, name = normalizedName, kind = PlanetKind.custom,
+            fileName = fileName, icon = icon, iconColor = iconColor,
+        )
         // 注册表读-追加-写整段持域锁，防止并发写丢更新
         store.mutate {
             store.writePlanetsLocked(store.readPlanets() + profile)
@@ -113,14 +121,16 @@ class PlanetImporter(private val store: AppConfigStore) {
         }
     }
 
-    /** 更新自定义图标；null 表示恢复自动生成。 */
-    suspend fun updateIcon(profile: PlanetProfile, icon: String?) {
+    /** 更新自定义图标与底色（iOS updateIcon(icon:color:) 同签名语义）。 */
+    suspend fun updateIcon(profile: PlanetProfile, icon: String?, color: String?) {
         store.mutate {
             val profiles = store.readPlanets()
             val index = profiles.indexOfFirst { it.id == profile.id }
             if (index < 0) return@mutate
             store.writePlanetsLocked(
-                profiles.toMutableList().apply { this[index] = this[index].copy(icon = icon) }
+                profiles.toMutableList().apply {
+                    this[index] = this[index].copy(icon = icon, iconColor = color)
+                }
             )
         }
     }

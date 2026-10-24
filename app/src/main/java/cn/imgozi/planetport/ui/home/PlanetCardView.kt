@@ -40,6 +40,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -49,6 +51,7 @@ import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
+import cn.imgozi.planetport.ui.planet.PlanetIcon
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import cn.imgozi.planetport.ui.theme.PlanetFonts
@@ -160,21 +163,22 @@ fun PlanetCardView(
     }
 }
 
-/** 72dp 私有行星磁贴：装饰色实底 + 白符号 30dp，圆角 20（iOS :76-82）。 */
+/** 72dp 私有行星磁贴：底色实底（自定义/哈希）+ 白动物图 38dp，圆角 20（iOS :30-40）。 */
 @Composable
 private fun CustomPlanetTile(planet: PlanetProfile) {
+    val context = LocalContext.current
     Box(
         modifier = Modifier
             .size(HomeMetrics.iconTileSize)
             .clip(RoundedCornerShape(HomeMetrics.radiusLarge))
-            .background(PlanetIcons.tint(planet)),
+            .background(PlanetIcon.tint(planet)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = PlanetIcons.symbol(planet),
+            painter = painterResource(PlanetIcon.drawableId(context, PlanetIcon.animalKey(planet))),
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(30.dp),
+            modifier = Modifier.size(38.dp),
         )
     }
 }

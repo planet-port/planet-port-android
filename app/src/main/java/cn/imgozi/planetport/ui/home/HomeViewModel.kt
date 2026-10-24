@@ -401,7 +401,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * 从文件数据添加行星：World ID 查重（含官方内置）→ 落库 → 选中新行星。
      * [onDone] 二参为错误文案（含查重与导入失败），null = 成功。
      */
-    fun importPlanetFile(data: ByteArray, name: String, onDone: (PlanetProfile?, String?) -> Unit) {
+    fun importPlanetFile(
+        data: ByteArray,
+        name: String,
+        icon: String? = null,
+        iconColor: String? = null,
+        onDone: (PlanetProfile?, String?) -> Unit,
+    ) {
         viewModelScope.launch {
             val result = runCatching {
                 val worldId = PlanetImporter.worldIdOf(data)
@@ -410,7 +416,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     // 不混入异常 message 通道（iOS addplanet.duplicate；T7b 审查 I-1）
                     throw DuplicateWorld(worldId)
                 }
-                StoreRepo.planetImporter.importPlanetData(data, name)
+                StoreRepo.planetImporter.importPlanetData(data, name, icon, iconColor)
             }
             result.fold(
                 onSuccess = { profile ->
