@@ -66,6 +66,9 @@ class NetworkDetailViewModel(
     private val _ui = MutableStateFlow(NetworkDetailUiState())
     val ui: StateFlow<NetworkDetailUiState> = _ui.asStateFlow()
 
+    /** 总线最近一帧配置：快照派生的输入之一，与 store 侧状态任一变化都需重算 */
+    private var latestConfigs: Map<String, NetConf> = emptyMap()
+
     init {
         viewModelScope.launch {
             // store 侧：初始加载 + configChanges 全量重读（level-triggered 契约）
@@ -76,14 +79,20 @@ class NetworkDetailViewModel(
             // 快照侧：推模式订阅（停机清空 → 页面回退显示「—」）。实时快照只对
             // 隧道行星的网络有意义：不同行星可加入同 ID 网络，总线 networkConfigs
             // 键无行星维度，非隧道行星直取会拿到隧道行星同名网络的配置（iOS 19f7681
-            // refresh 同款串台防护）
+            // refresh 同款串台防护）。StateFlow 只在新帧到达时发射——store 侧
+            // 状态后到（entryPlanetId 就绪）不会触发重放，故快照在两侧任一
+            // 更新时统一重派生（[deriveSnapshot]）
             TunnelStateBus.networkConfigs.collect { configs ->
-                _ui.update { st ->
-                    val onActivePlanet = st.entryPlanetId != null && st.entryPlanetId == st.activePlanetId
-                    st.copy(snapshot = if (onActivePlanet) configs[nwid]?.toSnapshot() else null)
-                }
+                latestConfigs = configs
+                _ui.update { st -> st.copy(snapshot = deriveSnapshot(st)) }
             }
         }
+    }
+
+    /** 快照统一派生：条目归属行星 == 隧道行星时取总线配置，否则置空（串台防护）。 */
+    private fun deriveSnapshot(st: NetworkDetailUiState): NetworkSnapshot? {
+        val onActivePlanet = st.entryPlanetId != null && st.entryPlanetId == st.activePlanetId
+        return if (onActivePlanet) latestConfigs[nwid]?.toSnapshot() else null
     }
 
     private suspend fun reloadStoreState() {
@@ -103,13 +112,14 @@ class NetworkDetailViewModel(
         // 挂起读先算完再赋值：不把挂起调用放进 StateFlow.update 的 CAS 重试循环
         val active = store.activePlanetId()
         _ui.update {
-            it.copy(
+            val next = it.copy(
                 entry = hitEntry,
                 loaded = true,
                 entryPlanetId = hitPlanetId,
                 activePlanetId = active,
                 otherActivatedExists = others,
             )
+            next.copy(snapshot = deriveSnapshot(next))
         }
     }
 
