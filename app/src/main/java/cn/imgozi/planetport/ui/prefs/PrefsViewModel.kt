@@ -105,7 +105,10 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
      * 偏好写入（乐观更新）：先以当前内存值推演新值、同步灌 _prefs 与
      * [onApplied]（主题类经 ThemeManager 即时生效），再异步落盘——writePrefs 内
      * withContext(IO) 必挂起，若等落盘后再读内存灌主题，拿到的必是旧值（审查 C1）。
-     * 本 VM 是 AppPrefs 唯一写入方（单进程单页），内存推演值即权威，不做回读校正。
+     *
+     * 落盘用 [mutate] 而非整档替换：prefs.json 的 selectedPlanetId/activePlanetId
+     * 还由 AppConfigStore 内部（selectPlanet/activatePlanet，首页调用）写入，本 VM
+     * 快照会陈旧——RMW 作用于磁盘最新值，主题字段无第二写入方结果恒等（复核 I-NEW）。
      *
      * @param onApplied    推演完成即回调（新值），主线程同步执行
      * @param onPersisted  落盘完成后回调（如需依赖磁盘态的后续动作——热重启）
@@ -119,7 +122,7 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         _prefs.value = next
         onApplied?.invoke(next)
         viewModelScope.launch {
-            StoreRepo.store.writePrefs { next }
+            StoreRepo.store.writePrefs(mutate)
             onPersisted?.invoke()
         }
     }
