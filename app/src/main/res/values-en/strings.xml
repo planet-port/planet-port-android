@@ -166,6 +166,8 @@
     <string name="home_alert_openAnyway">Enable Anyway</string>
     <string name="home_alert_openMore">Enable More Networks</string>
     <string name="home_error_multiNetworkMessage">"Route via ZeroTier (default route)" was turned off automatically: it is unavailable while multiple networks are connected</string>
+    <string name="home_error_cellularTitle">Cellular Data Not Enabled</string>
+    <string name="home_error_cellularMessage">Currently on cellular data, which is not allowed in Settings</string>
     <string name="home_error_multiNetworkTitle">Multiple Networks</string>
     <string name="home_error_vpnStartTitle">Could Not Start VPN</string>
     <string name="home_network_connected">%1$d connected</string>
@@ -263,6 +265,7 @@
     <string name="prefs_appearance_sectionHeader">Appearance</string>
     <string name="prefs_language_sectionHeader">Language</string>
     <string name="prefs_language_system">Follow System</string>
+    <string name="prefs_network_allowCellular">Allow Cellular Data</string>
     <string name="prefs_network_disableIPv6">Disable IPv6</string>
     <string name="prefs_network_footer">Connecting multiple networks at once increases battery drain; you will be asked to confirm beyond the limit, but can still force-enable.</string>
     <string name="prefs_network_multiConnectLimit">Simultaneous connection limit: %1$d</string>

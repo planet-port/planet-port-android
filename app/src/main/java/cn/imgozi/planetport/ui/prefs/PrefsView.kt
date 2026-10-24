@@ -149,6 +149,13 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                 header = stringResource(R.string.prefs_network_sectionHeader),
                 footer = stringResource(R.string.prefs_network_footer),
             ) {
+                // 网络组首项（iOS PrefsView.swift:19 同位）：默认允许；关闭后移动
+                // 数据下开网络会被拦截（HomeViewModel.activate 门控）
+                FormToggleRow(
+                    title = stringResource(R.string.prefs_network_allowCellular),
+                    checked = prefs.allowCellular,
+                    onCheckedChange = vm::setAllowCellular,
+                )
                 FormToggleRow(
                     title = stringResource(R.string.prefs_network_disableIPv6),
                     checked = prefs.disableIpv6,

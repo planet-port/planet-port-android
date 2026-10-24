@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.home
 
 import android.app.Application
+import android.net.ConnectivityManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -391,6 +392,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈）；否则激活行星 + 起停隧道。
      */
     private suspend fun activate(planetId: String, entry: NetworkEntry) {
+        // 移动数据门控（iOS HomeView.swift:557 同位拦截）：设置禁止移动数据且当前
+        // 链路为计费蜂窝时拦截开启。iOS isCellular() 暂为占位恒 false（待接
+        // NWPathMonitor），Android 直接以 isActiveNetworkMetered 实测
+        if (!StoreRepo.store.readPrefs().allowCellular && isMeteredNetwork()) {
+            emitNotice(
+                appContext.getString(R.string.home_error_cellularTitle),
+                appContext.getString(R.string.home_error_cellularMessage),
+            )
+            return
+        }
         val store = StoreRepo.store
         val networks = store.readNetworks(planetId)
         val index = networks.indexOfFirst { it.networkId == entry.networkId }
@@ -695,6 +706,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 break
             }
         }
+    }
+
+    /** 当前链路是否计费蜂窝（VPN 未建立时调用；iOS isCellular 的真实实现形态）。 */
+    private fun isMeteredNetwork(): Boolean {
+        val cm = appContext.getSystemService(ConnectivityManager::class.java) ?: return false
+        return cm.isActiveNetworkMetered
     }
 
     private fun emitNotice(title: String, message: String) {

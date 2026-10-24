@@ -166,6 +166,8 @@
     <string name="home_alert_openAnyway">仍要开启</string>
     <string name="home_alert_openMore">开启更多网络</string>
     <string name="home_error_multiNetworkMessage">已自动关闭「经 ZeroTier 路由（默认路由）」：多网络同时连接时不可用</string>
+    <string name="home_error_cellularTitle">移动数据未开启</string>
+    <string name="home_error_cellularMessage">当前使用移动数据，未在设置中允许移动数据</string>
     <string name="home_error_multiNetworkTitle">多网络连接</string>
     <string name="home_error_vpnStartTitle">无法启动 VPN</string>
     <string name="home_network_connected">已连接 %1$d</string>
@@ -263,6 +265,7 @@
     <string name="prefs_appearance_sectionHeader">外观</string>
     <string name="prefs_language_sectionHeader">语言</string>
     <string name="prefs_language_system">跟随系统</string>
+    <string name="prefs_network_allowCellular">允许移动数据</string>
     <string name="prefs_network_disableIPv6">禁用 IPv6</string>
     <string name="prefs_network_footer">同时连接多个网络会增加耗电；超出上限时会提示确认，仍可强制开启。</string>
     <string name="prefs_network_multiConnectLimit">同时连接上限：%1$d</string>
