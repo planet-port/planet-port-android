@@ -33,10 +33,11 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 禁用 IPv6：落盘 + 隧道在跑则热重启（对齐 iOS VPNManager.restartIfRunning）。 */
+    /** 禁用 IPv6：落盘完成后隧道在跑才热重启（对齐 iOS VPNManager.restartIfRunning）。 */
     fun setDisableIpv6(on: Boolean) {
-        write({ it.copy(disableIpv6 = on) })
-        TunnelController.restartIfRunning(getApplication())
+        write({ it.copy(disableIpv6 = on) }, onPersisted = {
+            TunnelController.restartIfRunning(getApplication())
+        })
     }
 
     /** 同时连接网络软上限（2..6，纯偏好，UI 门控范围）。 */
@@ -93,19 +94,33 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         }.getOrDefault("—")
     }
 
-    /** 主题双写：持久化 + ThemeManager 内存态（即时生效）。 */
+    /** 主题双写：乐观更新内存态（新值即时灌 ThemeManager）+ 异步落盘。 */
     private fun writeWithTheme(persist: (AppPrefs) -> AppPrefs) {
-        write(persist)
-        val p = _prefs.value
-        ThemeManager.applyPrefs(p.themeColor, p.themeColorCustom, p.successDerived)
+        write(persist, onApplied = { p ->
+            ThemeManager.applyPrefs(p.themeColor, p.themeColorCustom, p.successDerived)
+        })
     }
 
-    private fun write(mutate: (AppPrefs) -> AppPrefs) {
+    /**
+     * 偏好写入（乐观更新）：先以当前内存值推演新值、同步灌 _prefs 与
+     * [onApplied]（主题类经 ThemeManager 即时生效），再异步落盘——writePrefs 内
+     * withContext(IO) 必挂起，若等落盘后再读内存灌主题，拿到的必是旧值（审查 C1）。
+     * 本 VM 是 AppPrefs 唯一写入方（单进程单页），内存推演值即权威，不做回读校正。
+     *
+     * @param onApplied    推演完成即回调（新值），主线程同步执行
+     * @param onPersisted  落盘完成后回调（如需依赖磁盘态的后续动作——热重启）
+     */
+    private fun write(
+        mutate: (AppPrefs) -> AppPrefs,
+        onApplied: ((AppPrefs) -> Unit)? = null,
+        onPersisted: (() -> Unit)? = null,
+    ) {
+        val next = mutate(_prefs.value)
+        _prefs.value = next
+        onApplied?.invoke(next)
         viewModelScope.launch {
-            StoreRepo.store.writePrefs(mutate)
-            // 直接赋值而非 StateFlow.update{}：readPrefs 是挂起函数，
-            // 不放进 update 的 CAS 重试循环里反复求值
-            _prefs.value = StoreRepo.store.readPrefs()
+            StoreRepo.store.writePrefs { next }
+            onPersisted?.invoke()
         }
     }
 }
