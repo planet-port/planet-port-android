@@ -194,12 +194,15 @@ internal class ZeroTierVpnService : VpnService() {
         // 先起前台满足 5s 窗口义务，再走 stopForegroundCompat 收口，通知随收口
         // 移除不留存。onRevoke/启动失败路径重复 startForeground 幂等无害
         VpnNotification.start(this, getString(R.string.tunnel_status_stopped))
+        // collector 先于置 Stopped 收口（T6 审查 M-1）：若 Stopped 发射落在下方
+        // stopForegroundCompat 之后会复活「已停止」僵尸通知；:196 显式 start 已是
+        // 本路径通知 owner，置态后无需 collector 再推
+        scope?.cancel()
+        scope = null
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
         // 先摘路径监听再拆链：teardown 期间的路径回调不得再触发重连（幂等，未注册时无害；
         // 重连编排的等待协程已捕获计划，不受此处注销影响）
         NetWatch.stop()
-        scope?.cancel()
-        scope = null
         tunnelManager?.stop()
         tunnelManager = null
         dataplane?.shutdown()

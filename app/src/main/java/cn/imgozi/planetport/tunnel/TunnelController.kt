@@ -2,7 +2,6 @@ package cn.imgozi.planetport.tunnel
 
 import android.content.Context
 import android.net.VpnService
-import cn.imgozi.planetport.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -117,8 +116,8 @@ object TunnelController {
         }
         reconnectInFlight = true
         val app = context.applicationContext
+        // 通知文案由服务侧 tunnelState collector 驱动（T6 订阅化），此处只置态
         TunnelStateBus.setTunnelState(TunnelState.Reconnecting("network_change"))
-        VpnNotification.update(app, app.getString(R.string.tunnel_status_reconnecting))
         TunnelStateBus.log("网络切换，重启核心")
         ZeroTierVpnService.stop(app)
         restartScope.launch {
