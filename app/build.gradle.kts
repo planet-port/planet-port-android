@@ -51,6 +51,8 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.viewmodel.compose)
+    // 语言切换（AppCompatDelegate.setApplicationLocales）需要 AppCompatActivity 承载
+    implementation(libs.androidx.appcompat)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 }

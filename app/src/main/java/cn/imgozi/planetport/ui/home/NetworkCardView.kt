@@ -37,6 +37,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.ui.NetworkCardStatus
 import cn.imgozi.planetport.ui.components.StatusDot
@@ -65,6 +67,14 @@ fun NetworkCardView(
 ) {
     val tertiary = tertiaryTextColor(isSystemInDarkTheme())
     val statusColor = LocalPlanetStatusColors.current[status.color]
+    // 状态文案带占位实参时先解析实参再格式化（「%@,断开」）
+    val statusLabel = status.labelArgRes
+        ?.let { argRes -> stringResource(status.label, stringResource(argRes)) }
+        ?: stringResource(status.label)
+    val a11yToggle = stringResource(
+        R.string.card_a11yToggle,
+        entry.networkName.ifEmpty { entry.networkId },
+    )
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
 
@@ -105,7 +115,7 @@ fun NetworkCardView(
                 modifier = Modifier.padding(top = 2.dp),
             ) {
                 StatusDot(color = statusColor)
-                Text(status.label, style = MaterialTheme.typography.bodySmall, color = statusColor)
+                Text(statusLabel, style = MaterialTheme.typography.bodySmall, color = statusColor)
                 IpGroup(addresses, tertiary)
             }
         }
@@ -119,7 +129,8 @@ fun NetworkCardView(
                 checked = appearsActive,
                 onCheckedChange = onToggle,
                 modifier = Modifier.semantics {
-                    contentDescription = "启用网络 ${entry.networkName.ifEmpty { entry.networkId }}"
+                    // stringResource 不可在 semantics lambda 内调用，须先在组合期解析
+                    contentDescription = a11yToggle
                 },
             )
         }
@@ -169,7 +180,7 @@ private fun IpGroup(addresses: List<String>?, tertiary: androidx.compose.ui.grap
         )
         Icon(
             imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-            contentDescription = "复制 IP",
+            contentDescription = stringResource(R.string.common_copyIp),
             tint = if (copied) success else tertiary,
             modifier = Modifier
                 .size(10.dp)

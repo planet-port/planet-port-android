@@ -35,7 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.tunnel.PeerInfo
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.ui.components.Badge
@@ -79,10 +81,13 @@ fun PeerListView(onBack: () -> Unit = {}) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Peers") },
+                title = { Text(stringResource(R.string.peers_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -101,8 +106,8 @@ fun PeerListView(onBack: () -> Unit = {}) {
                 !tunnelUp -> StatusCard {
                     EmptyStateCard(
                         icon = Icons.Filled.PortableWifiOff,
-                        title = "隧道未运行",
-                        hint = "开启网络后可查看实时连接",
+                        title = stringResource(R.string.peers_tunnelDown),
+                        hint = stringResource(R.string.peers_tunnelDownHint),
                     )
                 }
                 !loaded -> StatusCard {
@@ -113,14 +118,17 @@ fun PeerListView(onBack: () -> Unit = {}) {
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(28.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text("正在查询 Peers…", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.peers_loading),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
                     }
                 }
                 else -> StatusCard {
                     EmptyStateCard(
                         icon = Icons.Filled.Group,
-                        title = "“$planetName”暂无 Peers",
-                        hint = "列表约每 5 秒自动刷新",
+                        title = stringResource(R.string.peers_emptyTitle, planetName),
+                        hint = stringResource(R.string.peers_autoRefreshHint),
                     )
                 }
             }
@@ -191,7 +199,7 @@ private fun PeerCard(peer: PeerInfo) {
             if (peer.paths.isEmpty()) {
                 // 无直连路径 = 经 planet/root 中转，性能劣化信号，橙色标识
                 Badge(
-                    text = "中转 relay",
+                    text = stringResource(R.string.peers_relay),
                     color = statusColors.warn,
                     icon = Icons.AutoMirrored.Filled.AltRoute,
                 )

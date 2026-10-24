@@ -29,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.ui.theme.ThemeManager
 
 /**
@@ -50,10 +52,10 @@ fun IconPickerSheet(
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "选择图标",
+                    stringResource(R.string.icon_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -61,7 +63,7 @@ fun IconPickerSheet(
                 TextButton(onClick = {
                     onSelect(null)
                     onDismiss()
-                }) { Text("恢复自动") }
+                }) { Text(stringResource(R.string.icon_reset)) }
             }
 
             val accentHex by ThemeManager.accent.collectAsState()
@@ -106,7 +108,7 @@ fun IconPickerSheet(
                                     if (symbol == current) {
                                         Icon(
                                             Icons.Filled.CheckCircle,
-                                            contentDescription = "当前图标",
+                                            contentDescription = stringResource(R.string.icon_current),
                                             tint = tint,
                                             modifier = Modifier.size(14.dp),
                                         )

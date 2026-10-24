@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AppCompatActivity 要求 Theme.AppCompat 系主题（否则 onCreate 抛
+    "You need to use a Theme.AppCompat theme"）。深色基底对齐原
+    Theme.Material.NoActionBar（窗口底暗色，避免冷启动白闪），
+    实际配色全部由 Compose PlanetTheme 接管。
+-->
+<resources>
+    <style name="Theme.PlanetPort" parent="Theme.AppCompat.NoActionBar" />
+</resources>

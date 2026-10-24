@@ -49,6 +49,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -57,11 +59,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.LocalNavigator
@@ -168,6 +172,10 @@ fun HomeView(activity: MainActivity) {
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                     }
+                    // 无障碍标签：行星页 = 浏览 X，末位 = 添加行星（iOS dot(isSelected:label:)）
+                    val planet = planetAtIndex(idx)
+                    val dotLabel = planet?.let { stringResource(R.string.home_a11y_browsePlanet, it.name) }
+                        ?: stringResource(R.string.planet_add_title)
                     Box(
                         modifier = Modifier
                             .size(44.dp)
@@ -176,7 +184,8 @@ fun HomeView(activity: MainActivity) {
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                             ) { scope.launch { pagerState.animateScrollToPage(idx) } }
-                            .padding(12.dp),
+                            .padding(12.dp)
+                            .semantics { contentDescription = dotLabel },
                         contentAlignment = Alignment.Center,
                     ) {
                         Canvas(
@@ -258,7 +267,7 @@ fun HomeView(activity: MainActivity) {
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
-                    contentDescription = "加入网络",
+                    contentDescription = stringResource(R.string.fab_addNetwork),
                     tint = Color.White,
                     modifier = Modifier.size(28.dp),
                 )
@@ -274,21 +283,30 @@ fun HomeView(activity: MainActivity) {
     limitTarget?.let { (entry, force) ->
         AlertDialog(
             onDismissRequest = { limitTarget = null },
-            title = { Text("开启更多网络") },
+            title = { Text(stringResource(R.string.home_alert_openMore)) },
             text = {
                 Text(
-                    "同时连接多个网络会增加耗电，仍要开启「" +
-                        entry.networkName.ifEmpty { entry.networkId } + "」？",
+                    stringResource(
+                        R.string.home_alert_limitConfirm,
+                        entry.networkName.ifEmpty { entry.networkId },
+                    ),
                 )
             },
             dismissButton = {
-                TextButton(onClick = { limitTarget = null }) { Text("取消") }
+                TextButton(onClick = { limitTarget = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     limitTarget = null
                     force()
-                }) { Text("仍要开启", color = MaterialTheme.colorScheme.error) }
+                }) {
+                    Text(
+                        stringResource(R.string.home_alert_openAnyway),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             },
         )
     }
@@ -298,7 +316,11 @@ fun HomeView(activity: MainActivity) {
             onDismissRequest = { notice = null },
             title = { Text(n.title) },
             text = { Text(n.message) },
-            confirmButton = { TextButton(onClick = { notice = null }) { Text("好") } },
+            confirmButton = {
+                TextButton(onClick = { notice = null }) {
+                    Text(stringResource(R.string.common_ok))
+                }
+            },
         )
     }
 }
@@ -385,8 +407,8 @@ private fun PlanetPage(
             ) {
                 EmptyStateCard(
                     icon = Icons.Outlined.WifiOff,
-                    title = "这颗行星还没有网络",
-                    hint = "点击此处或右下角 + 添加",
+                    title = stringResource(R.string.home_network_emptyTitle),
+                    hint = stringResource(R.string.home_network_emptyHint),
                     onClick = onJoin,
                 )
             }
@@ -472,14 +494,14 @@ private fun HeaderZone(
             IconButton(onClick = onOpenPrefs) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
-                    contentDescription = "设置",
+                    contentDescription = stringResource(R.string.common_settings),
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
         if (!browsingActive && state.tunnelRunning) {
             val activeName = state.planets.firstOrNull { it.id == state.activePlanetId }?.name
-                ?: "ZeroTier 官方"
+                ?: stringResource(R.string.planet_official_name)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier

@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.annotation.StringRes
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import kotlinx.coroutines.delay
@@ -103,7 +106,7 @@ fun SectionCard(
  * 点击复制文本（对齐 iOS：doc.on.doc 图标，成功后短暂变绿色对勾）。
  * 图标包在 44pt 透明热区内补足触控目标（iOS §3 纪律）。
  *
- * @param contentDescription 无障碍标签，同时作为点击语义标签
+ * @param contentDescriptionRes 无障碍标签资源，同时作为点击语义标签
  */
 @Composable
 fun CopyableText(
@@ -112,12 +115,13 @@ fun CopyableText(
     style: TextStyle = MaterialTheme.typography.bodySmall,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     iconSize: Dp = 14.dp,
-    contentDescription: String = "复制",
+    @StringRes contentDescriptionRes: Int = R.string.common_copy,
 ) {
     // LocalClipboardManager.setText：现代 LocalClipboard 为 suspend API，
     // 此处同步拷贝即可（小文本，无需协程），deprecation 由 T7 资源化时一并处理
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
+    val contentDescription = stringResource(contentDescriptionRes)
     val successColor = LocalPlanetStatusColors.current.good
     var copied by remember { mutableStateOf(false) }
 

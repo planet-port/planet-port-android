@@ -29,6 +29,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.ui.components.DnsConfigSection
@@ -67,9 +69,9 @@ internal fun JoinNetworkSheet(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                 Spacer(Modifier.weight(1f))
-                Text("加入网络", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.join_title), style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.weight(1f))
                 TextButton(
                     enabled = idValid && dnsValid,
@@ -96,14 +98,14 @@ internal fun JoinNetworkSheet(
                         ) { duplicateAlert = true }
                         onDismiss()
                     },
-                ) { Text("加入") }
+                ) { Text(stringResource(R.string.join_action)) }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(
                     value = networkId,
                     onValueChange = { networkId = it },
-                    label = { Text("16 位十六进制") },
+                    label = { Text(stringResource(R.string.join_idPlaceholder)) },
                     singleLine = true,
                     textStyle = PlanetFonts.MonoBody.copy(
                         color = MaterialTheme.colorScheme.onSurface,
@@ -117,7 +119,7 @@ internal fun JoinNetworkSheet(
                         IconButton(onClick = {}, enabled = false) {
                             Icon(
                                 imageVector = Icons.Outlined.QrCodeScanner,
-                                contentDescription = "扫码识别网络 ID",
+                                contentDescription = stringResource(R.string.join_a11yScan),
                                 tint = MaterialTheme.colorScheme.primary,
                             )
                         }
@@ -126,7 +128,7 @@ internal fun JoinNetworkSheet(
                 )
                 if (networkId.isNotEmpty() && !idValid) {
                     Text(
-                        "网络 ID 必须为 16 位十六进制字符",
+                        stringResource(R.string.join_idInvalid),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -138,12 +140,15 @@ internal fun JoinNetworkSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("默认路由经 ZeroTier", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.join_routeVia),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
                     Spacer(Modifier.weight(1f))
                     Switch(checked = routeVia, onCheckedChange = { routeVia = it })
                 }
                 Text(
-                    "开启后所有流量经 ZeroTier 隧道路由",
+                    stringResource(R.string.join_routeViaFooter),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -168,10 +173,16 @@ internal fun JoinNetworkSheet(
     if (duplicateAlert) {
         AlertDialog(
             onDismissRequest = { duplicateAlert = false },
-            title = { Text("网络已存在") },
-            text = { Text("网络 ${networkId.lowercase()} 已在列表中，不能重复添加。") },
+            title = { Text(stringResource(R.string.join_duplicateTitle)) },
+            text = {
+                Text(
+                    stringResource(R.string.join_duplicateMessage, networkId.lowercase()),
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { duplicateAlert = false }) { Text("好") }
+                TextButton(onClick = { duplicateAlert = false }) {
+                    Text(stringResource(R.string.common_ok))
+                }
             },
         )
     }

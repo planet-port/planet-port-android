@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.MoonEntry
 import cn.imgozi.planetport.store.MoonImporter
 import cn.imgozi.planetport.store.PlanetProfile
@@ -40,6 +41,9 @@ sealed interface AddMoonResult {
 class MoonViewModel(application: Application, private val planetId: String) : AndroidViewModel(application) {
 
     private val store get() = StoreRepo.store
+
+    /** VM 侧资源解析（非 Composable 上下文）。 */
+    private fun string(resId: Int): String = getApplication<Application>().getString(resId)
 
     private val _moons = MutableStateFlow<List<MoonRow>>(emptyList())
     val moons: StateFlow<List<MoonRow>> = _moons.asStateFlow()
@@ -80,7 +84,7 @@ class MoonViewModel(application: Application, private val planetId: String) : An
             planetId,
         )
         AddMoonResult.Added
-    }.getOrElse { AddMoonResult.Failed("操作失败，请重试") }
+    }.getOrElse { AddMoonResult.Failed(string(R.string.common_operationRetry)) }
 
     /**
      * 文件导入：限量读 Uri（超 [MoonImporter.MAX_MOON_BYTES] 抛 [MoonImporter.ImportError.TooLarge]，
@@ -89,13 +93,20 @@ class MoonViewModel(application: Application, private val planetId: String) : An
      */
     suspend fun importFromFile(uri: Uri): AddMoonResult = runCatching {
         val bytes = withContext(Dispatchers.IO) { readMoonBytes(uri) }
-            ?: return@runCatching AddMoonResult.Failed(MoonImporter.ImportError.READ_FAILED_MESSAGE)
+            ?: return@runCatching AddMoonResult.Failed(string(R.string.error_moon_readFailed))
         val entry = StoreRepo.moonImporter.importMoonData(bytes)
         val existing = store.readMoons(planetId)
         store.writeMoons(existing.filterNot { it.worldId == entry.worldId } + entry, planetId)
         AddMoonResult.Added
     }.getOrElse { e ->
-        AddMoonResult.Failed((e as? MoonImporter.ImportError)?.message ?: "moon 文件导入失败")
+        // store 层异常消息为中文常量（TunnelStateBus 之外的技术性文案），这里按
+        // 异常类型映射资源；未识别类型回退通用文案
+        val message = when (e as? MoonImporter.ImportError) {
+            is MoonImporter.ImportError.BadHeader -> string(R.string.error_moon_badHeader)
+            is MoonImporter.ImportError.ReadFailed -> string(R.string.error_moon_readFailed)
+            else -> (e as? MoonImporter.ImportError)?.message ?: string(R.string.moon_importFailed)
+        }
+        AddMoonResult.Failed(message)
     }
 
     /**

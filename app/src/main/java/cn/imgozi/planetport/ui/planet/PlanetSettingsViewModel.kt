@@ -3,6 +3,7 @@ package cn.imgozi.planetport.ui.planet
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
@@ -76,7 +77,11 @@ class PlanetSettingsViewModel(
     fun rename(name: String, onError: (String) -> Unit) {
         viewModelScope.launch {
             runCatching { StoreRepo.planetImporter.rename(requirePlanet(), name) }
-                .onFailure { onError(it.message ?: "重命名失败") }
+                .onFailure {
+                    onError(
+                        it.message ?: getApplication<Application>().getString(R.string.planet_renameFailed),
+                    )
+                }
         }
     }
 
@@ -84,7 +89,11 @@ class PlanetSettingsViewModel(
     fun updateIcon(symbol: String?, onError: (String) -> Unit) {
         viewModelScope.launch {
             runCatching { StoreRepo.planetImporter.updateIcon(requirePlanet(), symbol) }
-                .onFailure { onError(it.message ?: "更新图标失败") }
+                .onFailure {
+                    onError(
+                        it.message ?: getApplication<Application>().getString(R.string.planet_iconUpdateFailed),
+                    )
+                }
         }
     }
 

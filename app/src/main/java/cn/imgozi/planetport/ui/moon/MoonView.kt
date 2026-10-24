@@ -53,9 +53,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.MoonEntry
 import cn.imgozi.planetport.ui.components.Badge
 import cn.imgozi.planetport.ui.components.EmptyStateCard
@@ -89,6 +92,8 @@ fun MoonView(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
+    // Snackbar 回调非 Composable 上下文，文案经 context.getString 解析
+    val context = LocalContext.current
 
     var showAdd by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -110,15 +115,21 @@ fun MoonView(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("卫星") },
+                title = { Text(stringResource(R.string.moon_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 actions = {
                     IconButton(onClick = { showAdd = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = "添加卫星")
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = stringResource(R.string.moon_addTitle),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -140,8 +151,8 @@ fun MoonView(
                 // 空态（对齐 iOS：「"X"尚未配置卫星 / 右上角 + 添加」，不可点击）
                 EmptyStateCard(
                     icon = Icons.Filled.Nightlight,
-                    title = "“$planetName”尚未配置卫星",
-                    hint = "右上角 + 添加",
+                    title = stringResource(R.string.moon_emptyTitle, planetName),
+                    hint = stringResource(R.string.moon_emptyHint),
                 )
             }
         } else {
@@ -162,9 +173,11 @@ fun MoonView(
                             scope.launch {
                                 runCatching { vm.deleteOrbit(row.entry) }
                                     .onSuccess {
-                                        snackbar.showSnackbar("已删除入轨，重启隧道以应用变更")
+                                        snackbar.showSnackbar(context.getString(R.string.moon_orbitRemoved))
                                     }
-                                    .onFailure { snackbar.showSnackbar("操作失败") }
+                                    .onFailure {
+                                        snackbar.showSnackbar(context.getString(R.string.common_operationFailed))
+                                    }
                             }
                         },
                         onCopy = {
@@ -173,7 +186,9 @@ fun MoonView(
                         onDeleteCache = {
                             scope.launch {
                                 runCatching { vm.deleteCacheFile(row.entry) }
-                                    .onFailure { snackbar.showSnackbar("操作失败") }
+                                    .onFailure {
+                                        snackbar.showSnackbar(context.getString(R.string.common_operationFailed))
+                                    }
                             }
                         },
                     )
@@ -202,10 +217,12 @@ fun MoonView(
     notice?.let { message ->
         AlertDialog(
             onDismissRequest = { notice = null },
-            title = { Text("提示") },
+            title = { Text(stringResource(R.string.common_notice)) },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { notice = null }) { Text("好") }
+                TextButton(onClick = { notice = null }) {
+                    Text(stringResource(R.string.common_ok))
+                }
             },
         )
     }
@@ -252,7 +269,7 @@ private fun MoonRowCard(
             ) {
                 Icon(
                     imageVector = Icons.Filled.DeleteOutline,
-                    contentDescription = "删除入轨",
+                    contentDescription = stringResource(R.string.moon_deleteOrbit),
                     tint = MaterialTheme.colorScheme.onError,
                 )
             }
@@ -263,7 +280,7 @@ private fun MoonRowCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .combinedClickable(
-                        onClickLabel = "卫星操作",
+                        onClickLabel = stringResource(R.string.moon_actions),
                         onClick = {},
                         onLongClick = { menuOpen = true },
                     ),
@@ -308,7 +325,9 @@ private fun MoonRowCard(
                             }
                             // 缓存徽标：已缓存（就绪，绿）/ 未缓存（中性）；文件导入附 doc 图标
                             Badge(
-                                text = if (row.cached) "已缓存" else "未缓存",
+                                text = stringResource(
+                                    if (row.cached) R.string.moon_cached else R.string.moon_notCached,
+                                ),
                                 color = if (row.cached) statusColors.good else statusColors.neutral,
                                 icon = if (row.entry.fromFile) Icons.Filled.Description else null,
                             )
@@ -319,7 +338,12 @@ private fun MoonRowCard(
 
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text("删除入轨", color = MaterialTheme.colorScheme.error) },
+                    text = {
+                        Text(
+                            stringResource(R.string.moon_deleteOrbit),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    },
                     leadingIcon = {
                         Icon(
                             Icons.Filled.DeleteOutline,
@@ -333,7 +357,7 @@ private fun MoonRowCard(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("复制地址") },
+                    text = { Text(stringResource(R.string.moon_copyAddress)) },
                     leadingIcon = {
                         Icon(Icons.Filled.ContentCopy, contentDescription = null)
                     },
@@ -344,7 +368,7 @@ private fun MoonRowCard(
                 )
                 if (row.entry.fromFile) {
                     DropdownMenuItem(
-                        text = { Text("删除缓存文件") },
+                        text = { Text(stringResource(R.string.moon_deleteCache)) },
                         leadingIcon = {
                             Icon(Icons.Filled.DeleteSweep, contentDescription = null)
                         },

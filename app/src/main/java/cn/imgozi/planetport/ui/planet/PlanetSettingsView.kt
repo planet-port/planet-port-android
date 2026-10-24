@@ -48,7 +48,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
@@ -93,10 +95,13 @@ fun PlanetSettingsView(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(planet?.name ?: "行星") },
+                title = { Text(planet?.name ?: stringResource(R.string.planet_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -120,7 +125,11 @@ fun PlanetSettingsView(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             FormSection(
-                footer = if (isOfficial) "官方行星使用 Core 内置配置，不支持修改。" else null,
+                footer = if (isOfficial) {
+                    stringResource(R.string.planet_info_officialOnly)
+                } else {
+                    null
+                },
             ) {
                 NameRow(
                     planet = planet,
@@ -134,10 +143,10 @@ fun PlanetSettingsView(
                 )
             }
 
-            FormSection(footer = "节点身份与行星绑定，仅隧道正在使用的行星能读取到节点 ID。") {
+            FormSection(footer = stringResource(R.string.planet_info_footer)) {
                 FormRow("World ID", ui.worldId)
                 FormRow(
-                    "节点 ID",
+                    stringResource(R.string.planet_info_nodeId),
                     // 激活行星优先实时值，其余/离线回退档案缓存（对齐 iOS nodeIDText）
                     if (planetId == ui.activePlanetId && !node?.nodeId.isNullOrEmpty()) {
                         node!!.nodeId
@@ -146,38 +155,46 @@ fun PlanetSettingsView(
                     },
                 )
                 FormRow(
-                    "类型",
-                    if (isOfficial) "官方" else "私有",
+                    stringResource(R.string.common_type),
+                    stringResource(
+                        if (isOfficial) R.string.planet_info_officialKind else R.string.planet_info_customKind,
+                    ),
                     valueStyle = MaterialTheme.typography.bodyLarge,
                 )
                 ui.fileInfo?.let { info ->
-                    FormRow("文件大小", fileSizeText(info.fileSize))
-                    FormRow("修订时间", revisionText(info.timestamp))
+                    FormRow(
+                        stringResource(R.string.planet_info_fileSize),
+                        fileSizeText(info.fileSize),
+                    )
+                    FormRow(
+                        stringResource(R.string.planet_info_revision),
+                        revisionText(info.timestamp),
+                    )
                 }
             }
 
-            FormSection(footer = "Peers 来自隧道的实时连接，仅隧道正在使用的行星可查看。") {
+            FormSection(footer = stringResource(R.string.planet_diagnostics_footer)) {
                 NavRow(
                     icon = Icons.Filled.Group,
-                    label = "查看 Peers",
+                    label = stringResource(R.string.planet_diagnostics_peers),
                     enabled = planetId == ui.activePlanetId,
                     onClick = navToPeers,
                 )
                 NavRow(
                     icon = Icons.Filled.Nightlight,
-                    label = "管理卫星节点",
+                    label = stringResource(R.string.planet_diagnostics_moons),
                     onClick = navToMoon,
                 )
                 NavRow(
                     icon = Icons.Filled.MonitorHeart,
-                    label = "数据面诊断",
+                    label = stringResource(R.string.planet_diagnostics_trace),
                     onClick = navToApplyTrace,
                 )
             }
 
             if (!isOfficial) {
                 FormSection(
-                    footer = "将一并删除该行星下保存的网络和卫星。若隧道正在使用它，VPN 将停止并回退到官方行星。",
+                    footer = stringResource(R.string.planet_delete_footer),
                 ) {
                     Box(
                         Modifier
@@ -187,7 +204,7 @@ fun PlanetSettingsView(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            "删除此行星",
+                            stringResource(R.string.planet_delete),
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.labelLarge,
                         )
@@ -212,18 +229,23 @@ fun PlanetSettingsView(
     if (showDelete) {
         AlertDialog(
             onDismissRequest = { showDelete = false },
-            title = { Text("删除这颗行星？") },
-            text = { Text("此操作不可撤销。") },
+            title = { Text(stringResource(R.string.planet_delete_confirmTitle)) },
+            text = { Text(stringResource(R.string.common_irreversible)) },
             confirmButton = {
                 TextButton(onClick = {
                     showDelete = false
                     vm.delete(onBack)
                 }) {
-                    Text("删除行星、网络和卫星", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        stringResource(R.string.planet_delete_confirmAction),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDelete = false }) { Text("取消") }
+                TextButton(onClick = { showDelete = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
             },
         )
     }
@@ -231,10 +253,12 @@ fun PlanetSettingsView(
     alertText?.let { message ->
         AlertDialog(
             onDismissRequest = { alertText = null },
-            title = { Text("提示") },
+            title = { Text(stringResource(R.string.common_notice)) },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { alertText = null }) { Text("好") }
+                TextButton(onClick = { alertText = null }) {
+                    Text(stringResource(R.string.common_ok))
+                }
             },
         )
     }
@@ -261,7 +285,7 @@ private fun NameRow(
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("名称", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.common_name), style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.weight(1f))
         if (isOfficial) {
             Text(
@@ -307,7 +331,7 @@ private fun IconRow(
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("图标", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.common_icon), style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.weight(1f))
         if (isOfficial) {
             // 官方磁贴（与首页共用 ui.components.OfficialPlanetIcon，石绿线稿行星）

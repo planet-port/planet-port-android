@@ -2,6 +2,7 @@ package cn.imgozi.planetport.ui.prefs
 
 import android.app.Application
 import android.graphics.Color as AndroidColor
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,10 +48,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
@@ -78,10 +84,13 @@ fun PrefsView(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("设置") },
+                title = { Text(stringResource(R.string.common_settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -99,37 +108,37 @@ fun PrefsView(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             FormSection(
-                header = "网络",
-                footer = "同时连接多个网络会增加耗电；超出上限时会提示确认，仍可强制开启。",
+                header = stringResource(R.string.prefs_network_sectionHeader),
+                footer = stringResource(R.string.prefs_network_footer),
             ) {
                 FormToggleRow(
-                    title = "禁用 IPv6",
+                    title = stringResource(R.string.prefs_network_disableIPv6),
                     checked = prefs.disableIpv6,
                     onCheckedChange = vm::setDisableIpv6,
                 )
                 StepperRow(
-                    title = "同时连接上限：${prefs.maxNetworks}",
+                    title = stringResource(R.string.prefs_network_multiConnectLimit, prefs.maxNetworks),
                     value = prefs.maxNetworks,
                     range = 2..6,
                     onChange = vm::setMaxNetworks,
                 )
             }
 
-            FormSection(
-                header = "语言",
-                // per-app locale 切换接线归 T7（AppCompatDelegate.setApplicationLocales），
-                // 本任务先落 UI 与持久化，占位说明生效时机
-                footer = "语言切换需重启应用后生效。",
-            ) {
+            // 语言即时切换：AppCompatDelegate.setApplicationLocales（autoStoreLocales
+            // 持久化），AppPrefs.language 仅作展示态同步（审查 M4：占位 footer 已删）
+            FormSection(header = stringResource(R.string.prefs_language_sectionHeader)) {
                 LanguageOptions(
                     selected = prefs.language,
-                    onSelect = vm::setLanguage,
+                    onSelect = { code ->
+                        vm.setLanguage(code)
+                        AppCompatDelegate.setApplicationLocales(localeListFor(code))
+                    },
                 )
             }
 
             FormSection(
-                header = "外观",
-                footer = "背景图可从相册选择或通过 URL 下载；视差动画仅在设置了背景图时生效。",
+                header = stringResource(R.string.prefs_appearance_sectionHeader),
+                footer = stringResource(R.string.prefs_appearance_footer),
             ) {
                 // 背景图入口壳：选取器（BackgroundImagePickerSheet）实现在 T7，
                 // 本任务只渲染「未设置」态；AppPrefs.backgroundImage 持久化字段由 T7 写
@@ -141,7 +150,10 @@ fun PrefsView(onBack: () -> Unit) {
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("背景图", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.prefs_appearance_background),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
                     Spacer(Modifier.weight(1f))
                     if (prefs.backgroundImage) {
                         Box(
@@ -152,7 +164,7 @@ fun PrefsView(onBack: () -> Unit) {
                         )
                     } else {
                         Text(
-                            "未设置",
+                            stringResource(R.string.common_notSet),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -165,7 +177,7 @@ fun PrefsView(onBack: () -> Unit) {
                     )
                 }
                 FormToggleRow(
-                    title = "视差动画",
+                    title = stringResource(R.string.prefs_appearance_parallax),
                     checked = prefs.parallax,
                     onCheckedChange = vm::setParallax,
                     // 无背景图时禁用且标签置灰（对齐 iOS disabled + Color.secondary）
@@ -179,9 +191,8 @@ fun PrefsView(onBack: () -> Unit) {
             }
 
             FormSection(
-                header = "主题色",
-                footer = "主色决定按钮、指示器与行星装饰色，深浅模式自动适配；状态色默认保持绿/橙/红语义，" +
-                    "打开开关后成功色随主色三角派生。",
+                header = stringResource(R.string.prefs_theme_sectionHeader),
+                footer = stringResource(R.string.prefs_theme_footer),
             ) {
                 PresetPalette(
                     selected = (prefs.themeColorCustom == null) to
@@ -195,34 +206,41 @@ fun PrefsView(onBack: () -> Unit) {
                     onCommit = vm::setThemeCustom,
                 )
                 FormToggleRow(
-                    title = "状态色跟随主色派生",
+                    title = stringResource(R.string.prefs_theme_deriveStatus),
                     checked = prefs.successDerived,
                     onCheckedChange = vm::setSuccessDerived,
                 )
             }
 
-            FormSection(header = "关于") {
+            FormSection(header = stringResource(R.string.prefs_about_sectionHeader)) {
                 SelectionContainer {
                     FormRow(
                         title = "ZeroTier Core",
-                        value = node?.coreVersion?.takeIf { it.isNotBlank() } ?: "未知",
+                        value = node?.coreVersion?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.common_unknown),
                     )
                 }
                 SelectionContainer {
-                    FormRow(title = "版本", value = vm.appVersion)
+                    FormRow(
+                        title = stringResource(R.string.prefs_about_version),
+                        value = vm.appVersion,
+                    )
                 }
             }
 
             // 支持区暂隐藏（内容待补充），代码保留——对齐 iOS PrefsView if (false)
             if (false) {
-                FormSection(header = "支持") {
+                FormSection(header = stringResource(R.string.prefs_support_sectionHeader)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("捐赠", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.prefs_support_donate),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
                         Spacer(Modifier.weight(1f))
                         Icon(
                             Icons.Filled.Favorite,
@@ -254,10 +272,16 @@ private fun StepperRow(
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         IconButton(onClick = { onChange(value - 1) }, enabled = value > range.first) {
-            Icon(Icons.Filled.Remove, contentDescription = "减小")
+            Icon(
+                Icons.Filled.Remove,
+                contentDescription = stringResource(R.string.prefs_stepperDecrease),
+            )
         }
         IconButton(onClick = { onChange(value + 1) }, enabled = value < range.last) {
-            Icon(Icons.Filled.Add, contentDescription = "增大")
+            Icon(
+                Icons.Filled.Add,
+                contentDescription = stringResource(R.string.prefs_stepperIncrease),
+            )
         }
     }
 }
@@ -269,7 +293,7 @@ private fun LanguageOptions(
     onSelect: (String?) -> Unit,
 ) {
     val options: List<Pair<String?, String>> = listOf(
-        null to "跟随系统",
+        null to stringResource(R.string.prefs_language_system),
         "zh" to "简体中文",
         "zh-rTW" to "繁體中文",
         "en" to "English",
@@ -307,13 +331,18 @@ private fun PresetPalette(
     ) {
         ThemeManager.presets.forEach { hex ->
             val isSelected = selected.first && selected.second == hex
+            // 审查 M3：色点无文字，组合期解析「主色 %@」作为无障碍标签
+            val a11yLabel = presetNames[hex]?.let { nameRes ->
+                stringResource(R.string.prefs_theme_a11yPreset, stringResource(nameRes))
+            }
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .aspectRatio(1f)
                     .clip(CircleShape)
                     .background(colorOf(hex))
-                    .clickable { onSelect(hex) },
+                    .semantics { if (a11yLabel != null) contentDescription = a11yLabel }
+                    .clickable(onClickLabel = a11yLabel) { onSelect(hex) },
                 contentAlignment = Alignment.Center,
             ) {
                 if (isSelected) {
@@ -331,6 +360,21 @@ private fun PresetPalette(
 
 /** ARGB Long → Compose Color。 */
 private fun colorOf(argb: Long): Color = Color(argb.toInt())
+
+/**
+ * 预设主色 → 名称资源（与 ThemeManager.presets 同序；审查 M3：色板圆点
+ * 需无障碍标签「主色 %@」，纯色块无文字）。
+ */
+private val presetNames: Map<Long, Int> = mapOf(
+    0xFFD44037 to R.string.theme_preset_defaultRed, // 默认红
+    0xFFFFB61E to R.string.theme_preset_gamboge, // 藤黄
+    0xFF789262 to R.string.theme_preset_bamboo, // 竹青
+    0xFF57C3C2 to R.string.theme_preset_malachite, // 石绿
+    0xFF4C8DAE to R.string.theme_preset_ultramarine, // 群青
+    0xFF003472 to R.string.theme_preset_indigo, // 花青
+    0xFF4A4266 to R.string.theme_preset_dark, // 黛
+    0xFF9D2933 to R.string.theme_preset_carmine, // 胭脂
+)
 
 /**
  * 自定义主色拾取（iOS ColorPicker 等价，色相/饱和度/亮度三滑杆 + 预览圆点）：
@@ -351,7 +395,11 @@ private fun ThemeColorPickerRow(
 
     Column(Modifier.padding(vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("自定义主色", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(
+                stringResource(R.string.prefs_theme_custom),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
             Box(
                 Modifier
                     .size(24.dp)
@@ -360,7 +408,7 @@ private fun ThemeColorPickerRow(
             )
         }
         HslSlider(
-            label = "色相",
+            label = stringResource(R.string.prefs_theme_hue),
             value = hsv[0],
             range = 0f..360f,
             display = { it.toInt().toString() },
@@ -371,7 +419,7 @@ private fun ThemeColorPickerRow(
             onFinished = { onCommit(argb()) },
         )
         HslSlider(
-            label = "饱和度",
+            label = stringResource(R.string.prefs_theme_saturation),
             value = hsv[1],
             range = 0f..1f,
             display = { "%d%%".format((it * 100).toInt()) },
@@ -382,7 +430,7 @@ private fun ThemeColorPickerRow(
             onFinished = { onCommit(argb()) },
         )
         HslSlider(
-            label = "亮度",
+            label = stringResource(R.string.prefs_theme_brightness),
             value = hsv[2],
             range = 0f..1f,
             display = { "%d%%".format((it * 100).toInt()) },

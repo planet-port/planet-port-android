@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.ui.components.SectionCard
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 
@@ -49,6 +51,7 @@ fun AddMoonSheet(
 ) {
     var worldIdText by remember { mutableStateOf("") }
     var seedText by remember { mutableStateOf("") }
+    val moonChooseFile = stringResource(R.string.moon_chooseFile)
 
     val valid = isHex16(worldIdText) && isHex16(seedText)
     val worldId = if (valid) worldIdText.toULongOrNull(16) else null
@@ -65,20 +68,24 @@ fun AddMoonSheet(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("添加卫星", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("取消") }
+                Text(
+                    stringResource(R.string.moon_addTitle),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
             }
 
             // —— 从文件导入 ——
             Text(
-                "从文件导入",
+                stringResource(R.string.moon_importFileHeader),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             SectionCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClickLabel = "选择 .moon 文件") { onFileImport() },
+                    .clickable(onClickLabel = moonChooseFile) { onFileImport() },
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -88,20 +95,20 @@ fun AddMoonSheet(
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("选择 .moon 文件", style = MaterialTheme.typography.labelLarge)
+                    Text(moonChooseFile, style = MaterialTheme.typography.labelLarge)
                 }
             }
 
             // —— 手动入轨 ——
             Text(
-                "手动入轨",
+                stringResource(R.string.moon_manualHeader),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedTextField(
                 value = worldIdText,
                 onValueChange = { worldIdText = it },
-                label = { Text("World ID（16 位 hex）") },
+                label = { Text(stringResource(R.string.moon_worldIdPlaceholder)) },
                 singleLine = true,
                 textStyle = PlanetFonts.MonoBody,
                 keyboardOptions = KeyboardOptions(
@@ -113,7 +120,7 @@ fun AddMoonSheet(
             OutlinedTextField(
                 value = seedText,
                 onValueChange = { seedText = it },
-                label = { Text("Seed（16 位 hex）") },
+                label = { Text(stringResource(R.string.moon_seedPlaceholder)) },
                 singleLine = true,
                 textStyle = PlanetFonts.MonoBody,
                 keyboardOptions = KeyboardOptions(
@@ -131,7 +138,7 @@ fun AddMoonSheet(
                 enabled = valid,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("入轨")
+                Text(stringResource(R.string.moon_orbit))
             }
         }
     }

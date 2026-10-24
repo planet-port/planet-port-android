@@ -50,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
@@ -106,9 +108,12 @@ internal fun AddPlanetPage(
             modifier = Modifier.padding(horizontal = HomeMetrics.pageHMargin),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("添加行星", style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
             Text(
-                "导入 planet 文件，或输入下载地址",
+                stringResource(R.string.planet_add_title),
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                stringResource(R.string.addplanet_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -138,7 +143,7 @@ private fun existingNames(state: HomeUiState): Set<String> =
 /** 预览身份区：虚线占位形态的行星卡，信息随表单实时同步（iOS AddPlanetPage:61-68）。 */
 @Composable
 private fun PreviewCard(name: String, modifier: Modifier = Modifier) {
-    val displayName = name.trim().ifEmpty { "新行星" }
+    val displayName = name.trim().ifEmpty { stringResource(R.string.addplanet_previewName) }
     PlanetCardView(
         planet = PlanetProfile(
             id = "preview-${displayName}",
@@ -175,6 +180,9 @@ private fun AddPlanetForm(
     var downloading by remember { mutableStateOf(false) }
     var pendingData by remember { mutableStateOf<ByteArray?>(null) }
     var alert by remember { mutableStateOf<String?>(null) }
+    // 回调非 Composable 上下文：文案先在组合期解析
+    val fileUnreadable = stringResource(R.string.addplanet_fileUnreadable)
+    val badHeader = stringResource(R.string.addplanet_badHeader)
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -183,9 +191,8 @@ private fun AddPlanetForm(
                 context.contentResolver.openInputStream(uri)?.use { stream -> stream.readBytes() }
             }.getOrNull()
             when {
-                data == null -> alert = "无法读取所选文件"
-                data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE ->
-                    alert = "planet 文件头无效（首字节应为 0x01）"
+                data == null -> alert = fileUnreadable
+                data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE -> alert = badHeader
                 else -> pendingData = data
             }
         }
@@ -211,7 +218,7 @@ private fun AddPlanetForm(
                 FormField(
                     value = name,
                     onValueChange = onNameChange,
-                    placeholder = "行星名称",
+                    placeholder = stringResource(R.string.addplanet_namePlaceholder),
                     modifier = Modifier.weight(1f),
                 )
                 Box(
@@ -227,7 +234,7 @@ private fun AddPlanetForm(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Casino,
-                        contentDescription = "换个随机名称",
+                        contentDescription = stringResource(R.string.addplanet_randomName),
                         tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(20.dp),
                     )
@@ -254,12 +261,15 @@ private fun AddPlanetForm(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.size(8.dp))
-                Text("选择行星文件", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    stringResource(R.string.addplanet_chooseFile),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
                 Spacer(Modifier.weight(1f))
                 val ready = pendingData
                 if (ready != null) {
                     Text(
-                        "已就绪 · ${fileSizeLabel(ready.size)}",
+                        stringResource(R.string.addplanet_ready, fileSizeLabel(ready.size)),
                         style = MaterialTheme.typography.bodySmall,
                         color = cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors.current.good,
                     )
@@ -281,7 +291,7 @@ private fun AddPlanetForm(
                 FormField(
                     value = url,
                     onValueChange = { url = it },
-                    placeholder = "或输入行星文件URL",
+                    placeholder = stringResource(R.string.addplanet_urlPlaceholder),
                     keyboardType = KeyboardType.Uri,
                     modifier = Modifier.weight(1f),
                 )
@@ -301,7 +311,7 @@ private fun AddPlanetForm(
                                 when {
                                     error != null -> alert = error
                                     data != null && (data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE) ->
-                                        alert = "planet 文件头无效（首字节应为 0x01）"
+                                        alert = badHeader
                                     data != null -> pendingData = data
                                 }
                             }
@@ -312,7 +322,7 @@ private fun AddPlanetForm(
                         CircularProgressIndicator(Modifier.size(18.dp))
                     } else {
                         Text(
-                            "导入",
+                            stringResource(R.string.common_import),
                             style = MaterialTheme.typography.labelMedium,
                             color = if (url.isEmpty() || downloading) {
                                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -353,7 +363,7 @@ private fun AddPlanetForm(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "添加行星服务器",
+                stringResource(R.string.addplanet_action),
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                 color = Color.White,
             )
@@ -363,9 +373,11 @@ private fun AddPlanetForm(
     if (alert != null) {
         AlertDialog(
             onDismissRequest = { alert = null },
-            title = { Text("导入失败") },
+            title = { Text(stringResource(R.string.addplanet_importFailed)) },
             text = { Text(alert ?: "") },
-            confirmButton = { TextButton(onClick = { alert = null }) { Text("好") } },
+            confirmButton = {
+                TextButton(onClick = { alert = null }) { Text(stringResource(R.string.common_ok)) }
+            },
         )
     }
 }

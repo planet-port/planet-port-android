@@ -36,8 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.ui.components.DnsConfigSection
@@ -46,7 +48,7 @@ import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
 import cn.imgozi.planetport.ui.theme.PlanetFonts
-import cn.imgozi.planetport.ui.ztStatusText
+import cn.imgozi.planetport.ui.ztStatusLabel
 
 /**
  * 网络详情页（iOS NetworkDetailView.swift 1:1）：
@@ -75,10 +77,13 @@ fun NetworkDetailView(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("网络详情") },
+                title = { Text(stringResource(R.string.network_detailTitle)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -93,7 +98,7 @@ fun NetworkDetailView(
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 if (ui.loaded) {
                     Text(
-                        "网络不存在或已被删除",
+                        stringResource(R.string.network_notFoundOrDeleted),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -141,28 +146,44 @@ private fun NetworkDetailContent(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         FormSection {
-            FormRow("网络 ID", entry.networkId)
-            FormRow("名称", snapshot?.name ?: entry.networkName)
-            FormRow("状态", snapshot?.let { ztStatusText(it.statusCode) } ?: "—")
-            FormRow("类型", snapshot?.type ?: "—")
+            FormRow(stringResource(R.string.network_id), entry.networkId)
+            FormRow(
+                stringResource(R.string.common_name),
+                snapshot?.name ?: entry.networkName,
+            )
+            FormRow(
+                stringResource(R.string.common_status),
+                snapshot?.let { stringResource(ztStatusLabel(it.statusCode)) } ?: "—",
+            )
+            FormRow(stringResource(R.string.common_type), snapshot?.type ?: "—")
             FormRow("MAC", snapshot?.mac ?: "—")
             FormRow("MTU", snapshot?.let { it.mtu.toString() } ?: "—")
-            FormRow("广播", snapshot?.let { if (it.broadcastEnabled) "允许" else "禁止" } ?: "—")
-            FormRow("桥接", snapshot?.let { if (it.bridge) "是" else "否" } ?: "—")
+            FormRow(
+                stringResource(R.string.network_broadcast),
+                snapshot?.let {
+                    stringResource(if (it.broadcastEnabled) R.string.common_allowed else R.string.common_forbidden)
+                } ?: "—",
+            )
+            FormRow(
+                stringResource(R.string.network_bridge),
+                snapshot?.let {
+                    stringResource(if (it.bridge) R.string.common_yes else R.string.common_no)
+                } ?: "—",
+            )
         }
 
-        FormSection(header = "分配的地址") {
+        FormSection(header = stringResource(R.string.network_assignedAddrs)) {
             MonoListOrEmpty(snapshot?.assignedAddrs.orEmpty())
         }
 
-        FormSection(header = "托管路由") {
+        FormSection(header = stringResource(R.string.network_managedRoutes)) {
             MonoListOrEmpty(snapshot?.routes.orEmpty())
         }
 
         FormSection(
             header = "DNS",
             // iOS network.dnsFooter：热重配不重连
-            footer = "修改后需点「应用」生效；隧道运行时会自动重配，无需断开重连。",
+            footer = stringResource(R.string.network_dnsFooter),
         ) {
             DnsConfigSection(
                 mode = dnsMode,
@@ -182,20 +203,20 @@ private fun NetworkDetailContent(
                     enabled = isDnsConfigValid(dnsMode, dnsServers),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("应用 DNS 配置")
+                    Text(stringResource(R.string.network_applyDns))
                 }
             }
         }
 
         FormSection(
             footer = if (routeViaLocked) {
-                "多网络同时连接时不可用"
+                stringResource(R.string.network_routeVia_lockedFooter)
             } else {
-                "开启后该网络的默认路由经 ZeroTier，立即生效"
+                stringResource(R.string.network_routeVia_footer)
             },
         ) {
             FormToggleRow(
-                title = "经 ZeroTier 路由（默认路由）",
+                title = stringResource(R.string.network_routeVia),
                 checked = entry.routeViaZeroTier,
                 onCheckedChange = onSetRouteVia,
                 enabled = !routeViaLocked,
@@ -211,7 +232,7 @@ private fun NetworkDetailContent(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    "删除网络",
+                    stringResource(R.string.network_delete),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -224,18 +245,23 @@ private fun NetworkDetailContent(
     if (showDelete) {
         AlertDialog(
             onDismissRequest = { showDelete = false },
-            title = { Text("删除这个网络？") },
-            text = { Text("将从当前行星的网络列表中移除；若隧道正在使用，将停止加入该网络。") },
+            title = { Text(stringResource(R.string.network_delete_confirmTitle)) },
+            text = { Text(stringResource(R.string.network_delete_confirmMessage)) },
             confirmButton = {
                 TextButton(onClick = {
                     showDelete = false
                     onDelete()
                 }) {
-                    Text("删除网络", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        stringResource(R.string.network_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDelete = false }) { Text("取消") }
+                TextButton(onClick = { showDelete = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
             },
         )
     }

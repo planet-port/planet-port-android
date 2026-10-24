@@ -1,5 +1,7 @@
 package cn.imgozi.planetport.ui
 
+import androidx.annotation.StringRes
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.tunnel.TunnelState
 
 /** 网络状态语义色（M3 ColorScheme 无状态槽位，映射见 ui.theme.PlanetStatusColors）。 */
@@ -7,17 +9,35 @@ enum class StatusColor { Good, Warn, Neutral, Danger }
 
 /**
  * 网络卡片状态行模型（对齐 iOS NetworkCardView.swift:8-52 的 NetworkCardStatus）：
- * 文案 + 语义色。文案在此生成、跨层只传原始码（与 iOS 跨进程契约一致）。
+ * 文案 + 语义色。跨层只传原始码（与 iOS 跨进程契约一致），文案以 [StringRes] 承载、
+ * 由 UI 层 stringResource 解析（三语）。[labelArgRes] 供带占位文案（如「%@,断开」），
+ * 实参本身也是资源 ID（冲突原因文案），解析时先解实参再格式化。
  */
 data class NetworkCardStatus(
-    val label: String,
+    @StringRes val label: Int,
     val color: StatusColor,
+    @StringRes val labelArgRes: Int? = null,
 )
 
 /**
- * ZT_VirtualNetworkStatus 原始码 → 文案（iOS Shared/Models.swift:16-54 全集）。
- * [code] 取值 0..6；-1 与其他未知值归入「未知」。
- * 全 UI 唯一网络状态文案映射入口（自 P2 脚手架页上移恢复原名）。
+ * ZT_VirtualNetworkStatus 原始码 → 文案资源（iOS Shared/Models.swift:16-54 全集）。
+ * [code] 取值 0..6；-1 与其他未知值归入「未知」。UI 层用 [stringResource] 解析。
+ */
+@StringRes
+fun ztStatusLabel(code: Int): Int = when (code) {
+    0 -> R.string.network_status_requestingConfiguration
+    1 -> R.string.network_status_ok
+    2 -> R.string.network_status_accessDenied
+    3 -> R.string.network_status_notFound
+    4 -> R.string.network_status_portError
+    5 -> R.string.network_status_clientTooOld
+    6 -> R.string.network_status_authRequired
+    else -> R.string.network_status_unknown
+}
+
+/**
+ * [ztStatusLabel] 的字面量版（HomeViewModel 事件弹窗等非 Composable 上下文消费）。
+ * 无 Context 无法本地化，暂为简体固定文案——VM 侧文案资源化归 T6b 领地移交项。
  */
 fun ztStatusText(code: Int): String = when (code) {
     0 -> "正在初始化"
@@ -27,11 +47,10 @@ fun ztStatusText(code: Int): String = when (code) {
     4 -> "端口错误"
     5 -> "客户端过旧"
     6 -> "需要认证"
-    -1 -> "未知"
     else -> "未知"
 }
 
-/** 隧道宏观状态文案（自 P2 脚手架页上移，脚手架页已退役）。 */
+/** 隧道宏观状态文案（自 P2 脚手架页上移，脚手架页已退役；诊断用途，未接 UI）。 */
 fun tunnelStateText(state: TunnelState): String = when (state) {
     is TunnelState.Idle -> "空闲"
     is TunnelState.Starting -> "启动中"
@@ -50,7 +69,7 @@ fun tunnelStateText(state: TunnelState): String = when (state) {
  * 4. 有实时状态码（[hasStatus]）→ 待授权(2/6) 橙「待授权」；ok(1) 绿；其余橙（状态文案）
  * 5. 兜底「等待节点响应」中性
  *
- * 纯函数模型，本任务不接 UI（T3 网络卡消费）。
+ * 纯函数模型：只产出资源 ID，文案解析在 UI 层（stringResource）。
  *
  * @param liveConflict 当前会话的冲突原因码，null = 无冲突
  * @param lastConflict 上次会话遗留的冲突原因码，null = 无记录
@@ -68,35 +87,42 @@ fun deriveNetworkCardStatus(
 ): NetworkCardStatus {
     if (!vpnRunning) {
         return if (lastActivated) {
-            NetworkCardStatus("建立隧道", StatusColor.Warn)
+            NetworkCardStatus(R.string.status_establishing, StatusColor.Warn)
         } else {
-            NetworkCardStatus("未连接", StatusColor.Neutral)
+            NetworkCardStatus(R.string.status_disconnected, StatusColor.Neutral)
         }
     }
     liveConflict?.takeIf { lastActivated }?.let {
-        return NetworkCardStatus(conflictLabel(it), StatusColor.Danger)
+        return NetworkCardStatus(conflictLabelRes(it), StatusColor.Danger)
     }
     if (!lastActivated) {
         return if (lastConflict != null) {
-            NetworkCardStatus("${conflictLabel(lastConflict)}，断开", StatusColor.Danger)
+            NetworkCardStatus(
+                R.string.card_conflict_offline,
+                StatusColor.Danger,
+                conflictLabelRes(lastConflict),
+            )
         } else {
-            NetworkCardStatus("未连接", StatusColor.Neutral)
+            NetworkCardStatus(R.string.status_disconnected, StatusColor.Neutral)
         }
     }
     if (hasStatus && statusCode != null) {
         if (statusCode == 2 || statusCode == 6) {
-            return NetworkCardStatus("待授权", StatusColor.Warn)
+            return NetworkCardStatus(R.string.status_pendingAuth, StatusColor.Warn)
         }
         return NetworkCardStatus(
-            label = ztStatusText(statusCode),
+            label = ztStatusLabel(statusCode),
             color = if (statusCode == 1) StatusColor.Good else StatusColor.Warn,
         )
     }
-    return NetworkCardStatus("等待节点响应", StatusColor.Neutral)
+    return NetworkCardStatus(R.string.status_waitingNode, StatusColor.Neutral)
 }
 
-/** 冲突原因码 → 文案（NetworkEntry.lastConflict 约定 "address"/"subnet"）。 */
-private fun conflictLabel(code: String): String = when (code) {
-    "subnet" -> "网段冲突"
-    else -> "地址冲突"
+/**
+ * 冲突原因码 → 文案资源（NetworkEntry.lastConflict 约定 "address"/"subnet"）。
+ * 「地址冲突/网段冲突」单发与「%@,断开」拼串两场景共用同一资源。
+ */
+private fun conflictLabelRes(code: String): Int = when (code) {
+    "subnet" -> R.string.card_conflict_subnet
+    else -> R.string.card_conflict_address
 }

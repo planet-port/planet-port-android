@@ -19,6 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 
@@ -159,9 +161,9 @@ fun DnsConfigSection(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         val modes = listOf(
-            DnsMode.none to "不使用",
-            DnsMode.network to "使用网络 DNS",
-            DnsMode.custom to "自定义",
+            DnsMode.none to stringResource(R.string.dns_mode_none),
+            DnsMode.network to stringResource(R.string.dns_mode_network),
+            DnsMode.custom to stringResource(R.string.dns_mode_custom),
         )
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             modes.forEachIndexed { index, (segmentMode, label) ->
@@ -176,24 +178,24 @@ fun DnsConfigSection(
 
         if (mode == DnsMode.custom) {
             DnsField(
-                value = slots.v4a, label = "IPv4 DNS 1", ipv4 = true, enabled = enabled,
+                value = slots.v4a, label = stringResource(R.string.dns_v4a), ipv4 = true, enabled = enabled,
                 onValueChange = { emit(mode, slots.copy(v4a = it)) },
             )
             DnsField(
-                value = slots.v4b, label = "IPv4 DNS 2（可选）", ipv4 = true, enabled = enabled,
+                value = slots.v4b, label = stringResource(R.string.dns_v4b), ipv4 = true, enabled = enabled,
                 onValueChange = { emit(mode, slots.copy(v4b = it)) },
             )
             DnsField(
-                value = slots.v6a, label = "IPv6 DNS 1", ipv4 = false, enabled = enabled,
+                value = slots.v6a, label = stringResource(R.string.dns_v6a), ipv4 = false, enabled = enabled,
                 onValueChange = { emit(mode, slots.copy(v6a = it)) },
             )
             DnsField(
-                value = slots.v6b, label = "IPv6 DNS 2（可选）", ipv4 = false, enabled = enabled,
+                value = slots.v6b, label = stringResource(R.string.dns_v6b), ipv4 = false, enabled = enabled,
                 onValueChange = { emit(mode, slots.copy(v6b = it)) },
             )
             if (!isDnsConfigValid(mode, slots.toServers())) {
                 Text(
-                    "DNS 地址格式不正确",
+                    stringResource(R.string.dns_invalid),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -203,7 +205,7 @@ fun DnsConfigSection(
         if (showNetworkDns != null) {
             if (showNetworkDns.isEmpty()) {
                 Text(
-                    "等待网络下发…",
+                    stringResource(R.string.network_dnsPending),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

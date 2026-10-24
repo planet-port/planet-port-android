@@ -7,17 +7,21 @@ import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import cn.imgozi.planetport.store.StoreRepo
+import cn.imgozi.planetport.ui.prefs.languageCodeFor
+import cn.imgozi.planetport.ui.prefs.localeListFor
 import cn.imgozi.planetport.ui.theme.PlanetTheme
 import cn.imgozi.planetport.ui.theme.ThemeManager
 
-class MainActivity : ComponentActivity() {
+// AppCompatActivity：承载 per-app locale（AppCompatDelegate.setApplicationLocales，
+// autoStoreLocales 持久化）；Compose UI 不受其 AppCompat 主题影响
+class MainActivity : AppCompatActivity() {
     private lateinit var vpnPermissionLauncher: ActivityResultLauncher<Intent>
     private lateinit var notificationPermissionLauncher: ActivityResultLauncher<String>
     private var vpnGrantedCallback: (() -> Unit)? = null
@@ -44,6 +48,21 @@ class MainActivity : ComponentActivity() {
         runCatching {
             val prefs = kotlinx.coroutines.runBlocking { StoreRepo.store.readPrefs() }
             ThemeManager.applyPrefs(prefs.themeColor, prefs.themeColorCustom, prefs.successDerived)
+            // 语言同步（T7）：appcompat 存储为空且用户曾用旧版选过语言 → 一次性迁移；
+            // 反之系统「应用语言」（Android 13 Settings）写入 appcompat 存储 → 回写
+            // AppPrefs 保持展示态一致。两方向均幂等，正常启动零写入。
+            val applied = androidx.appcompat.app.AppCompatDelegate.getApplicationLocales()
+            val stored = prefs.language
+            when {
+                applied.isEmpty && stored != null ->
+                    androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(localeListFor(stored))
+                !applied.isEmpty && languageCodeFor(applied.toLanguageTags()) != stored ->
+                    kotlinx.coroutines.runBlocking {
+                        StoreRepo.store.writePrefs {
+                            it.copy(language = languageCodeFor(applied.toLanguageTags()))
+                        }
+                    }
+            }
         }
 
         vpnPermissionLauncher = registerForActivityResult(

@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.tunnel.TunnelStateBus
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 
@@ -54,10 +56,13 @@ fun ApplyTraceView(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("数据面诊断") },
+                title = { Text(stringResource(R.string.trace_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 actions = {
@@ -66,7 +71,10 @@ fun ApplyTraceView(onBack: () -> Unit) {
                             clipboard.setText(AnnotatedString("$trace\n\n$eventLog"))
                         },
                     ) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = "复制诊断信息")
+                        Icon(
+                            Icons.Filled.ContentCopy,
+                            contentDescription = stringResource(R.string.trace_copy),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -83,8 +91,8 @@ fun ApplyTraceView(onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            TraceSection(title = "最近一次聚合决策", content = trace)
-            TraceSection(title = "事件日志（最近 40 条）", content = eventLog)
+            TraceSection(title = stringResource(R.string.trace_last), content = trace)
+            TraceSection(title = stringResource(R.string.trace_events), content = eventLog)
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -92,6 +100,7 @@ fun ApplyTraceView(onBack: () -> Unit) {
 
 @Composable
 private fun TraceSection(title: String, content: String) {
+    val emptyLabel = stringResource(R.string.trace_empty)
     Column(Modifier.fillMaxWidth()) {
         Text(
             title,
@@ -101,7 +110,7 @@ private fun TraceSection(title: String, content: String) {
         Spacer(Modifier.height(6.dp))
         SelectionContainer {
             Text(
-                content.ifEmpty { "暂无" },
+                content.ifEmpty { emptyLabel },
                 style = PlanetFonts.MonoCaption,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),

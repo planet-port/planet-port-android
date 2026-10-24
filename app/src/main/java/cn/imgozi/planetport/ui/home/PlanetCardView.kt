@@ -40,10 +40,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
@@ -207,7 +209,7 @@ private fun StatusBadge(inUse: Boolean, modifier: Modifier = Modifier) {
             .padding(horizontal = 7.dp, vertical = 3.dp),
     ) {
         Text(
-            if (inUse) "使用中" else "上次使用",
+            stringResource(if (inUse) R.string.planetcard_inUse else R.string.planetcard_lastUsed),
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
             color = if (inUse) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -253,7 +255,9 @@ private fun IdLine(nodeId: String, moonCount: Int, isPreview: Boolean, tertiary:
         Spacer(Modifier.size(4.dp))
         Icon(
             imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-            contentDescription = if (copied) "已复制" else "复制节点 ID",
+            contentDescription = stringResource(
+                if (copied) R.string.card_copied else R.string.card_copyNodeId,
+            ),
             tint = if (copied) success else tertiary,
             modifier = Modifier.size(11.dp),
         )
@@ -262,7 +266,7 @@ private fun IdLine(nodeId: String, moonCount: Int, isPreview: Boolean, tertiary:
             Text("·", style = MaterialTheme.typography.bodyMedium, color = tertiary)
             Spacer(Modifier.size(4.dp))
             Text(
-                "卫星 x $moonCount",
+                stringResource(R.string.planetcard_moonCount, moonCount),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
