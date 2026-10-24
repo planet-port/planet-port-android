@@ -125,7 +125,11 @@ class PlanetSettingsViewModel(
             if (planet.id == _ui.value.activePlanetId) {
                 TunnelController.stop(getApplication())
             }
-            StoreRepo.store.deletePlanet(planet)
+            // 删除失败只记日志不崩进程（对齐 HomeViewModel storeWrite 兜底范式，
+            // deletePlanet 经 JsonFileStore 走同一写路径）：行星留档，列表下次
+            // 重读自然还原；退栈照旧，不因低概率磁盘故障阻断导航
+            runCatching { StoreRepo.store.deletePlanet(planet) }
+                .onFailure { Log.w(TAG, "deletePlanet 写盘失败", it) }
             onDeleted()
         }
     }
