@@ -418,10 +418,15 @@ private fun HeaderZone(
         Modifier
             .fillMaxWidth()
             .drawBehind {
-                // 底部渐隐至透明，覆盖状态栏（iOS ultraThinMaterial+渐隐 mask 降级）
+                // 三段渐隐对齐 iOS mask stops（白 0→0.85、clear 1.0）：85% 高度内
+                // 保持不透明，圆点指示器下方才渐隐，内容滚过时不穿字
                 drawRect(
                     brush = Brush.verticalGradient(
-                        colors = listOf(bg.copy(alpha = 0.85f), bg.copy(alpha = 0f)),
+                        colorStops = arrayOf(
+                            0f to bg.copy(alpha = 0.85f),
+                            0.85f to bg.copy(alpha = 0.85f),
+                            1f to bg.copy(alpha = 0f),
+                        ),
                     ),
                 )
             }
