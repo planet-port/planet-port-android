@@ -23,10 +23,12 @@ object TunnelController {
     private val restartScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /**
-     * 切网重连进行中标记：重连窗口（STOP 下发 → 停机终态 → START 下发）内后续路径
-     * 变化一律合并。合并的原因：窗口内再下一次 STOP 会排在迟到 START 之前/之后不
-     * 确定，最坏产生一次多余的停启循环；且触发期间核心本来就要整体重启重探测，
-     * 合并不损失语义。
+     * 停启编排进行中标记：切网重连与偏好热重启共用（QF-3，.superpowers/sdd/
+     * p5-task-1-review.md——两路都是 stop → awaitSettled → start，交错最坏多一轮
+     * 停启循环，用同一标记互斥合并）。窗口（STOP 下发 → 停机终态 → START 下发）
+     * 内的新触发一律记日志忽略：合并期间核心/配置本来就要经停启重新生效，不损失
+     * 语义；全部调用方收敛主线程（NetWatch 防抖 / ViewModel 主线程），check-then-set
+     * 无实际竞态，@Volatile 属保险。
      */
     @Volatile
     private var reconnectInFlight = false
@@ -96,14 +98,21 @@ object TunnelController {
      * Android UDP 虽是通配 bind 天然容忍，但核心重建才能重探测直连路径，与 iOS 同理。
      *
      * 时序：置 Reconnecting（通知/状态行可见）→ STOP → 等停机终态 → START。
-     * 未跑 no-op；重连窗口内的重复触发合并（见 [reconnectInFlight]）；等待超时只
+     * 未跑 no-op；编排窗口内的重复触发合并（见 [reconnectInFlight]）；等待超时只
      * 记日志放弃迟到启动，不留半启动状态（停机侧 join/JNI 收口有界，超时即进程级
      * 异常，交由用户手动重连）。
+     *
+     * QF-2（.superpowers/sdd/p5-task-1-review.md）平台差异记录：随后的 stopTunnel
+     * 会置 Stopped 并经 startForeground("已停止") + stopForeground(true) 移除通知，
+     * 故「重连中」文案实际仅存活亚秒级、且通知短暂消失——iOS restartCore 期间持续
+     * 显示 reconnecting（swift:204-211）。Android FGS 的 5s 前台义务使停机链的
+     * stopForeground 不可避免，属平台差异；Starting→Running 通知链完整，若 T3 要
+     * 抹平可在 UI 状态行把 Stopped→Starting 区间显示为重连中，T7 真机观察实际观感。
      */
     fun reconnectForNetworkChange(context: Context) {
         if (!isRunning) return
         if (reconnectInFlight) {
-            TunnelStateBus.log("网络切换合并：重连进行中，忽略重复触发")
+            TunnelStateBus.log("停启编排进行中，合并本次网络切换触发")
             return
         }
         reconnectInFlight = true
@@ -130,17 +139,29 @@ object TunnelController {
      * 停止的窗口从固定 1s 压缩到实际停机耗时（窗口内用户主动停止的完全裁决归 T3
      * 调用面收口）。
      *
+     * 与 [reconnectForNetworkChange] 共用 [reconnectInFlight] 互斥（QF-3）：任一
+     * 停启编排进行中时另一路触发合并跳过，避免两路 stop/start 交错最坏多一轮循环。
+     *
      * disableIpv6 已纳入 TunnelManager 的 appliedEntries 比较（configChanges 驱动
      * 的 applyConfig 可感知并热重套），但 writePrefs 静默不发变更信号——UI 写完
      * 偏好仍须经本方法显式触达隧道。
      */
     fun restartIfRunning(context: Context) {
         if (!isRunning) return
+        if (reconnectInFlight) {
+            TunnelStateBus.log("停启编排进行中，合并本次热重启触发")
+            return
+        }
+        reconnectInFlight = true
         val app = context.applicationContext
         ZeroTierVpnService.stop(app)
         restartScope.launch {
-            if (awaitSettled()) ZeroTierVpnService.start(app)
-            else TunnelStateBus.log("重启等待停机终态超时，放弃迟到启动")
+            try {
+                if (awaitSettled()) ZeroTierVpnService.start(app)
+                else TunnelStateBus.log("重启等待停机终态超时，放弃迟到启动")
+            } finally {
+                reconnectInFlight = false
+            }
         }
     }
 }
