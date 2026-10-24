@@ -252,6 +252,14 @@ internal class TunnelManager(
             // 命中会被幂等闸门挡住不重建
             dataplane.teardownTun()
             appliedSignature = null
+            // 拆 TUN 不动宏观状态：服务仍活（核心/UDP/保活在跑），仅数据面暂无网络；
+            // 若从 Running 掉到 Stopped/Failed，UI 会误判隧道已停而重复启动。仅把
+            // 常驻通知标注无网络（幂等 notify，CONFIG_UPDATE 重推重复触发无害）。
+            // 与 iOS 的已知差异：iOS 同场景「未套设置」留存旧配置且 vpnRunning=false，
+            // Android 保留服务存活语义、数据面按拆 TUN 处理
+            if (TunnelStateBus.tunnelState.value is TunnelState.Running) {
+                VpnNotification.update(vpnService, "运行中（无网络）")
+            }
             TunnelStateBus.setApplyTrace(
                 "items=${items.size} valid=0（无可用网络，已拆 TUN）\n" + converter.debugSummary()
             )
