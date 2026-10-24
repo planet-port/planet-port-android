@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 26 以下兜底 launcher 图标（自适应图标仅 v26+；minSdk 23）：
+     红底白色行星圆环 + 斜环带，与前景同一造型 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#FFD44037"
+        android:pathData="M0,0h48v48h-48z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M24,8a16,16 0 1,0 0.001,0z M24,12a12,12 0 1,1 -0.001,0z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6.4,27.2 l34.4,-14.8 1,2.2 -34.4,14.8z" />
+</vector>

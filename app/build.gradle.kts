@@ -46,6 +46,8 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
+    // 版本随 compose BOM（扩展图标库：ContentCopy/WifiOff 等 core 集不含的符号）
+    implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.viewmodel.compose)
