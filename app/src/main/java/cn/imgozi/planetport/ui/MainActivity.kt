@@ -9,12 +9,12 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import cn.imgozi.planetport.store.StoreRepo
+import cn.imgozi.planetport.ui.theme.PlanetTheme
 
 class MainActivity : ComponentActivity() {
     private lateinit var vpnPermissionLauncher: ActivityResultLauncher<Intent>
@@ -23,8 +23,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 全屏绘制（内容延伸到状态栏/导航栏下，自绘头区半透明覆盖，对齐 iOS 视觉）
+        enableEdgeToEdge()
 
-        // JNI 加载兜底（P1 保留）：加载失败仅记日志，不阻塞页面
+        // JNI 加载兜底（P1 保留）：全进程唯一 loadLibrary 点（服务同进程复用），
+        // 加载失败仅记日志，不阻塞页面
         try {
             System.loadLibrary("ZeroTierOneJNI")
         } catch (e: UnsatisfiedLinkError) {
@@ -55,10 +58,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
-                Surface {
-                    P2SelfCheckScreen(this)
-                }
+            PlanetTheme {
+                AppRoot(activity = this)
             }
         }
     }
