@@ -9,13 +9,21 @@ import java.net.URL
 /** 多 Planet 文件导入。每份私有 Planet 独立保存，不覆盖其它配置。 */
 class PlanetImporter(private val store: AppConfigStore) {
 
+    /**
+     * 导入失败异常。本类无 Context 无法本地化，message 为稳定英文标识串，
+     * 用户可见文案由消费侧（HomeViewModel/PlanetSettingsViewModel）按子类类型
+     * 映射字符串资源，标识串仅作兜底，正常不会直显用户。
+     */
     sealed class ImportError(message: String, cause: Throwable? = null) : Exception(message, cause) {
-        class BadHeader : ImportError("planet 文件头无效（首字节应为 0x01）")
-        class EmptyName : ImportError("名称不能为空")
-        class DownloadFailed(cause: Throwable? = null) : ImportError("planet 下载失败", cause)
+        class BadHeader : ImportError("planet_bad_header")
+        class EmptyName : ImportError("planet_empty_name")
+        class DownloadFailed(cause: Throwable? = null) : ImportError("planet_download_failed", cause)
 
         /** 下载体超过大小上限（Content-Length 超限或流读越界），供 UI 单独提示 */
-        class TooLarge : ImportError("planet 文件超过大小上限（8 MiB）")
+        class TooLarge : ImportError("planet_too_large")
+
+        /** 落盘失败（临时文件 rename 失败），文案由消费侧映射。 */
+        class WriteFailed(cause: Throwable? = null) : ImportError("planet_write_failed", cause)
     }
 
     /** 校验并落盘一份 planet 文件，注册为新的自定义 Planet。 */
@@ -33,7 +41,7 @@ class PlanetImporter(private val store: AppConfigStore) {
             tmp.writeBytes(data)
             if (!tmp.renameTo(target)) {
                 tmp.delete()
-                throw IllegalStateException("planet 文件写入失败: $fileName")
+                throw ImportError.WriteFailed()
             }
         }
 

@@ -7,15 +7,24 @@ import java.io.File
 /** Moon 文件导入。校验 .moon 数据并落盘到当前选中 Planet 独立的 moons.d/ 目录。 */
 class MoonImporter(private val store: AppConfigStore) {
 
+    /**
+     * 导入失败异常。本类无 Context 无法本地化，message 为稳定英文标识串，
+     * 用户可见文案由消费侧（MoonViewModel）按子类类型映射字符串资源，
+     * 标识串仅作兜底，正常不会直显用户。
+     */
     sealed class ImportError(message: String, cause: Throwable? = null) : Exception(message, cause) {
         class BadHeader : ImportError(BAD_HEADER_MESSAGE)
         class ReadFailed(cause: Throwable? = null) : ImportError(READ_FAILED_MESSAGE, cause)
         class TooLarge : ImportError(TOO_LARGE_MESSAGE)
 
+        /** 落盘失败（临时文件 rename 失败），文案由消费侧映射。 */
+        class WriteFailed(cause: Throwable? = null) : ImportError(WRITE_FAILED_MESSAGE, cause)
+
         companion object {
-            const val BAD_HEADER_MESSAGE = "moon 文件头无效（首字节应为 0x7f）"
-            const val READ_FAILED_MESSAGE = "moon 数据读取失败"
-            const val TOO_LARGE_MESSAGE = "文件超过大小上限"
+            const val BAD_HEADER_MESSAGE = "moon_bad_header"
+            const val READ_FAILED_MESSAGE = "moon_read_failed"
+            const val TOO_LARGE_MESSAGE = "moon_too_large"
+            const val WRITE_FAILED_MESSAGE = "moon_write_failed"
         }
     }
 
@@ -38,7 +47,7 @@ class MoonImporter(private val store: AppConfigStore) {
             tmp.writeBytes(data)
             if (!tmp.renameTo(target)) {
                 tmp.delete()
-                throw IllegalStateException("moon 文件写入失败: ${target.name}")
+                throw ImportError.WriteFailed()
             }
         }
         return MoonEntry(worldId = worldId, seed = 0u, fromFile = true, planetId = planetId)

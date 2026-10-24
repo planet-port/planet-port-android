@@ -251,4 +251,8 @@
     <string name="tunnel_error_udpBindFailed">UDP 9994 連接埠綁定失敗</string>
     <string name="tunnel_error_tunAssemble">TUN 組裝失敗</string>
     <string name="tunnel_error_tunEstablish">TUN 建立失敗</string>
+    <string name="error_moon_tooLarge">檔案超過大小上限</string>
+    <string name="error_moon_writeFailed">moon 檔案寫入失敗</string>
+    <string name="error_planet_tooLarge">planet 檔案超過大小上限（8 MiB）</string>
+    <string name="error_planet_writeFailed">planet 檔案寫入失敗</string>
 </resources>

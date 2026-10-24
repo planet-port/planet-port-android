@@ -99,12 +99,14 @@ class MoonViewModel(application: Application, private val planetId: String) : An
         store.writeMoons(existing.filterNot { it.worldId == entry.worldId } + entry, planetId)
         AddMoonResult.Added
     }.getOrElse { e ->
-        // store 层异常消息为中文常量（TunnelStateBus 之外的技术性文案），这里按
+        // store 层 message 为稳定英文标识串（导入器无 Context 无法本地化），按
         // 异常类型映射资源；未识别类型回退通用文案
         val message = when (e as? MoonImporter.ImportError) {
             is MoonImporter.ImportError.BadHeader -> string(R.string.error_moon_badHeader)
             is MoonImporter.ImportError.ReadFailed -> string(R.string.error_moon_readFailed)
-            else -> (e as? MoonImporter.ImportError)?.message ?: string(R.string.moon_importFailed)
+            is MoonImporter.ImportError.TooLarge -> string(R.string.error_moon_tooLarge)
+            is MoonImporter.ImportError.WriteFailed -> string(R.string.error_moon_writeFailed)
+            null -> string(R.string.moon_importFailed)
         }
         AddMoonResult.Failed(message)
     }

@@ -370,7 +370,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     reload()
                     onDone(profile, null)
                 },
-                onFailure = { onDone(null, it.message ?: appContext.getString(R.string.addplanet_importFailed)) },
+                onFailure = { onDone(null, importErrorText(it)) },
             )
         }
     }
@@ -380,9 +380,28 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { StoreRepo.planetImporter.downloadPlanetFile(url) }.fold(
                 onSuccess = { onDone(it, null) },
-                onFailure = { onDone(null, it.message ?: appContext.getString(R.string.error_downloadFailed)) },
+                onFailure = { onDone(null, importErrorText(it)) },
             )
         }
+    }
+
+    /**
+     * 导入/下载链异常 → 用户文案：按 [PlanetImporter.ImportError] 子类映射资源。
+     * store 层 message 是稳定英文标识串（导入器无 Context 无法本地化），仅作
+     * 未识别异常的兜底展示，正常路径不会直接透出。
+     */
+    private fun importErrorText(e: Throwable): String = when (e as? PlanetImporter.ImportError) {
+        is PlanetImporter.ImportError.BadHeader ->
+            appContext.getString(R.string.error_planet_badHeader)
+        is PlanetImporter.ImportError.EmptyName ->
+            appContext.getString(R.string.error_planet_emptyName)
+        is PlanetImporter.ImportError.DownloadFailed ->
+            appContext.getString(R.string.error_downloadFailed)
+        is PlanetImporter.ImportError.TooLarge ->
+            appContext.getString(R.string.error_planet_tooLarge)
+        is PlanetImporter.ImportError.WriteFailed ->
+            appContext.getString(R.string.error_planet_writeFailed)
+        null -> e.message ?: appContext.getString(R.string.addplanet_importFailed)
     }
 
     // MARK: - 隧道运行期回写缓存

@@ -77,9 +77,16 @@ class PlanetSettingsViewModel(
     fun rename(name: String, onError: (String) -> Unit) {
         viewModelScope.launch {
             runCatching { StoreRepo.planetImporter.rename(requirePlanet(), name) }
-                .onFailure {
+                .onFailure { e ->
+                    // 导入器 message 为稳定英文标识串（无 Context 无法本地化），
+                    // 已知类型映射资源，其余兜底通用文案
                     onError(
-                        it.message ?: getApplication<Application>().getString(R.string.planet_renameFailed),
+                        if (e is PlanetImporter.ImportError.EmptyName) {
+                            getApplication<Application>().getString(R.string.error_planet_emptyName)
+                        } else {
+                            e.message
+                                ?: getApplication<Application>().getString(R.string.planet_renameFailed)
+                        },
                     )
                 }
         }
