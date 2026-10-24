@@ -17,8 +17,8 @@
 | P1 数据层 | 模型/JSON 存储/planet·moon 导入/自检页 | 导入 planet/moon、切换、持久化正确 | ✅ 闭合（2026-10-23） |
 | P2 隧道核心 | 单网络隧道全链路（服务壳/核心/UDP/数据面/聚合/验证页） | 加入 → 连通 → 退出 | ✅ 闭合（2026-10-24，判定线版） |
 | P3 多网络数据面 | ping 闭环 + 多网络隔离验证 + 数据面调优 | 双网络不串扰、切换不风暴、首访不丢包 | 🔶 代码面闭合（2026-10-24，终审通过）；T1 判层/T4 真机验证挂起（手机断网） |
-| P4 UI 全量 | 正式 UI，替换验证脚手架 | 与 iOS 端视觉对照一致 | 🔶 进行中（2026-10-24 启动） |
-| P5 收尾 | 稳定性生命周期功能 | 锁屏/切网重连、开机自启、DNS 三模式热重配 | ⬜ 未开始 |
+| P4 UI 全量 | 正式 UI 全页面 | 三波 14 任务+终审 Ready to merge | ✅ 完成 |
+| P5 收尾 | 稳定性生命周期功能 | 锁屏/切网重连、开机自启、DNS 三模式热重配 | ⬜ 未开始（P4 归档批次并入） |
 
 关键路径 P2→P3；P4 自 P1 起可并行（当前按串行推进）。
 
@@ -64,11 +64,13 @@
 
 **不做**：正式 UI（P4）；planet 切换重启联动（P5）。
 
-## P4 UI 全量 ⬜
+## P4 UI 全量 ✅
 
 **目标**：正式 UI 替换验证脚手架，与 iOS 端视觉对照一致。
 
 **输入（P1/P2 移交项）**：Builder 组装 try-catch（customDns 用户输入面）；appliedEntries 纳入 disableIpv6 比较；leave 显式拆 TUN（P3 若未做）；store 收敛进程单例（companion 流与实例锁不跨实例互斥）；startForegroundService 接线（后台启动限制）；planet 下载 Content-Length 上限+有界读取；MoonView 按 worldId 查重；验证脚手架页面退役。
+
+**实况（2026-10-24 闭合）**：三波 14 任务全闭环（波 1 基建 T1/T2 → 波 2 T3主页/T4详情设置/T5Moon+Peers/T6隧道顺手 → 波 3 T7视觉精修扫码三语/T6b冲突链路/T7b本地化收尾），每任务 worktree 并行实施+任务级双裁定审查+Important 修复复核；终审（opus 全分支 48 commits）**Ready to merge**。P1/P2 移交项全数落地；T3 审查追补 T6b 冲突链路（iOS Extension 推流+App 侧收敛全链）；三语本地化 249 key ×3（iOS xcstrings 全量移植+Android 独有）；协议合规终核通过（依赖全 Apache-2.0/MPL-2.0，GPL 血统零命中）。终审归档 P5 批次：B-3 NodeRuntime 驱动循环留 Running、背景图技术串两处、store 写路径 UI 兜底、死代码/死 key 清理、HomeMetrics 遮蔽、ZeroTier MPL-2.0 归属声明。
 
 **前置（用户侧）**：提供长期私有网络回归基线。
 
@@ -90,10 +92,10 @@
 | 被踢单网不拆 TUN 黑洞 | P2 | P3 | 闭合（8af95ba/580ad3e） |
 | split-tunnel 默认路由策略 | P2 | P3 | 已决策：与 iOS 同构语义（单网 routeVia 才接管，物理网段挖洞），非缺陷 |
 | 停机窄窗五项 | P2 | P3 顺手 | 闭合 |
-| Builder try-catch / appliedEntries+disableIpv6 / leave 拆 TUN / store 单例 / startForegroundService | P2 | P4 | leave 拆 TUN 已在 P3 闭合，余项待接 |
-| P4 顺手四项（DAD 形态/NonCancellable establish/拆 TUN 状态保真/NdpTable 注释） | P3 终审 | P4 | 待接 |
+| Builder try-catch / appliedEntries+disableIpv6 / leave 拆 TUN / store 单例 / startForegroundService | P2 | P4 | 闭合（leave 拆 TUN=P3，余项=T6 86e9e84） |
+| P4 顺手四项（DAD 形态/NonCancellable establish/拆 TUN 状态保真/NdpTable 注释） | P3 终审 | P4 | 闭合（T6 全落地） |
 | onRevoke 平台交互证据 | P3 终审 | T4 | 待验（release 前置闸门） |
-| planet 下载上限 / moon worldId 查重 | P1 终审 | P4 | 待接 |
+| planet 下载上限 / moon worldId 查重 | P1 终审 | P4 | 闭合（T5/T6 8MiB cap；moon 同 worldId 替换语义） |
 | 停止按钮人工确认 / 长期回归网络 | P2 | 用户侧 | 待确认 |
 | iOS NDP 构造错位（跨平台 v6 互通） | P2 | P5 备忘 | 待接 |
 
