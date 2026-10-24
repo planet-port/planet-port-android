@@ -71,7 +71,8 @@ import cn.imgozi.planetport.ui.theme.ThemeManager
  * 全局设置页（iOS PrefsView.swift 可适用项移植）：
  * 网络（禁用 IPv6 热重启 / 同时连接上限）、语言（本任务只建 UI + 持久化，切换接线归 T7）、
  * 外观（背景图入口壳——选取器归 T7；视差无图禁用）、主题色（8 预设色板 + 自定义拾色 +
- * 派生开关，双写 ThemeManager 与 AppPrefs）、关于（Core 版本 / App 版本）。
+ * 派生开关，双写 ThemeManager 与 AppPrefs）、关于（Core 版本 / App 版本 +
+ * MPL-2.0 归属声明 footer）。
  * iOS 的「允许移动数据」「按需连接」无 Android 等价，不移植；捐赠 Section 以 if(false) 隐藏对齐。
  *
  * @param onBack 页面退栈回调
@@ -222,7 +223,12 @@ fun PrefsView(onBack: () -> Unit) {
                 )
             }
 
-            FormSection(header = stringResource(R.string.prefs_about_sectionHeader)) {
+            // MPL-2.0 归属声明（P4 终审归档项）：静态 footer 行，样式对齐页内既有
+            // section footer；MPL 2.0 要求的源码可得性由 externals/ 源码随仓满足
+            FormSection(
+                header = stringResource(R.string.prefs_about_sectionHeader),
+                footer = stringResource(R.string.about_opensource),
+            ) {
                 SelectionContainer {
                     FormRow(
                         title = "ZeroTier Core",

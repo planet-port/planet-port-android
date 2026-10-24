@@ -5,6 +5,8 @@
     默认语言（values/）= 简体中文，对齐 iOS sourceLanguage；繁中/英文分目录覆盖。
 -->
 <resources>
+    <!-- Android 侧独有：MPL-2.0 归属声明（核心源码随 externals/ 分发，声明为补充） -->
+    <string name="about_opensource">本应用内含 ZeroTier 核心（MPL-2.0，源码随应用分发：github.com/zerotier/ZeroTierOne）</string>
     <string name="addplanet_action">添加行星服务器</string>
     <string name="addplanet_chooseFile">选择行星文件</string>
     <string name="addplanet_duplicate">已存在相同的 Planet（World ID %1$s），不能重复添加。</string>
