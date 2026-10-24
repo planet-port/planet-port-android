@@ -330,13 +330,16 @@ private fun PlanetPage(
             it.lastActivated && it.lastConflict == null &&
                 state.networkConflicts[it.networkId] == null
         }
+        // header 与 connected 分开取串（stringResource 是组合期调用，不能进 buildString）；
+        // 中缀「 · 」与 iOS 硬拼一致
+        val headerText = stringResource(R.string.home_network_header, networks.size)
+        val connectedText = if (isActivePage && running && connectedCount > 1) {
+            stringResource(R.string.home_network_connected, connectedCount)
+        } else {
+            null
+        }
         Text(
-            text = buildString {
-                append("网络 · ${networks.size}")
-                if (isActivePage && running && connectedCount > 1) {
-                    append(" · 已连接 $connectedCount")
-                }
-            },
+            text = if (connectedText != null) "$headerText · $connectedText" else headerText,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 12.dp),
