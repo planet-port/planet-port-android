@@ -11,7 +11,6 @@ import cn.imgozi.planetport.ui.theme.ThemeManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -56,7 +55,15 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         writeWithTheme(persist = { it.copy(themeColor = hex, themeColorCustom = null) })
     }
 
-    /** 拾色器自定义主色（ARGB）；themeColor 保留为最后一次预设，custom 优先。 */
+    /**
+     * 拾色器拖动中的实时预览：只改 ThemeManager 内存态，不落盘——
+     * 滑杆逐帧回调，写盘由 [setThemeCustom] 在拖动结束时一次性完成。
+     */
+    fun previewThemeCustom(argb: Long) {
+        ThemeManager.applyPrefs(null, argb and 0xFFFFFFFFL, _prefs.value.successDerived)
+    }
+
+    /** 拾色器自定义主色（ARGB）落盘 + 内存态；themeColor 保留为最后一次预设，custom 优先。 */
     fun setThemeCustom(argb: Long) {
         writeWithTheme(persist = { it.copy(themeColorCustom = argb and 0xFFFFFFFFL) })
     }
@@ -96,7 +103,9 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
     private fun write(mutate: (AppPrefs) -> AppPrefs) {
         viewModelScope.launch {
             StoreRepo.store.writePrefs(mutate)
-            _prefs.update { StoreRepo.store.readPrefs() }
+            // 直接赋值而非 StateFlow.update{}：readPrefs 是挂起函数，
+            // 不放进 update 的 CAS 重试循环里反复求值
+            _prefs.value = StoreRepo.store.readPrefs()
         }
     }
 }

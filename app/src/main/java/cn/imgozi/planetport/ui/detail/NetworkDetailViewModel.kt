@@ -41,6 +41,8 @@ data class NetworkSnapshot(
 data class NetworkDetailUiState(
     /** 持久化条目（null = 加载中或已被删除） */
     val entry: NetworkEntry? = null,
+    /** 首次 store 读取已完成（entry 仍为 null 时视图渲染「不存在」而非转圈） */
+    val loaded: Boolean = false,
     val snapshot: NetworkSnapshot? = null,
     val selectedPlanetId: String = PlanetProfile.OFFICIAL_ID,
     val activePlanetId: String? = null,
@@ -90,11 +92,15 @@ class NetworkDetailViewModel(
             others = list.any { it.networkId != nwid && it.lastActivated }
             break
         }
+        // 挂起读先算完再赋值：不把挂起调用放进 StateFlow.update 的 CAS 重试循环
+        val selected = store.selectedPlanetId()
+        val active = store.activePlanetId()
         _ui.update {
             it.copy(
                 entry = hitEntry,
-                selectedPlanetId = store.selectedPlanetId(),
-                activePlanetId = store.activePlanetId(),
+                loaded = true,
+                selectedPlanetId = selected,
+                activePlanetId = active,
                 otherActivatedExists = others,
             )
         }

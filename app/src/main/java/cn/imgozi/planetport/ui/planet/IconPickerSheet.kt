@@ -11,9 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -71,45 +68,53 @@ fun IconPickerSheet(
             val dark = androidx.compose.foundation.isSystemInDarkTheme()
             val tint = remember(accentHex, dark) { ThemeManager.accentFor(dark) }
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(4),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+            // 12 个固定项直接用行/列布局：不用 Lazy 网格（弹层内嵌套滚动且会撑满高度）
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(PlanetIconCatalog) { symbol ->
-                    Column(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .clickable {
-                                onSelect(symbol)
-                                onDismiss()
-                            }
-                            .padding(vertical = 10.dp)
-                            .fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                PlanetIconCatalog.chunked(4).forEach { rowSymbols ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = planetIconVector(symbol),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(26.dp),
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        if (symbol == current) {
-                            Icon(
-                                Icons.Filled.CheckCircle,
-                                contentDescription = "当前图标",
-                                tint = tint,
-                                modifier = Modifier.size(14.dp),
-                            )
-                        } else {
-                            Spacer(Modifier.height(15.dp))
+                        rowSymbols.forEach { symbol ->
+                            Box(Modifier.weight(1f)) {
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                                        .clickable {
+                                            onSelect(symbol)
+                                            onDismiss()
+                                        }
+                                        .padding(vertical = 10.dp)
+                                        .fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = planetIconVector(symbol),
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(26.dp),
+                                        )
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                    if (symbol == current) {
+                                        Icon(
+                                            Icons.Filled.CheckCircle,
+                                            contentDescription = "当前图标",
+                                            tint = tint,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                    } else {
+                                        Spacer(Modifier.height(15.dp))
+                                    }
+                                }
+                            }
                         }
                     }
                 }

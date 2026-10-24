@@ -60,10 +60,12 @@ class PlanetSettingsViewModel(
                 "%016x".format(PlanetImporter.ZT_WORLD_ID_EARTH.toLong())
             else -> info?.worldId?.let { "%016x".format(it.toLong()) } ?: "—"
         }
+        // 挂起读先算完再赋值：不把挂起调用放进 StateFlow.update 的 CAS 重试循环
+        val active = store.activePlanetId()
         _ui.update {
             it.copy(
                 planet = planet,
-                activePlanetId = store.activePlanetId(),
+                activePlanetId = active,
                 worldId = worldId,
                 fileInfo = info,
             )

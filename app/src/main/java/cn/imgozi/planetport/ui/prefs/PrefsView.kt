@@ -191,7 +191,7 @@ fun PrefsView(onBack: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 ThemeColorPickerRow(
                     initial = prefs.themeColorCustom ?: prefs.themeColor ?: ThemeManager.presets.first(),
-                    onPreview = vm::setThemeCustom,
+                    onPreview = vm::previewThemeCustom,
                     onCommit = vm::setThemeCustom,
                 )
                 FormToggleRow(

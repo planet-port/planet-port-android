@@ -88,9 +88,18 @@ fun NetworkDetailView(
         },
     ) { padding ->
         if (entry == null) {
-            // 加载中 / 条目已被删除（他端删除时 configChanges 会把 entry 置空）
+            // 加载中 / 条目不存在（已被删除）：iOS 端 entry 由上一页传入不存在此态，
+            // Android 页面只持 nwid，首读完成仍无条目时给出明确文案
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                if (ui.loaded) {
+                    Text(
+                        "网络不存在或已被删除",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    CircularProgressIndicator()
+                }
             }
             return@Scaffold
         }
