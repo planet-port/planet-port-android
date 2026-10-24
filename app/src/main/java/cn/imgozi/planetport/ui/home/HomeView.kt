@@ -315,8 +315,10 @@ private fun PlanetPage(
                 planet = planet,
                 nodeId = state.planetNodeIds[planet.id] ?: "-",
                 moonCount = state.moonCounts[planet.id] ?: 0,
-                showBadge = state.hasActivatedPlanet || planet.id == activeId,
-                badgeInUse = planet.id == activeId && running,
+                // iOS :42「isActive && hasActivatedPlanet」：角标只挂隧道绑定行星，
+                // 其余行星（含刚添加未激活的）无角标
+                showBadge = planet.id == activeId && state.hasActivatedPlanet,
+                badgeInUse = running,
                 interactionSource = cardSource,
             )
         }
