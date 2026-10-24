@@ -51,6 +51,9 @@ internal class NetworkContext(
     // 诊断计数（FrameConverter 锁内递增，仅诊断展示）
     var statFwdV4 = 0; var statArpReq = 0; var statArpReply = 0
     var statInV4 = 0; var statKeepalive = 0
+    // NAT44（iOS 同名诊断）：出站源不符却非本机地址（不改写仅计数）/改写与入站回写量
+    var statSrcMismatch = 0; var lastSrcMismatch: UInt? = null
+    var statNatOut = 0; var statNatIn = 0
 
     init { update(mac, ipv4Strings, ipv6Strings, routes) }
 

@@ -17,6 +17,8 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
     private var aggregateV4: List<AggregateV4Entry> = emptyList()
     private var aggregateV6: List<AggregateV6Entry> = emptyList()
     private var statNoRoute = 0
+    /** 多网络源地址 NAT（仅本类锁内使用，对齐 iOS FrameConverter） */
+    private val nat = NAT44()
 
     companion object {
         /** 每下一跳待决包上限（超出丢包，防移动端内存失控） */
@@ -79,14 +81,17 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
     /** 诊断快照（验证页/排查用） */
     fun debugSummary(): String = synchronized(lock) {
         val lines = mutableListOf(
-            "contexts=${contexts.size} aggV4=${aggregateV4.size} aggV6=${aggregateV6.size} 无路由丢弃=$statNoRoute"
+            "contexts=${contexts.size} aggV4=${aggregateV4.size} aggV6=${aggregateV6.size} " +
+                "无路由丢弃=$statNoRoute NAT流表=${nat.count}"
         )
         for (nwid in order) {
             val c = contexts[nwid] ?: continue
             lines.add(
                 ("ctx %016x mac=%012x v4=[%s] routes=${c.routesV4.size}/${c.routesV6.size} " +
                     "出站=${c.statFwdV4} 入站=${c.statInV4} ARP问=${c.statArpReq} ARP答=${c.statArpReply} " +
-                    "保活=${c.statKeepalive} ARP表=${c.arp.count} 待决=${c.pendingV4.values.sumOf { it.size }}")
+                    "保活=${c.statKeepalive} ARP表=${c.arp.count} 待决=${c.pendingV4.values.sumOf { it.size }} " +
+                    "源不符=${c.statSrcMismatch}${c.lastSrcMismatch?.let { "(${NetworkContextMath.dotted(it)})" } ?: ""} " +
+                    "NAT出=${c.statNatOut} NAT入=${c.statNatIn}")
                     .format(nwid, c.mac, c.ipv4Addresses.joinToString(",") { NetworkContextMath.dotted(it) })
             )
         }
@@ -128,6 +133,23 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
         }
         val ctx = contexts[match.nwid] ?: return
         if (ctx.mac == 0L) return
+        // 多网络源地址 NAT（iOS FrameConverter 同构）：内核按接口主地址选源，
+        // 目的属于另一网络时源是错的。源不属于本网时：是本机另一网络地址则改写
+        // 为本网地址（优先取命中路由网段的）并登记流表；单网络源恒在列表内，
+        // 一次比较都不改写（零回归直通）
+        val src = bigEndianIP32(pkt, 12)
+        if (src !in ctx.ipv4Addresses) {
+            if (isLocalIPv4Locked(src)) {
+                val newSrc = ctx.ipv4Addresses.firstOrNull { match.route.matches(it) }
+                    ?: ctx.ipv4Addresses.firstOrNull() ?: return
+                NAT44.outboundKey(pkt, ctx.nwid)?.let { nat.record(it, src) }
+                NAT44.rewriteAddress(pkt, 12, src, newSrc)
+                ctx.statNatOut++
+            } else {
+                ctx.statSrcMismatch++
+                ctx.lastSrcMismatch = src
+            }
+        }
         val nextHop = match.route.gateway ?: dst
         val mac = ctx.arp.lookup(nextHop)
         if (mac == null) {
@@ -190,6 +212,14 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
                 }
                 Ethernet.TYPE_IPV4 -> {
                     ctx.statInV4++
+                    // NAT44 入站回写：命中流表的回包把目的地址回写为原始源，
+                    // 否则应用 socket（本地地址=原始错误源）匹配不上
+                    NAT44.inboundKey(frame, nwid)?.let { key ->
+                        nat.lookup(key)?.let { orig ->
+                            NAT44.rewriteAddress(frame, 16, bigEndianIP32(frame, 16), orig)
+                            ctx.statNatIn++
+                        }
+                    }
                     listOf(frame)
                 }
                 else -> emptyList()
@@ -318,6 +348,10 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
             (pkt[offset + 3].toUInt() and 0xffu)
 
     private fun isIPv4Multicast(ip: UInt) = (ip shr 28) == 0xEu
+
+    /** 地址是否为本机任一网络持有（NAT44：出站源是另一网络地址才改写） */
+    private fun isLocalIPv4Locked(ip: UInt): Boolean =
+        contexts.values.any { ip in it.ipv4Addresses }
 
     private fun isIPv6Multicast(addr: ByteArray) = addr[0] == 0xff.toByte()
 
