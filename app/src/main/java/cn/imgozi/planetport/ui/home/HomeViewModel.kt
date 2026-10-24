@@ -45,6 +45,8 @@ data class HomeUiState(
     val tunnelRunning: Boolean = false,
     /** nwid → ZT 原始状态码（隧道侧契约：文案在 UI 层生成）。 */
     val networkStatuses: Map<String, Int> = emptyMap(),
+    /** nwid → 实时冲突原因码 "address"/"subnet"（隧道侧契约：文案在 UI 层生成；空表 = 无冲突）。 */
+    val networkConflicts: Map<String, String> = emptyMap(),
     /** nwid → 已分配地址（去前缀，仅当前隧道行星有数据）。 */
     val assignedAddrs: Map<String, List<String>> = emptyMap(),
 )
@@ -101,6 +103,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             TunnelStateBus.networkStatuses.collect {
                 _state.update { s -> s.copy(networkStatuses = it) }
                 checkAlertableStatus(it)
+            }
+        }
+        viewModelScope.launch {
+            TunnelStateBus.networkConflicts.collect { conflicts ->
+                _state.update { s -> s.copy(networkConflicts = conflicts) }
+                autoDisconnectConflictedNetworks(conflicts)
             }
         }
         viewModelScope.launch {
@@ -363,6 +371,35 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // MARK: - 隧道运行期回写缓存
+
+    /**
+     * 冲突自动断开（对齐 iOS AppState.autoDisconnectConflictedNetworks）：隧道侧检出
+     * 地址/网段冲突（原始码经 TunnelStateBus 透出）后，把冲突网络记因 lastConflict 并
+     * 复位 lastActivated，写回触发 configChanges → applyConfig 差分 leave。数据面已在
+     * 隧道侧隔离（冲突网络不进聚合），此处只收敛配置态。
+     *
+     * lastConflict 只在用户重开网络时清除（activate）：冲突解除（网络出冲突表）不清，
+     * 卡片持稳显示「<原因>，断开」（五级判定第 3 级）。跨行星处理：冲突网络可能属于
+     * 非当前浏览行星，按 readNetworksByPlanet 全量扫。
+     */
+    private suspend fun autoDisconnectConflictedNetworks(conflicts: Map<String, String>) {
+        if (conflicts.isEmpty()) return
+        val store = StoreRepo.store
+        for ((planetId, networks) in store.readNetworksByPlanet()) {
+            if (networks.none { it.lastActivated && conflicts[it.networkId] != null }) continue
+            store.writeNetworks(
+                networks.map { entry ->
+                    val code = conflicts[entry.networkId]
+                    if (entry.lastActivated && code != null) {
+                        entry.copy(lastConflict = code, lastActivated = false)
+                    } else {
+                        entry
+                    }
+                },
+                planetId,
+            )
+        }
+    }
 
     /** 节点 ID 缓存：隧道在跑读到即持久化到激活行星（iOS AppState.cacheNodeId）。 */
     private suspend fun cacheNodeId(nodeId: String) {

@@ -401,8 +401,12 @@ private fun PlanetPage(
                             vpnRunning = running,
                             lastActivated = entry.lastActivated,
                             lastConflict = entry.lastConflict,
-                            // 隧道侧无 networkConflicts 流，运行期冲突暂无数据源（T6）
-                            liveConflict = null,
+                            // 实时冲突仅当前隧道行星传入（收敛断开由 lastConflict 呈现）
+                            liveConflict = if (isActivePage) {
+                                state.networkConflicts[entry.networkId]
+                            } else {
+                                null
+                            },
                             // statusCode 仅当前隧道行星传入，规避总线遗留状态
                             statusCode = if (isActivePage) {
                                 state.networkStatuses[entry.networkId]
