@@ -207,6 +207,7 @@
     <string name="trace_events">Event Log (Last 40)</string>
     <string name="trace_last">Latest Aggregation Decision</string>
     <string name="trace_title">Data Plane Diagnostics</string>
+    <string name="tunnel_error_coreDriver">ZeroTier core runtime error</string>
     <string name="tunnel_error_coreInit">ZeroTier Core initialization failed</string>
     <string name="tunnel_error_socketBind">Failed to bind UDP port (errno=%1$d: %2$s)</string>
     <string name="tunnel_error_socketCreate">Failed to create UDP socket (errno=%1$d: %2$s)</string>

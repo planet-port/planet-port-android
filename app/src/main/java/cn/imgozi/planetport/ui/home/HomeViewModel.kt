@@ -175,13 +175,26 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 if (fromStartAttempt) {
                     emitNotice(
                         appContext.getString(R.string.home_error_vpnStartTitle),
-                        st.reason,
+                        failedReasonText(st.reason),
                     )
                 }
             }
             else -> Unit
         }
     }
+
+    /**
+     * Failed reason → 弹窗文案。reason 有两类装配：隧道侧持 Context 的生产点已
+     * getString（identityCollision/TUN 建立失败等，直显即本地化文案）；核心侧
+     * （NodeRuntime 驱动循环）无 Context，只能给技术串 "core_driver:$rc"。技术串
+     * 按前缀识别落通用失败文案，恒定资源、零技术串直显（T7b 审查 I-1 同范式）。
+     */
+    private fun failedReasonText(reason: String): String =
+        if (reason.startsWith("core_driver:")) {
+            appContext.getString(R.string.tunnel_error_coreDriver)
+        } else {
+            reason
+        }
 
     // MARK: - 行星浏览
 

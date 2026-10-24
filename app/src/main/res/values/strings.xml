@@ -207,6 +207,7 @@
     <string name="trace_events">事件日志（最近 40 条）</string>
     <string name="trace_last">最近一次聚合决策</string>
     <string name="trace_title">数据面诊断</string>
+    <string name="tunnel_error_coreDriver">ZeroTier Core 运行异常</string>
     <string name="tunnel_error_coreInit">ZeroTier Core 初始化失败</string>
     <string name="tunnel_error_socketBind">UDP 端口绑定失败（errno=%1$d: %2$s）</string>
     <string name="tunnel_error_socketCreate">UDP socket 创建失败（errno=%1$d: %2$s）</string>

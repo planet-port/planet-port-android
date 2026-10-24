@@ -139,7 +139,18 @@ internal class NodeRuntime(
                 val n = node ?: break
                 val rc = n.processBackgroundTasks(System.currentTimeMillis(), deadline)
                 if (rc != ResultCode.RESULT_OK) {
+                    // 对齐 P4 终审 B-3：此前静默 break 会把 TunnelState 悬在 Running，
+                    // 用户看到假在线；先置 Failed 再退出驱动循环。
+                    // recoverable = true：服务进程仍活（scope/通知在），用户可显式停止，
+                    // 切网自愈由 NetWatch 链路在下次网络事件重启核心；keepalive/peers
+                    // 协程不连带收口——Failed 存活态下 keepalive 温热 UDP 无害，统一
+                    // 收口归服务 stopTunnel 既有链路。
+                    // reason 为技术串（本类无 Context 无法本地化），HomeViewModel 消费侧
+                    // 按 "core_driver:" 前缀映射通用失败文案，不直显用户。
                     TunnelStateBus.log("processBackgroundTasks rc=$rc，停止驱动")
+                    TunnelStateBus.setTunnelState(
+                        TunnelState.Failed("core_driver:$rc", recoverable = true),
+                    )
                     break
                 }
                 val wait = (deadline[0] - System.currentTimeMillis()).coerceIn(50, 100)
