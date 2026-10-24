@@ -91,7 +91,7 @@ internal object NetWatch {
         this.callback = cb
         this.onPathChange = onPathChange
         lastPath = null // 新一轮监听重新记基线
-        synchronized(this) { candidates.clear() }
+        candidates.clear()
         try {
             manager.registerNetworkCallback(
                 NetworkRequest.Builder()
@@ -118,7 +118,7 @@ internal object NetWatch {
         onPathChange = null
         lastPath = null
         cm = null
-        synchronized(this) { candidates.clear() }
+        candidates.clear()
         mainHandler.removeCallbacks(fireDebounced)
         if (manager != null) {
             try {

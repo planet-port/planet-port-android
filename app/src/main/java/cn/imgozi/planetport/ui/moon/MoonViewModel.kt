@@ -2,6 +2,7 @@ package cn.imgozi.planetport.ui.moon
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -13,6 +14,8 @@ import cn.imgozi.planetport.store.MoonImporter
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
+import cn.imgozi.planetport.store.StreamTooLargeException
+import cn.imgozi.planetport.store.readBounded
 import cn.imgozi.planetport.tunnel.TunnelController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 
 /** Moon 行展示模型：条目 + moons.d 缓存文件在位状态（缓存徽标「已缓存/未缓存」）。 */
@@ -122,24 +124,16 @@ class MoonViewModel(application: Application, private val planetId: String) : An
     }
 
     /**
-     * 流式限量读取：每次 64KiB，累计超过 [MoonImporter.MAX_MOON_BYTES] 即抛
-     * [MoonImporter.ImportError.TooLarge] 终止。读取失败（无法打开流等）返回 null。
+     * 流式限量读取：共享 [readBounded] 分块累计，超过 [MoonImporter.MAX_MOON_BYTES]
+     * 即抛 [StreamTooLargeException] 终止。读取失败（无法打开流等）返回 null。
      */
     private fun readMoonBytes(uri: Uri): ByteArray? = try {
         getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
-            val buffer = ByteArrayOutputStream(MOON_READ_BUFFER_INIT)
-            val chunk = ByteArray(MOON_READ_CHUNK)
-            var read: Int
-            while (input.read(chunk).also { read = it } != -1) {
-                if (buffer.size() + read > MoonImporter.MAX_MOON_BYTES) {
-                    throw MoonImporter.ImportError.TooLarge()
-                }
-                buffer.write(chunk, 0, read)
-            }
-            buffer.toByteArray()
+            input.readBounded(MoonImporter.MAX_MOON_BYTES)
         }
-    } catch (e: MoonImporter.ImportError) {
-        throw e
+    } catch (_: StreamTooLargeException) {
+        // 归一为导入器 TooLarge，沿用 importFromFile 既有 error_moon_tooLarge 映射链
+        throw MoonImporter.ImportError.TooLarge()
     } catch (_: Exception) {
         null
     }
@@ -150,7 +144,14 @@ class MoonViewModel(application: Application, private val planetId: String) : An
      * 自动停 1s 再启，UI 层提示生效说明。
      */
     suspend fun deleteOrbit(entry: MoonEntry) {
-        store.deleteMoon(entry.worldId, planetId)
+        // 写盘失败只记日志不崩进程（对齐 HomeViewModel storeWrite 兜底范式，
+        // JsonFileStore.rename 失败抛 IOException 会直通崩溃）：记录未删成时不
+        // 重启隧道，列表态由 configChanges 收敛
+        runCatching { store.deleteMoon(entry.worldId, planetId) }
+            .onFailure {
+                Log.w(TAG, "deleteMoon 写盘失败", it)
+                return
+            }
         TunnelController.restartIfRunning(getApplication())
     }
 
@@ -170,9 +171,7 @@ class MoonViewModel(application: Application, private val planetId: String) : An
     }
 
     companion object {
-        /** 限量读取的初始缓冲 64KiB 与分块大小 64KiB（.moon 数 KB 量级，单块足够）。 */
-        private const val MOON_READ_BUFFER_INIT = 64 * 1024
-        private const val MOON_READ_CHUNK = 64 * 1024
+        private const val TAG = "MoonViewModel"
 
         fun factory(planetId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {

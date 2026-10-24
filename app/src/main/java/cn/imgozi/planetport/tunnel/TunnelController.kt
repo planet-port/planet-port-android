@@ -33,6 +33,17 @@ object TunnelController {
     private var reconnectInFlight = false
 
     /**
+     * 停启代际计数：用户主动 [stop] 实际下发 STOP 时自增。编排协程在窗口前捕获
+     * 当前代际、START 下发前比对——窗口内用户停止会使代际失效，迟到的 START
+     * 据此放弃，防「stop → awaitSettled → start」把用户主动停止顶回。
+     * 只在真正下发 STOP 时自增：终态下的幂等 no-op 不作数（用户没有实际干预）。
+     * stop 收敛主线程、编排协程在 restartScope（Main.immediate）同线程，无实际
+     * 竞态，@Volatile 属保险（与 [reconnectInFlight] 同范式）。
+     */
+    @Volatile
+    private var stopGeneration = 0
+
+    /**
      * 隧道是否存活：Running/Starting/Reconnecting 视为在跑；
      * Failed/Stopped/Idle 视为不在（注意：establish 失败的 Failed 态服务进程
      * 仍存活——scope 未取消、前台通知在，仅数据面未建立，见 stop 的门控）。
@@ -74,7 +85,11 @@ object TunnelController {
     fun stop(context: Context) {
         when (TunnelStateBus.tunnelState.value) {
             is TunnelState.Idle, is TunnelState.Stopped -> return
-            else -> ZeroTierVpnService.stop(context.applicationContext)
+            else -> {
+                // 用户主动干预：代际自增使进行中编排窗口的迟到 START 失效
+                stopGeneration++
+                ZeroTierVpnService.stop(context.applicationContext)
+            }
         }
     }
 
@@ -115,6 +130,8 @@ object TunnelController {
             return
         }
         reconnectInFlight = true
+        // 窗口前捕获代际：START 前比对，窗口内用户主动停止则放弃迟到启动
+        val generationAtStop = stopGeneration
         val app = context.applicationContext
         // 通知文案由服务侧 tunnelState collector 驱动（T6 订阅化），此处只置态
         TunnelStateBus.setTunnelState(TunnelState.Reconnecting("network_change"))
@@ -122,8 +139,13 @@ object TunnelController {
         ZeroTierVpnService.stop(app)
         restartScope.launch {
             try {
-                if (awaitSettled()) ZeroTierVpnService.start(app)
-                else TunnelStateBus.log("重连等待停机终态超时，放弃迟到启动")
+                when {
+                    !awaitSettled() ->
+                        TunnelStateBus.log("重连等待停机终态超时，放弃迟到启动")
+                    stopGeneration != generationAtStop ->
+                        TunnelStateBus.log("编排窗口内用户已停止，放弃迟到启动")
+                    else -> ZeroTierVpnService.start(app)
+                }
             } finally {
                 reconnectInFlight = false
             }
@@ -158,12 +180,19 @@ object TunnelController {
             return
         }
         reconnectInFlight = true
+        // 窗口前捕获代际：START 前比对，窗口内用户主动停止则放弃迟到启动
+        val generationAtStop = stopGeneration
         val app = context.applicationContext
         ZeroTierVpnService.stop(app)
         restartScope.launch {
             try {
-                if (awaitSettled()) ZeroTierVpnService.start(app)
-                else TunnelStateBus.log("重启等待停机终态超时，放弃迟到启动")
+                when {
+                    !awaitSettled() ->
+                        TunnelStateBus.log("重启等待停机终态超时，放弃迟到启动")
+                    stopGeneration != generationAtStop ->
+                        TunnelStateBus.log("编排窗口内用户已停止，放弃迟到启动")
+                    else -> ZeroTierVpnService.start(app)
+                }
             } finally {
                 reconnectInFlight = false
             }

@@ -40,6 +40,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.BackgroundImageStore
+import cn.imgozi.planetport.store.StreamTooLargeException
+import cn.imgozi.planetport.store.readBounded
 import cn.imgozi.planetport.ui.components.SectionCard
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -87,14 +90,20 @@ fun BackgroundImagePickerSheet(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
+        // 有界读取（与 BackgroundImageStore.save 的 MAX_BYTES 校验同值）：相册
+        // 资源大小不可信，无界 readBytes 是 OOM 入口，读过程中超限即断（读前即限）
         val bytes = runCatching {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        }.getOrNull()
-        if (bytes == null) {
-            errorText = context.getString(R.string.error_bg_notImage)
-        } else {
-            applyImage(bytes)
+            context.contentResolver.openInputStream(uri)?.use {
+                it.readBounded(BackgroundImageStore.MAX_BYTES)
+            }
+        }.getOrElse { e ->
+            errorText = context.getString(
+                if (e is StreamTooLargeException) R.string.error_bg_tooLarge
+                else R.string.error_bg_notImage
+            )
+            null
         }
+        bytes?.let { applyImage(it) }
     }
 
     fun download() {
@@ -115,7 +124,9 @@ fun BackgroundImagePickerSheet(
                 try {
                     val code = conn.responseCode
                     if (code !in 200..299) throw IOException("HTTP $code")
-                    conn.inputStream.use { it.readBytes() }
+                    // 有界读取（与 BackgroundImageStore.save 的 MAX_BYTES 校验同值）：
+                    // 远程响应体长度不可信，读过程中超限即断，不等落盘后判
+                    conn.inputStream.use { it.readBounded(BackgroundImageStore.MAX_BYTES) }
                 } finally {
                     conn.disconnect()
                 }
@@ -125,7 +136,10 @@ fun BackgroundImagePickerSheet(
                 // 恒定资源文案：HTTP 码/系统异常 message 不直显（T7b 范式），细节进日志
                 result.isFailure -> {
                     Log.w("BgImage", "apply 失败", result.exceptionOrNull())
-                    errorText = context.getString(R.string.bg_error_generic)
+                    errorText = context.getString(
+                        if (result.exceptionOrNull() is StreamTooLargeException) R.string.error_bg_tooLarge
+                        else R.string.bg_error_generic
+                    )
                 }
                 result.getOrDefault(ByteArray(0)).isEmpty() -> errorText =
                     context.getString(R.string.bg_error_emptyContent)

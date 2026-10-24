@@ -1,5 +1,6 @@
 package cn.imgozi.planetport.store
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -34,6 +35,9 @@ class PlanetImporter(private val store: AppConfigStore) {
         iconColor: String? = null,
     ): PlanetProfile {
         if (data.isEmpty() || data[0] != PLANET_TYPE_BYTE) throw ImportError.BadHeader()
+        // 防御性大小校验：调用方应先行有界读取，这里兜住数据已进内存的场合
+        // （文件路径直读/未来新调用方），与下载链 MAX_PLANET_BYTES 同一口径
+        if (data.size > MAX_PLANET_BYTES) throw ImportError.TooLarge()
         val normalizedName = name.trim()
         if (normalizedName.isEmpty()) throw ImportError.EmptyName()
 
@@ -55,8 +59,17 @@ class PlanetImporter(private val store: AppConfigStore) {
             fileName = fileName, icon = icon, iconColor = iconColor,
         )
         // 注册表读-追加-写整段持域锁，防止并发写丢更新
-        store.mutate {
-            store.writePlanetsLocked(store.readPlanets() + profile)
+        try {
+            store.mutate {
+                store.writePlanetsLocked(store.readPlanets() + profile)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 先落文件后写注册表的顺序窗口：注册表写失败时回收已落的
+            // .planet，防孤儿文件累积（未注册的文件无人消费也扫不到）
+            withContext(Dispatchers.IO) { File(store.paths.planetsDir, fileName).delete() }
+            throw e
         }
         return profile
     }

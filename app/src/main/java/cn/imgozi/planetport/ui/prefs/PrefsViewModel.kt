@@ -200,8 +200,12 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         _prefs.value = next
         onApplied?.invoke(next)
         viewModelScope.launch {
-            StoreRepo.store.writePrefs(mutate)
-            onPersisted?.invoke()
+            // 写盘兜底（JsonFileStore rename 失败抛 IOException，直通会崩进程；
+            // 同 HomeViewModel/PlanetSettingsViewModel 范式）：失败仅记日志，
+            // 内存态已是新值，下次成功落盘前 UI 不回滚
+            runCatching { StoreRepo.store.writePrefs(mutate) }
+                .onFailure { Log.w("PrefsViewModel", "writePrefs 写盘失败", it) }
+                .onSuccess { onPersisted?.invoke() }
         }
     }
 }

@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetImporter
+import cn.imgozi.planetport.store.StreamTooLargeException
+import cn.imgozi.planetport.store.readBounded
 import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.planet.IconPickerSheet
 import cn.imgozi.planetport.ui.planet.PlanetIcon
@@ -309,15 +311,21 @@ private fun AddPlanetForm(
     // 回调非 Composable 上下文：文案先在组合期解析
     val fileUnreadable = stringResource(R.string.addplanet_fileUnreadable)
     val badHeader = stringResource(R.string.addplanet_badHeader)
+    val tooLarge = stringResource(R.string.error_planet_tooLarge)
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            // 有界读取（上限对齐 URL 路径 MAX_PLANET_BYTES）：不可信来源文件
+            // 无界 readBytes 是 OOM 入口，读过程中超限即断
+            var oversize = false
             val data = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { stream -> stream.readBytes() }
-            }.getOrNull()
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.readBounded(PlanetImporter.MAX_PLANET_BYTES)
+                }
+            }.onFailure { oversize = it is StreamTooLargeException }.getOrNull()
             when {
-                data == null -> alert = fileUnreadable
+                data == null -> alert = if (oversize) tooLarge else fileUnreadable
                 data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE -> alert = badHeader
                 else -> pendingData = data
             }

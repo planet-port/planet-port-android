@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.detail
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.store.DnsMode
@@ -133,7 +134,11 @@ class NetworkDetailViewModel(
     /** 删除网络条目（隧道经 configChanges 自动 leave）。[onDeleted] 供视图退栈。 */
     fun delete(onDeleted: () -> Unit) {
         viewModelScope.launch {
-            StoreRepo.store.deleteNetwork(networkId = nwid, planetId = planetId)
+            // 写盘失败只记日志不崩进程（对齐 HomeViewModel storeWrite 兜底范式，
+            // JsonFileStore.rename 失败抛 IOException 会直通崩溃）：失败时不执行
+            // 停隧道与退栈——条目仍在盘上，UI 与磁盘态由 configChanges 收敛
+            runCatching { StoreRepo.store.deleteNetwork(networkId = nwid, planetId = planetId) }
+                .onFailure { Log.w(TAG, "deleteNetwork 写盘失败", it); return@launch }
             // 空跑收敛（iOS 19f7681 stopVPNIfNoActiveNetworks）：删的可能是
             // 活跃行星最后一个启用网络，隧道不得无网络空跑。stop 幂等，未跑直过
             if (StoreRepo.store.readActiveNetworks().none { it.lastActivated }) {
@@ -150,9 +155,14 @@ class NetworkDetailViewModel(
         if (index < 0) return
         val updated = list.toMutableList()
         updated[index] = transform(updated[index])
-        StoreRepo.store.writeNetworks(updated, planetId)
+        // 写盘失败直接放弃（storeWrite 兜底范式）：UI 开关态由 configChanges
+        // 全量重读回滚，不留内存/磁盘分歧
+        runCatching { StoreRepo.store.writeNetworks(updated, planetId) }
+            .onFailure { Log.w(TAG, "writeNetworks 写盘失败", it) }
     }
 }
+
+private const val TAG = "NetworkDetailVM"
 
 private fun NetConf.toSnapshot(): NetworkSnapshot = NetworkSnapshot(
     name = name,
