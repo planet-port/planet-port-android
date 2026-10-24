@@ -82,6 +82,10 @@ internal class TunnelManager(
         // 总线镜像同步清空（网络配置快照与 Peer 列表都只在隧道存活期有意义）
         TunnelStateBus.clearNetworkConfigs()
         TunnelStateBus.clearPeers()
+        // 未 join 的 JNI 任务清单（P5 停机收口统一处理）：keepaliveJob（JNI send）、
+        // peersJob（JNI peers 查询）、configChangesJob（applyConfig 内 join/orbit JNI）
+        // ——cancel 只置标志不中断 JNI，与 frame/config 消费协程（服务侧 joinConsumerJobs
+        // 已收口）不同；若恰在 JNI 内关 Node 理论上 native UAF，窗口微秒级
     }
 
     /**

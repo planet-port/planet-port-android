@@ -16,7 +16,8 @@ object TunnelController {
 
     /**
      * 隧道是否存活：Running/Starting/Reconnecting 视为在跑；
-     * Failed/Stopped/Idle 视为不在（Failed 的各分支服务侧均已自清理）。
+     * Failed/Stopped/Idle 视为不在（注意：establish 失败的 Failed 态服务进程
+     * 仍存活——scope 未取消、前台通知在，仅数据面未建立，见 stop 的门控）。
      */
     val isRunning: Boolean
         get() = when (TunnelStateBus.tunnelState.value) {
@@ -46,10 +47,17 @@ object TunnelController {
         requestPermission { ZeroTierVpnService.start(app) }
     }
 
-    /** 停止隧道（幂等）：仅在跑时下发 STOP，避免对已死服务空跑一轮启停。 */
+    /**
+     * 停止隧道（幂等）：终态（Idle/Stopped）不下发；存活态与 Failed 均放行——
+     * establish 失败的 Failed 态服务仍活着（scope 存活、通知「运行中」），若按
+     * isRunning 门控会静默 no-op，用户从 App 内停不掉只能靠系统撤销；服务侧
+     * stopTunnel 幂等，对终态外的一切状态下发 STOP 都安全
+     */
     fun stop(context: Context) {
-        if (!isRunning) return
-        ZeroTierVpnService.stop(context.applicationContext)
+        when (TunnelStateBus.tunnelState.value) {
+            is TunnelState.Idle, is TunnelState.Stopped -> return
+            else -> ZeroTierVpnService.stop(context.applicationContext)
+        }
     }
 
     /**
