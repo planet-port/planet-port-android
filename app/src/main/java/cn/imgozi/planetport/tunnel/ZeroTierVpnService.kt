@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import androidx.core.app.ServiceCompat
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
@@ -71,16 +72,13 @@ internal class ZeroTierVpnService : VpnService() {
     private fun startTunnel() {
         // 双 START 守卫：二轮启动会 bind 9994 失败错置 Failed 状态；一轮存活则忽略
         // 重复指令。守卫内也须 startForeground——本意图经 startForegroundService
-        // 下发时系统要求 5s 窗口内起前台，否则崩。重发当前态通知而非「启动中」，
-        // 保持「通知文案不改回启动中」的既有语义
+        // 下发时系统要求 5s 窗口内起前台，否则崩。重发当前态映射文案而非「启动中」，
+        // 保持「通知文案不改回启动中」的既有语义（Reconnecting 态重发也随映射正确）
         if (scope?.isActive == true) {
             VpnNotification.start(
                 this,
-                if (TunnelStateBus.tunnelState.value is TunnelState.Running) {
-                    getString(R.string.tunnel_status_running)
-                } else {
-                    getString(R.string.tunnel_status_starting)
-                },
+                notificationText(TunnelStateBus.tunnelState.value)
+                    ?: getString(R.string.tunnel_status_starting),
             )
             return
         }
@@ -88,6 +86,15 @@ internal class ZeroTierVpnService : VpnService() {
         TunnelStateBus.setTunnelState(TunnelState.Starting)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = s
+        // 通知订阅化（T3 审查 Minor-1）：服务 scope 内 collect 隧道状态，状态变化
+        // 即映射文案 update——NodeRuntime 置 Failed 后通知不再停留「运行中」。此前
+        // 的散点 update 中，Running 置位点已随本订阅删除；TunnelManager（无网络标注）
+        // 与 TunnelController（重连显式调用）不属本服务，保留为同值幂等冗余
+        s.launch {
+            TunnelStateBus.tunnelState.collect { st ->
+                notificationText(st)?.let { VpnNotification.update(this@ZeroTierVpnService, it) }
+            }
+        }
         val store = StoreRepo.store
         s.launch {
             val planetId = store.activePlanetId()
@@ -152,8 +159,7 @@ internal class ZeroTierVpnService : VpnService() {
                     return@launch
                 }
                 started = true
-                TunnelStateBus.setTunnelState(TunnelState.Running)
-                VpnNotification.update(this@ZeroTierVpnService, getString(R.string.tunnel_status_running))
+                TunnelStateBus.setTunnelState(TunnelState.Running) // 通知随订阅更新
                 // 切网自愈：隧道全链起来后才注册路径监听——失败路径的 finally 兜底不含
                 // NetWatch 注销，半启动状态不得持注册（回调持服务引用）。重复 START 守卫
                 // 分支不至此，NetWatch.start 幂等仍兜底
@@ -176,7 +182,7 @@ internal class ZeroTierVpnService : VpnService() {
                         dataplane = null; tunnelManager = null
                     }
                     TunnelStateBus.setNodeStatus(null)
-                    stopForeground(true)
+                    stopForegroundCompat()
                     stopSelf()
                 }
             }
@@ -185,7 +191,7 @@ internal class ZeroTierVpnService : VpnService() {
 
     private fun stopTunnel() {
         // ACTION_STOP 同样可能经 startForegroundService 下发（后台停止场景）：
-        // 先起前台满足 5s 窗口义务，再走 stopForeground(true) 收口，通知随收口
+        // 先起前台满足 5s 窗口义务，再走 stopForegroundCompat 收口，通知随收口
         // 移除不留存。onRevoke/启动失败路径重复 startForeground 幂等无害
         VpnNotification.start(this, getString(R.string.tunnel_status_stopped))
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
@@ -206,8 +212,35 @@ internal class ZeroTierVpnService : VpnService() {
         runtime = null
         TunnelStateBus.setNodeStatus(null)
         TunnelStateBus.clearNetworkStatuses()
-        stopForeground(true)
+        stopForegroundCompat()
         stopSelf()
+    }
+
+    /**
+     * TunnelState → 通知文案。Idle 返回 null（仅 onDestroy 置位，服务已收口——此时
+     * notify 会让 stopForeground 移除的通知复活，须跳过）。Failed reason 两类装配：
+     * 持 Context 的生产点已 getString（直显即本地化文案）；核心侧（NodeRuntime 驱动
+     * 循环）无 Context 只能给技术串 "core_driver:$rc"，按前缀映射通用失败文案——
+     * 与 HomeViewModel.failedReasonText 同范式，恒定资源、零技术串直显。
+     */
+    private fun notificationText(state: TunnelState): String? = when (state) {
+        TunnelState.Idle -> null
+        TunnelState.Starting -> getString(R.string.tunnel_status_starting)
+        TunnelState.Running -> getString(R.string.tunnel_status_running)
+        is TunnelState.Reconnecting -> getString(R.string.tunnel_status_reconnecting)
+        is TunnelState.Stopped -> getString(R.string.tunnel_status_stopped)
+        is TunnelState.Failed ->
+            if (state.reason.startsWith("core_driver:")) {
+                getString(R.string.tunnel_error_coreDriver)
+            } else {
+                state.reason
+            }
+    }
+
+    /** deprecated 收口：stopForeground(Boolean) 弃用，ServiceCompat 按 SDK 分派
+     *  STOP_FOREGROUND_REMOVE（语义同原 true，通知随收口移除）。 */
+    private fun stopForegroundCompat() {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }
 
     /**

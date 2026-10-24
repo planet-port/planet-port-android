@@ -269,6 +269,17 @@ internal class NodeRuntime(
                     tmp.delete()
                     return -1
                 }
+                // 私钥文件 owner-only（0600）：Core 约定 identity.secret 属敏感对象
+                // （secure=true），桌面版 ZeroTier One 同样收紧该文件权限。app 沙盒内
+                // 其余 app 本不可达，此处防 root/adb 拉取与备份提取的纵深防御；
+                // rename 后新文件权限来自 tmp，逐次收紧幂等（identity.secret 重写亦覆盖）
+                if (secure || name == "identity.secret") {
+                    f.setReadable(false, false)
+                    f.setWritable(false, false)
+                    f.setExecutable(false, false)
+                    f.setReadable(true, true)
+                    f.setWritable(true, true)
+                }
                 0
             } catch (e: IOException) {
                 -1
