@@ -55,6 +55,15 @@ object TunnelStateBus {
     private val _networkStatuses = MutableStateFlow<Map<String, Int>>(emptyMap())
     val networkStatuses: StateFlow<Map<String, Int>> = _networkStatuses.asStateFlow()
 
+    /**
+     * 实时冲突表（键为 16 位十六进制 nwid → 冲突原因码 "address"/"subnet"；空表 = 无冲突，
+     * 对齐 iOS StatusStore.networkConflicts）。键形态与 networkStatuses 一致——UI 侧以
+     * NetworkEntry.networkId 直查。值是原始码：文案在 UI 层生成（跨层契约同上）。
+     * 每次聚合应用全量替换（冲突解除的网络自然出表）；停机清空。
+     */
+    private val _networkConflicts = MutableStateFlow<Map<String, String>>(emptyMap())
+    val networkConflicts: StateFlow<Map<String, String>> = _networkConflicts.asStateFlow()
+
     /** 网络配置快照（键为 16 位十六进制 nwid；对齐 iOS StatusStore.networkConfigs）。
      *  来源 = TunnelManager 聚合快照的同步镜像，仅供 UI 展示（详情页类型/桥接/广播/
      *  DHCP、地址/路由/DNS 列表）；不参与数据面聚合。停机清空。
@@ -82,6 +91,13 @@ object TunnelStateBus {
     }
 
     fun clearNetworkStatuses() { _networkStatuses.value = emptyMap() }
+
+    /** 冲突表全量替换（键 Long → 16 位十六进制字符串，与 networkStatuses 一致） */
+    fun setNetworkConflicts(conflicts: Map<Long, String>) {
+        _networkConflicts.value = conflicts.mapKeys { "%016x".format(it.key) }
+    }
+
+    fun clearNetworkConflicts() { _networkConflicts.value = emptyMap() }
 
     /** 网络配置快照全量同步（键 Long → 16 位十六进制字符串，与 networkStatuses 一致） */
     internal fun setNetworkConfigs(snapshots: Map<Long, NetConf>) {

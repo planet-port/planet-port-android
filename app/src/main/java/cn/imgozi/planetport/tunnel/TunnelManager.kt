@@ -90,8 +90,9 @@ internal class TunnelManager(
         settingsJob?.cancel(); settingsJob = null
         snapshots = HashMap()
         appliedSignature = null
-        // 总线镜像同步清空（网络配置快照与 Peer 列表都只在隧道存活期有意义）
+        // 总线镜像同步清空（网络配置快照/冲突表与 Peer 列表都只在隧道存活期有意义）
         TunnelStateBus.clearNetworkConfigs()
+        TunnelStateBus.clearNetworkConflicts()
         TunnelStateBus.clearPeers()
         // 未 join 的 JNI 任务清单（P5 停机收口统一处理）：keepaliveJob（JNI send）、
         // peersJob（JNI peers 查询）、configChangesJob（applyConfig 内 join/orbit JNI）、
@@ -227,10 +228,13 @@ internal class TunnelManager(
             Item(nwid, entry, conf, v4, v6)
         }
 
-        // 冲突检测（后进入者让路）→ 转换器上下文（冲突网络不建，保留 join 仅展示状态）
+        // 冲突检测（后进入者让路）→ 冲突透出（原始码，文案 UI 层生成；对齐 iOS
+        // Extension 每次聚合推流 StatusStore.networkConflicts）→ 转换器上下文
+        //（冲突网络不建，保留 join 仅展示状态）。全量替换：冲突解除的网络自然出表
         val conflicts = NetworkContextMath.detectConflicts(
             items.map { Triple(it.nwid, it.v4, it.v6) }
         )
+        TunnelStateBus.setNetworkConflicts(conflicts)
         for (item in items) {
             converter.updateNetworkInfo(
                 item.nwid, enabled = !conflicts.containsKey(item.nwid),
