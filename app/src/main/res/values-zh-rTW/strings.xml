@@ -243,4 +243,6 @@
     <string name="moon_importFailed">moon 檔案匯入失敗</string>
     <string name="planet_renameFailed">重新命名失敗</string>
     <string name="planet_iconUpdateFailed">更新圖示失敗</string>
+    <!-- Android 側獨有文案（iOS Localizable.xcstrings 無對應 key） -->
+    <string name="home_error_vpnPermissionDenied">VPN 授權被拒</string>
 </resources>

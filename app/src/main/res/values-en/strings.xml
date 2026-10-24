@@ -243,4 +243,6 @@
     <string name="moon_importFailed">Failed to import moon file</string>
     <string name="planet_renameFailed">Rename failed</string>
     <string name="planet_iconUpdateFailed">Failed to update icon</string>
+    <!-- Android-only strings (no counterpart in the iOS Localizable.xcstrings) -->
+    <string name="home_error_vpnPermissionDenied">VPN permission denied</string>
 </resources>

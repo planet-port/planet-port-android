@@ -3,6 +3,7 @@ package cn.imgozi.planetport.ui.home
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetProfile
@@ -11,7 +12,7 @@ import cn.imgozi.planetport.tunnel.NetConf
 import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
-import cn.imgozi.planetport.ui.ztStatusText
+import cn.imgozi.planetport.ui.ztStatusLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -169,7 +170,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 val fromStartAttempt = startAttemptAt > 0
                 startAttemptAt = 0
                 // 仅启动尝试期的 Failed 报「无法启动 VPN」；运行期 TUN 故障由状态行呈现
-                if (fromStartAttempt) emitNotice("无法启动 VPN", st.reason)
+                if (fromStartAttempt) {
+                    emitNotice(
+                        appContext.getString(R.string.home_error_vpnStartTitle),
+                        st.reason,
+                    )
+                }
             }
             else -> Unit
         }
@@ -252,7 +258,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         store.writeNetworks(updated, planetId)
         if (routeViaTurnedOff) {
-            emitNotice("多网络连接", "已自动关闭「经 ZeroTier 路由（默认路由）」：多网络同时连接时不可用")
+            emitNotice(
+                appContext.getString(R.string.home_error_multiNetworkTitle),
+                appContext.getString(R.string.home_error_multiNetworkMessage),
+            )
         }
 
         val selected = store.selectedPlanetId()
@@ -290,7 +299,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 TunnelController.ensureStarted(
                     appContext,
                     requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
-                    onPermissionDenied = { emitNotice("无法启动 VPN", "VPN 授权被拒") },
+                    onPermissionDenied = {
+                        emitNotice(
+                            appContext.getString(R.string.home_error_vpnStartTitle),
+                            appContext.getString(R.string.home_error_vpnPermissionDenied),
+                        )
+                    },
                 )
             }
         }
@@ -345,7 +359,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val result = runCatching {
                 val worldId = PlanetImporter.worldIdOf(data)
                 if (worldId != null && worldId in StoreRepo.planetImporter.existingWorldIds()) {
-                    error("已存在相同的 Planet（World ID $worldId），不能重复添加。")
+                    // 查重在 VM 内抛、同链路 catch 回传，抛点直接资源化（iOS addplanet.duplicate）
+                    error(appContext.getString(R.string.addplanet_duplicate, worldId.toString()))
                 }
                 StoreRepo.planetImporter.importPlanetData(data, name)
             }
@@ -355,7 +370,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     reload()
                     onDone(profile, null)
                 },
-                onFailure = { onDone(null, it.message ?: "导入失败") },
+                onFailure = { onDone(null, it.message ?: appContext.getString(R.string.addplanet_importFailed)) },
             )
         }
     }
@@ -365,7 +380,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { StoreRepo.planetImporter.downloadPlanetFile(url) }.fold(
                 onSuccess = { onDone(it, null) },
-                onFailure = { onDone(null, it.message ?: "planet 下载失败") },
+                onFailure = { onDone(null, it.message ?: appContext.getString(R.string.error_downloadFailed)) },
             )
         }
     }
@@ -452,7 +467,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             if (code == 3 || code == 4 || code == 5) {
                 val name = s.planetNetworks[s.selectedPlanetId]
                     ?.firstOrNull { it.networkId == nwid }?.networkName ?: nwid
-                emitNotice("网络状态异常", "网络 $name：${ztStatusText(code)}")
+                emitNotice(
+                    appContext.getString(R.string.home_alert_networkStatusError),
+                    appContext.getString(
+                        R.string.home_alert_networkStatus,
+                        name,
+                        appContext.getString(ztStatusLabel(code)),
+                    ),
+                )
                 break
             }
         }

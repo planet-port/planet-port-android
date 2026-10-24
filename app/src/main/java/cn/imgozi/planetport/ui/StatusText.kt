@@ -2,7 +2,6 @@ package cn.imgozi.planetport.ui
 
 import androidx.annotation.StringRes
 import cn.imgozi.planetport.R
-import cn.imgozi.planetport.tunnel.TunnelState
 
 /** 网络状态语义色（M3 ColorScheme 无状态槽位，映射见 ui.theme.PlanetStatusColors）。 */
 enum class StatusColor { Good, Warn, Neutral, Danger }
@@ -21,7 +20,9 @@ data class NetworkCardStatus(
 
 /**
  * ZT_VirtualNetworkStatus 原始码 → 文案资源（iOS Shared/Models.swift:16-54 全集）。
- * [code] 取值 0..6；-1 与其他未知值归入「未知」。UI 层用 [stringResource] 解析。
+ * [code] 取值 0..6；-1 与其他未知值归入「未知」。Composable 用 [stringResource] 解析；
+ * 非 Composable 上下文（HomeViewModel 事件弹窗等）经 Application context
+ * `getString` 解析，VM 侧不再保留字面量版。
  */
 @StringRes
 fun ztStatusLabel(code: Int): Int = when (code) {
@@ -33,31 +34,6 @@ fun ztStatusLabel(code: Int): Int = when (code) {
     5 -> R.string.network_status_clientTooOld
     6 -> R.string.network_status_authRequired
     else -> R.string.network_status_unknown
-}
-
-/**
- * [ztStatusLabel] 的字面量版（HomeViewModel 事件弹窗等非 Composable 上下文消费）。
- * 无 Context 无法本地化，暂为简体固定文案——VM 侧文案资源化归 T6b 领地移交项。
- */
-fun ztStatusText(code: Int): String = when (code) {
-    0 -> "正在初始化"
-    1 -> "在线"
-    2 -> "拒绝访问"
-    3 -> "网络不存在"
-    4 -> "端口错误"
-    5 -> "客户端过旧"
-    6 -> "需要认证"
-    else -> "未知"
-}
-
-/** 隧道宏观状态文案（自 P2 脚手架页上移，脚手架页已退役；诊断用途，未接 UI）。 */
-fun tunnelStateText(state: TunnelState): String = when (state) {
-    is TunnelState.Idle -> "空闲"
-    is TunnelState.Starting -> "启动中"
-    is TunnelState.Running -> "运行中"
-    is TunnelState.Reconnecting -> "重连中(${state.reason})"
-    is TunnelState.Stopped -> "已停止${state.reason?.let { "($it)" } ?: ""}"
-    is TunnelState.Failed -> "失败(${state.reason})"
 }
 
 /**
