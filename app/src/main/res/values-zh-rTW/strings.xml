@@ -297,9 +297,9 @@
     <string name="app_name">Planet Port</string>
     <string name="common_back">返回</string>
     <string name="common_copy">複製</string>
+    <string name="common_share">分享</string>
+    <string name="qrcode_title">QR Code</string>
     <string name="common_operationFailed">操作失敗</string>
-    <string name="card_copyNodeId">複製節點 ID</string>
-    <string name="card_copied">已複製</string>
     <string name="icon_color">底色</string>
     <string name="icon_current">目前圖示</string>
     <string name="moon_actions">衛星操作</string>

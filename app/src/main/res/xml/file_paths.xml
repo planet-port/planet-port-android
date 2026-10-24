@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider 共享根：私有 planet 文件存于 filesDir/planets/（AppConfigStore.paths.planetsDir） -->
+<paths>
+    <files-path
+        name="planets"
+        path="planets/" />
+</paths>

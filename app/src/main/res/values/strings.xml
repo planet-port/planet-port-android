@@ -297,9 +297,9 @@
     <string name="app_name">Planet Port</string>
     <string name="common_back">返回</string>
     <string name="common_copy">复制</string>
+    <string name="common_share">分享</string>
+    <string name="qrcode_title">二维码</string>
     <string name="common_operationFailed">操作失败</string>
-    <string name="card_copyNodeId">复制节点 ID</string>
-    <string name="card_copied">已复制</string>
     <string name="icon_color">底色</string>
     <string name="icon_current">当前图标</string>
     <string name="moon_actions">卫星操作</string>

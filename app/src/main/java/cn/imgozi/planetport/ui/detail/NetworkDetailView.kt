@@ -1,7 +1,9 @@
 package cn.imgozi.planetport.ui.detail
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,10 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -23,6 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,14 +40,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.graphics.Bitmap
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
+import cn.imgozi.planetport.ui.components.CopyableRow
+import cn.imgozi.planetport.ui.components.CopyableValue
 import cn.imgozi.planetport.ui.components.DnsConfigSection
 import cn.imgozi.planetport.ui.components.isDnsConfigValid
 import cn.imgozi.planetport.ui.form.FormRow
@@ -49,6 +62,10 @@ import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.ztStatusLabel
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
 /**
  * 网络详情页（iOS NetworkDetailView.swift 1:1）：
@@ -139,6 +156,7 @@ private fun NetworkDetailContent(
     var dnsMode by remember(entry.networkId) { mutableStateOf(entry.dnsMode) }
     var dnsServers by remember(entry.networkId) { mutableStateOf(entry.customDns) }
     var showDelete by remember { mutableStateOf(false) }
+    var showQR by remember { mutableStateOf(false) }
 
     val dnsDirty = dnsMode != entry.dnsMode || dnsServers != entry.customDns
 
@@ -149,7 +167,10 @@ private fun NetworkDetailContent(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         FormSection {
-            FormRow(stringResource(R.string.network_id), entry.networkId)
+            NetworkIdRow(
+                networkId = entry.networkId,
+                onShowQR = { showQR = true },
+            )
             FormRow(
                 stringResource(R.string.common_name),
                 snapshot?.name ?: entry.networkName,
@@ -159,7 +180,7 @@ private fun NetworkDetailContent(
                 snapshot?.let { stringResource(ztStatusLabel(it.statusCode)) } ?: "—",
             )
             FormRow(stringResource(R.string.common_type), snapshot?.type ?: "—")
-            FormRow("MAC", snapshot?.mac ?: "—")
+            CopyableRow("MAC", macText(snapshot))
             FormRow("MTU", snapshot?.let { it.mtu.toString() } ?: "—")
             FormRow(
                 stringResource(R.string.network_broadcast),
@@ -176,7 +197,7 @@ private fun NetworkDetailContent(
         }
 
         FormSection(header = stringResource(R.string.network_assignedAddrs)) {
-            MonoListOrEmpty(snapshot?.assignedAddrs.orEmpty())
+            MonoListOrEmpty(snapshot?.assignedAddrs.orEmpty(), copyable = true)
         }
 
         FormSection(header = stringResource(R.string.network_managedRoutes)) {
@@ -268,11 +289,136 @@ private fun NetworkDetailContent(
             },
         )
     }
+
+    if (showQR) {
+        NetworkQRSheet(
+            networkId = entry.networkId,
+            networkName = snapshot?.name?.takeIf { it.isNotEmpty() } ?: entry.networkName,
+            onDismiss = { showQR = false },
+        )
+    }
 }
 
-/** 等宽列表（地址/路由），空表显示「—」（对齐 iOS ForEach / Text("—")）。 */
+/**
+ * 网络 ID 行（iOS networkIdRow）：值可点复制（无常驻图标，避免与二维码入口双图标）
+ * + 二维码按钮。
+ */
 @Composable
-private fun MonoListOrEmpty(values: List<String>) {
+private fun NetworkIdRow(networkId: String, onShowQR: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.network_id), style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.weight(1f).padding(start = 12.dp))
+        CopyableValue(networkId, showsIcon = false)
+        Icon(
+            Icons.Filled.QrCode2,
+            contentDescription = stringResource(R.string.qrcode_title),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .size(15.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClickLabel = stringResource(R.string.qrcode_title),
+                ) { onShowQR() },
+        )
+    }
+}
+
+/** MAC 常用格式 aa:bb:cc:dd:ee:ff（隧道传 12 位无分隔 hex，UI 层格式化，iOS 同构）。 */
+private fun macText(snapshot: NetworkSnapshot?): String {
+    val raw = snapshot?.mac ?: return "—"
+    val hex = raw.lowercase()
+    if (hex.length != 12 || hex.any { Character.digit(it, 16) < 0 }) return raw
+    return hex.chunked(2).joinToString(":")
+}
+
+/**
+ * 网络 ID 二维码分享 sheet（iOS NetworkQRSheet）：二维码（内容 = 网络 ID 纯文本，
+ * 与 App 内扫码填 ID 互逆）+ 网络名称 + 网络 ID（点击复制）。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NetworkQRSheet(
+    networkId: String,
+    networkName: String,
+    onDismiss: () -> Unit,
+) {
+    // 纠错 M 对齐 iOS CIQRCodeGenerator inputCorrectionLevel；420px 足够 16 hex 字符清晰
+    val qr = remember(networkId) { qrImage(networkId) }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                stringResource(R.string.qrcode_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            qr?.let { bitmap ->
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = stringResource(R.string.qrcode_title),
+                    // 最近邻缩放保持模块边缘锐利（iOS interpolation(.none)）
+                    filterQuality = FilterQuality.None,
+                    modifier = Modifier.size(200.dp),
+                )
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    networkName.ifEmpty { networkId },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                CopyableValue(
+                    networkId,
+                    style = PlanetFonts.MonoCaption,
+                    iconSize = 9.dp,
+                )
+            }
+        }
+    }
+}
+
+/** zxing 生成二维码位图（失败返回 null，sheet 中省略图位）。 */
+private fun qrImage(content: String, size: Int = 420): ImageBitmap? {
+    return try {
+        val matrix = QRCodeWriter().encode(
+            content,
+            BarcodeFormat.QR_CODE,
+            size,
+            size,
+            mapOf(EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M),
+        )
+        val pixels = IntArray(size * size)
+        for (y in 0 until size) {
+            val offset = y * size
+            for (x in 0 until size) {
+                pixels[offset + x] = if (matrix[x, y]) 0xFF000000u.toInt() else 0xFFFFFFFFu.toInt()
+            }
+        }
+        Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888).asImageBitmap()
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** 等宽列表（地址/路由），空表显示「—」（对齐 iOS ForEach / Text("—")）；地址可复制。 */
+@Composable
+private fun MonoListOrEmpty(values: List<String>, copyable: Boolean = false) {
     if (values.isEmpty()) {
         Text(
             "—",
@@ -283,13 +429,22 @@ private fun MonoListOrEmpty(values: List<String>) {
     }
     Column {
         values.forEach { value ->
-            Text(
-                value,
-                style = PlanetFonts.MonoBody,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-            )
+            if (copyable) {
+                CopyableValue(
+                    value,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                )
+            } else {
+                Text(
+                    value,
+                    style = PlanetFonts.MonoBody,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                )
+            }
         }
     }
 }

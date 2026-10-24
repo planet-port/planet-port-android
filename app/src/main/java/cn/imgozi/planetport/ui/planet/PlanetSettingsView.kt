@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.planet
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.MonitorHeart
@@ -57,10 +59,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
+import cn.imgozi.planetport.ui.components.CopyableRow
 import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
+import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.theme.ThemeManager
+import java.io.File
 import java.text.DateFormat
 import androidx.appcompat.app.AppCompatDelegate
 import java.util.Date
@@ -161,7 +166,7 @@ fun PlanetSettingsView(
 
             FormSection(footer = stringResource(R.string.planet_info_footer)) {
                 FormRow("World ID", ui.worldId)
-                FormRow(
+                CopyableRow(
                     stringResource(R.string.planet_info_nodeId),
                     // 激活行星优先实时值，其余/离线回退档案缓存（对齐 iOS nodeIDText）
                     if (planetId == ui.activePlanetId && !node?.nodeId.isNullOrEmpty()) {
@@ -178,10 +183,7 @@ fun PlanetSettingsView(
                     valueStyle = MaterialTheme.typography.bodyLarge,
                 )
                 ui.fileInfo?.let { info ->
-                    FormRow(
-                        stringResource(R.string.planet_info_fileSize),
-                        fileSizeText(info.fileSize),
-                    )
+                    FileSizeRow(info.fileSize, planet.fileName)
                     FormRow(
                         stringResource(R.string.planet_info_revision),
                         revisionText(info.timestamp),
@@ -441,6 +443,67 @@ private fun fileSizeText(bytes: Int): String {
         }
     }
     return "$bytes B"
+}
+
+/**
+ * 文件大小行：值后附分享按钮（系统分享面板，iOS ShareLink 等价）。
+ * 文件不存在（并发删除）时不显示按钮。
+ */
+@Composable
+private fun FileSizeRow(bytes: Int, fileName: String?) {
+    val context = LocalContext.current
+    val shareLabel = stringResource(R.string.common_share)
+    // exists() 轻量 stat，按行星缓存一次避免每次重组都查盘
+    val shareable = remember(fileName) {
+        fileName?.let { File(File(context.filesDir, "planets"), it) }?.takeIf { it.exists() }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.planet_info_fileSize), style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.weight(1f).padding(start = 12.dp))
+        Text(
+            fileSizeText(bytes),
+            style = PlanetFonts.MonoBody,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        if (shareable != null) {
+            Icon(
+                Icons.Filled.Share,
+                contentDescription = shareLabel,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(15.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClickLabel = shareLabel,
+                    ) { sharePlanetFile(context, shareable) },
+            )
+        }
+    }
+}
+
+/** 经 FileProvider 授权外发 planet 文件（ACTION_SEND 系统分享面板）。 */
+private fun sharePlanetFile(context: android.content.Context, file: File) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(
+        context, "${context.packageName}.fileprovider", file,
+    )
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "application/octet-stream"
+        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        android.content.Intent.createChooser(send, context.getString(R.string.common_share)),
+    )
 }
 
 /** 修订时间（ZeroTier World 时间戳为毫秒；0 = 未知）。 */

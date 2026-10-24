@@ -19,13 +19,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,24 +37,22 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
+import cn.imgozi.planetport.ui.components.CopyableValue
 import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
 import cn.imgozi.planetport.ui.planet.PlanetIcon
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.theme.tertiaryTextColor
-import kotlinx.coroutines.delay
 
 /** systemGray（iOS 行星卡右下齿轮用色：固定装饰灰，不随语义色变化）。 */
 private val GearGray = Color(0xFF8E8E93)
@@ -159,7 +155,7 @@ fun PlanetCardView(
             maxLines = 1,
             textAlign = TextAlign.Center,
         )
-        IdLine(nodeId, moonCount, isPreview, tertiary)
+        IdLine(nodeId, moonCount, tertiary)
     }
 }
 
@@ -226,54 +222,23 @@ private fun StatusBadge(inUse: Boolean, modifier: Modifier = Modifier) {
 }
 
 /**
- * ID 行（iOS :92-121）：16sp monospaced tertiary + 复制图标（成功短暂变对勾）；
- * moon>0 时以间隔号「·」跟随「卫星 x N」。点击复制节点 ID（未知「-」与预览态不响应）。
+ * ID 行（iOS :92-121）：16sp monospaced tertiary，点击复制（无常驻图标，
+ * 成功瞬间短暂显示对勾）；moon>0 时以间隔号「·」跟随「卫星 x N」。
  */
 @Composable
-private fun IdLine(nodeId: String, moonCount: Int, isPreview: Boolean, tertiary: Color) {
-    // 小文本同步拷贝即可（同 Common.CopyableText 的取舍说明）
-    @Suppress("DEPRECATION")
-    val clipboard = LocalClipboardManager.current
-    val success = LocalPlanetStatusColors.current.good
-    var copied by remember { mutableStateOf(false) }
-
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(800)
-            copied = false
-        }
-    }
-
+private fun IdLine(nodeId: String, moonCount: Int, tertiary: Color) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.then(
-            if (!isPreview && nodeId != "-") {
-                Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) {
-                    clipboard.setText(AnnotatedString(nodeId))
-                    copied = true
-                }
-            } else {
-                Modifier
-            },
-        ),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(nodeId, style = PlanetFonts.MonoId, color = tertiary, maxLines = 1)
-        Spacer(Modifier.size(4.dp))
-        Icon(
-            imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-            contentDescription = stringResource(
-                if (copied) R.string.card_copied else R.string.card_copyNodeId,
-            ),
-            tint = if (copied) success else tertiary,
-            modifier = Modifier.size(11.dp),
+        CopyableValue(
+            text = nodeId,
+            showsIcon = false,
+            style = PlanetFonts.MonoId,
+            color = tertiary,
         )
         if (moonCount > 0) {
-            Spacer(Modifier.size(4.dp))
             Text("·", style = MaterialTheme.typography.bodyMedium, color = tertiary)
-            Spacer(Modifier.size(4.dp))
             Text(
                 stringResource(R.string.planetcard_moonCount, moonCount),
                 style = MaterialTheme.typography.bodyMedium,

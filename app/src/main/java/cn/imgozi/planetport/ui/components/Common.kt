@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -26,7 +27,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.annotation.StringRes
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,12 +38,14 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
+import cn.imgozi.planetport.ui.theme.PlanetFonts
 import kotlinx.coroutines.delay
 
 /** 语义状态圆点（iOS NetworkCardView 状态行，默认 6pt）。 */
@@ -103,25 +105,24 @@ fun SectionCard(
 }
 
 /**
- * 点击复制文本（对齐 iOS：doc.on.doc 图标，成功后短暂变绿色对勾）。
- * 图标包在 44pt 透明热区内补足触控目标（iOS §3 纪律）。
- *
- * @param contentDescriptionRes 无障碍标签资源，同时作为点击语义标签
+ * 可复制值文本（iOS CopyableValue 1:1）：点击复制到剪贴板，图标位置短暂变
+ * 对勾（0.8s 还原）；[showsIcon] 为 false 时无常驻图标，仅复制成功瞬间显示。
+ * 空串与「—」「-」占位不响应。iOS 以透明热区外扩 5pt 补命中区，Compose 布局
+ * 不可越界，热区 = 文本 + 图标内容本身（行场景另有 44dp 行高兜底）。
  */
 @Composable
-fun CopyableText(
+fun CopyableValue(
     text: String,
     modifier: Modifier = Modifier,
-    style: TextStyle = MaterialTheme.typography.bodySmall,
+    showsIcon: Boolean = true,
+    style: TextStyle = PlanetFonts.MonoBody,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    iconSize: Dp = 14.dp,
-    @StringRes contentDescriptionRes: Int = R.string.common_copy,
+    iconSize: Dp = 11.dp,
 ) {
     // LocalClipboardManager.setText：现代 LocalClipboard 为 suspend API，
     // 此处同步拷贝即可（小文本，无需协程），deprecation 由 T7 资源化时一并处理
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
-    val contentDescription = stringResource(contentDescriptionRes)
     val successColor = LocalPlanetStatusColors.current.good
     var copied by remember { mutableStateOf(false) }
 
@@ -133,23 +134,57 @@ fun CopyableText(
     }
 
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(HomeMetrics.radiusSmall))
-            .clickable(onClickLabel = contentDescription) {
-                clipboard.setText(AnnotatedString(text))
-                copied = true
-            },
+        modifier = modifier.clickable(
+            onClickLabel = stringResource(R.string.common_copy),
+            enabled = text.isNotEmpty() && text != "—" && text != "-",
+        ) {
+            clipboard.setText(AnnotatedString(text))
+            copied = true
+        },
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(text, style = style, color = color)
-        Box(modifier = Modifier.size(HomeMetrics.minTouchTarget), contentAlignment = Alignment.Center) {
+        Text(
+            text,
+            style = style,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.MiddleEllipsis,
+        )
+        if (showsIcon || copied) {
             Icon(
                 imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-                contentDescription = contentDescription,
-                tint = if (copied) successColor else color,
+                contentDescription = stringResource(R.string.common_copy),
+                tint = if (copied) {
+                    successColor
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                },
                 modifier = Modifier.size(iconSize),
             )
         }
+    }
+}
+
+/** 详情页「标题 + 可复制值」行（iOS CopyableRow）：标题左、值右，值整体可点复制。 */
+@Composable
+fun CopyableRow(
+    title: String,
+    text: String,
+    modifier: Modifier = Modifier,
+    showsIcon: Boolean = true,
+    style: TextStyle = PlanetFonts.MonoBody,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.weight(1f).padding(start = 12.dp))
+        CopyableValue(text = text, showsIcon = showsIcon, style = style)
     }
 }
 

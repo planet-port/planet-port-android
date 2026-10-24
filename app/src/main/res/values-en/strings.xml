@@ -297,9 +297,9 @@
     <string name="app_name">Planet Port</string>
     <string name="common_back">Back</string>
     <string name="common_copy">Copy</string>
+    <string name="common_share">Share</string>
+    <string name="qrcode_title">QR Code</string>
     <string name="common_operationFailed">Operation failed</string>
-    <string name="card_copyNodeId">Copy node ID</string>
-    <string name="card_copied">Copied</string>
     <string name="icon_color">Background</string>
     <string name="icon_current">Current icon</string>
     <string name="moon_actions">Moon actions</string>
