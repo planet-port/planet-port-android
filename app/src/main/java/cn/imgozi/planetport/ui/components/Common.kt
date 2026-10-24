@@ -35,6 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -124,6 +127,7 @@ fun CopyableValue(
     @Suppress("DEPRECATION")
     val clipboard = LocalClipboardManager.current
     val successColor = LocalPlanetStatusColors.current.good
+    val copyLabel = stringResource(R.string.common_copy)
     var copied by remember { mutableStateOf(false) }
 
     LaunchedEffect(copied) {
@@ -135,11 +139,16 @@ fun CopyableValue(
 
     Row(
         modifier = modifier.clickable(
-            onClickLabel = stringResource(R.string.common_copy),
+            onClickLabel = copyLabel,
             enabled = text.isNotEmpty() && text != "—" && text != "-",
         ) {
             clipboard.setText(AnnotatedString(text))
             copied = true
+        }.semantics {
+            // iOS 整元素 label=copy + value=text：无障碍整块读「复制 + 当前值」，
+            // 图标退为装饰（contentDescription = null），避免逐节点重复播报
+            contentDescription = copyLabel
+            stateDescription = text
         },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -154,7 +163,7 @@ fun CopyableValue(
         if (showsIcon || copied) {
             Icon(
                 imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-                contentDescription = stringResource(R.string.common_copy),
+                contentDescription = null,
                 tint = if (copied) {
                     successColor
                 } else {

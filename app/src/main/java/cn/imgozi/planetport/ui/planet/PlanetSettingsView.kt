@@ -57,6 +57,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.components.CopyableRow
@@ -183,7 +184,7 @@ fun PlanetSettingsView(
                     valueStyle = MaterialTheme.typography.bodyLarge,
                 )
                 ui.fileInfo?.let { info ->
-                    FileSizeRow(info.fileSize, planet.fileName)
+                    FileSizeRow(info, planet.fileName)
                     FormRow(
                         stringResource(R.string.planet_info_revision),
                         revisionText(info.timestamp),
@@ -450,11 +451,13 @@ private fun fileSizeText(bytes: Int): String {
  * 文件不存在（并发删除）时不显示按钮。
  */
 @Composable
-private fun FileSizeRow(bytes: Int, fileName: String?) {
+private fun FileSizeRow(info: PlanetImporter.PlanetFileInfo, fileName: String?) {
     val context = LocalContext.current
     val shareLabel = stringResource(R.string.common_share)
-    // exists() 轻量 stat，按行星缓存一次避免每次重组都查盘
-    val shareable = remember(fileName) {
+    // exists() 轻量 stat，按行星缓存一次避免每次重组都查盘；fileInfo 一并作 key：
+    // 页面停留期间文件被删/重导入会经 configChanges 重读出新的 fileInfo，此时重查
+    // exists()，分享按钮显隐不滞留旧状态
+    val shareable = remember(fileName, info) {
         fileName?.let { File(File(context.filesDir, "planets"), it) }?.takeIf { it.exists() }
     }
 
@@ -468,7 +471,7 @@ private fun FileSizeRow(bytes: Int, fileName: String?) {
         Text(stringResource(R.string.planet_info_fileSize), style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.weight(1f).padding(start = 12.dp))
         Text(
-            fileSizeText(bytes),
+            fileSizeText(info.fileSize),
             style = PlanetFonts.MonoBody,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

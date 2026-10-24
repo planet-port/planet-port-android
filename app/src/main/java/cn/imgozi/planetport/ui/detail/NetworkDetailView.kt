@@ -33,9 +33,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +47,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.collectAsState
@@ -62,6 +66,8 @@ import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.ztStatusLabel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -200,11 +206,15 @@ private fun NetworkDetailContent(
         }
 
         FormSection(header = stringResource(R.string.network_assignedAddrs)) {
-            MonoListOrEmpty(snapshot?.assignedAddrs.orEmpty(), copyable = true)
+            MonoListOrEmpty(
+                snapshot?.assignedAddrs.orEmpty(),
+                labelRes = R.string.network_addrLabel,
+                copyable = true,
+            )
         }
 
         FormSection(header = stringResource(R.string.network_managedRoutes)) {
-            MonoListOrEmpty(snapshot?.routes.orEmpty())
+            MonoListOrEmpty(snapshot?.routes.orEmpty(), labelRes = R.string.network_routeLabel)
         }
 
         FormSection(
@@ -353,8 +363,12 @@ private fun NetworkQRSheet(
     networkName: String,
     onDismiss: () -> Unit,
 ) {
-    // 纠错 M 对齐 iOS CIQRCodeGenerator inputCorrectionLevel；420px 足够 16 hex 字符清晰
-    val qr = remember(networkId) { qrImage(networkId) }
+    // 纠错 M 对齐 iOS CIQRCodeGenerator inputCorrectionLevel；420px 足够 16 hex 字符清晰。
+    // 编码 + 位图分配放后台线程（组合期主线程同步生成在低端机开 sheet 会掉帧），
+    // 生成完成前省略图位
+    val qr by produceState<ImageBitmap?>(initialValue = null, networkId) {
+        value = withContext(Dispatchers.Default) { qrImage(networkId) }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -420,9 +434,17 @@ private fun qrImage(content: String, size: Int = 420): ImageBitmap? {
     }
 }
 
-/** 等宽列表（地址/路由），空表显示「—」（对齐 iOS ForEach / Text("—")）；地址可复制。 */
+/**
+ * 等宽列表（地址/路由），空表显示「—」（对齐 iOS ForEach / Text("—")）。
+ * 每行左「地址/路由 N」标签（[labelRes]，iOS network.addrLabel / network.routeLabel）、
+ * 右等宽值（FormRow 同构：值右对齐）；地址行值可复制。
+ */
 @Composable
-private fun MonoListOrEmpty(values: List<String>, copyable: Boolean = false) {
+private fun MonoListOrEmpty(
+    values: List<String>,
+    @StringRes labelRes: Int,
+    copyable: Boolean = false,
+) {
     if (values.isEmpty()) {
         Text(
             "—",
@@ -432,22 +454,31 @@ private fun MonoListOrEmpty(values: List<String>, copyable: Boolean = false) {
         return
     }
     Column {
-        values.forEach { value ->
-            if (copyable) {
-                CopyableValue(
-                    value,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 10.dp),
-                )
-            } else {
+        values.forEachIndexed { index, value ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp)
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    value,
-                    style = PlanetFonts.MonoBody,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 10.dp),
+                    stringResource(labelRes, index + 1),
+                    style = MaterialTheme.typography.bodyLarge,
                 )
+                Spacer(Modifier.weight(1f).padding(start = 12.dp))
+                if (copyable) {
+                    CopyableValue(value)
+                } else {
+                    Text(
+                        value,
+                        style = PlanetFonts.MonoBody,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.MiddleEllipsis,
+                        textAlign = TextAlign.End,
+                    )
+                }
             }
         }
     }

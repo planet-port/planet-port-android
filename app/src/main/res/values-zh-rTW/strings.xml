@@ -198,6 +198,7 @@
     <string name="moon_seedPlaceholder">Seed（16 位 hex）</string>
     <string name="moon_title">衛星</string>
     <string name="moon_worldIdPlaceholder">World ID（16 位 hex）</string>
+    <string name="network_addrLabel">位址%1$d</string>
     <string name="network_applyDns">套用 DNS 設定</string>
     <string name="network_assignedAddrs">分配的位址</string>
     <string name="network_bridge">橋接</string>
@@ -210,6 +211,7 @@
     <string name="network_dnsPending">等待網路下發…</string>
     <string name="network_id">網路 ID</string>
     <string name="network_managedRoutes">託管路由</string>
+    <string name="network_routeLabel">路由%1$d</string>
     <string name="network_routeVia">經 ZeroTier 路由（預設路由）</string>
     <string name="network_routeVia_footer">開啟後該網路的預設路由經 ZeroTier，立即生效</string>
     <string name="network_routeVia_lockedFooter">多網路同時連線時不可用</string>

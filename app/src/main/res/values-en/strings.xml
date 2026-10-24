@@ -198,6 +198,7 @@
     <string name="moon_seedPlaceholder">Seed (16-digit hex)</string>
     <string name="moon_title">Moons</string>
     <string name="moon_worldIdPlaceholder">World ID (16-digit hex)</string>
+    <string name="network_addrLabel">Address %1$d</string>
     <string name="network_applyDns">Apply DNS Settings</string>
     <string name="network_assignedAddrs">Assigned Addresses</string>
     <string name="network_bridge">Bridge</string>
@@ -210,6 +211,7 @@
     <string name="network_dnsPending">Waiting for network…</string>
     <string name="network_id">Network ID</string>
     <string name="network_managedRoutes">Managed Routes</string>
+    <string name="network_routeLabel">Route %1$d</string>
     <string name="network_routeVia">Route via ZeroTier (Default Route)</string>
     <string name="network_routeVia_footer">When enabled, this network\'s default route goes through ZeroTier, effective immediately</string>
     <string name="network_routeVia_lockedFooter">Unavailable while multiple networks are connected</string>
