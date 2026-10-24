@@ -12,6 +12,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -351,7 +352,11 @@ internal class TunnelManager(
             for (r in v4Routes) builder.addRoute(r.addr, r.prefix)
             for (r in v6Routes) builder.addRoute(r.addr, r.prefix)
             for (dns in dnsServers) builder.addDnsServer(dns)
-            withContext(Dispatchers.IO) { builder.establish() }
+            // NonCancellable：establish 已向系统建好新 fd，若此处因协程被取消
+            // （服务停机竞态）抛 CancellationException 跳过 swap，fd 失主泄漏且
+            // 旧 TUN 留存。放进不可取消上下文保证一路走完；迟到的 swap 由
+            // Dataplane 停机闩锁拒绝并关 fd（P3 终审 M3 修正结论）
+            withContext(Dispatchers.IO + NonCancellable) { builder.establish() }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
