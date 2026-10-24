@@ -1,0 +1,427 @@
+package cn.imgozi.planetport.ui.home
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import cn.imgozi.planetport.store.NetworkEntry
+import cn.imgozi.planetport.store.PlanetImporter
+import cn.imgozi.planetport.store.PlanetProfile
+import cn.imgozi.planetport.store.StoreRepo
+import cn.imgozi.planetport.tunnel.NetConf
+import cn.imgozi.planetport.tunnel.TunnelController
+import cn.imgozi.planetport.tunnel.TunnelState
+import cn.imgozi.planetport.tunnel.TunnelStateBus
+import cn.imgozi.planetport.ui.ztStatusText
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.max
+
+/** 首页聚合状态（store 全量 + TunnelStateBus 五流的 level-triggered 快照）。 */
+data class HomeUiState(
+    /** 首次 reload 完成（分页指示器据此初始化，避免首帧闪回官方行星）。 */
+    val loaded: Boolean = false,
+    val planets: List<PlanetProfile> = emptyList(),
+    val selectedPlanetId: String = PlanetProfile.OFFICIAL_ID,
+    val activePlanetId: String = PlanetProfile.OFFICIAL_ID,
+    /** 是否激活过任何行星（未激活过不显示「上次使用」角标，iOS hasActivatedPlanet）。 */
+    val hasActivatedPlanet: Boolean = false,
+    /** 各行星各自的网络列表（分页并行渲染，避免相邻页共享当前页数据）。 */
+    val planetNetworks: Map<String, List<NetworkEntry>> = emptyMap(),
+    /** 各行星 moon 数（planetId 为 null 的遗留记录计入当前选中行星，iOS 同构）。 */
+    val moonCounts: Map<String, Int> = emptyMap(),
+    /** 各行星节点 ID 缓存（隧道在跑时回写，离线可显示）。 */
+    val planetNodeIds: Map<String, String> = emptyMap(),
+    /** 同时连接软上限（2..6，取 max(2, 偏好值)，iOS HomeView 同构）。 */
+    val maxNetworks: Int = 2,
+    /** 隧道在跑（Running/Starting/Reconnecting，对齐 iOS vpnRunning 判定）。 */
+    val tunnelRunning: Boolean = false,
+    /** nwid → ZT 原始状态码（隧道侧契约：文案在 UI 层生成）。 */
+    val networkStatuses: Map<String, Int> = emptyMap(),
+    /** nwid → 已分配地址（去前缀，仅当前隧道行星有数据）。 */
+    val assignedAddrs: Map<String, List<String>> = emptyMap(),
+)
+
+/** 首页一次性弹窗事件（iOS 的多组 .alert 均为「标题 + 内容」形态，收敛为一类）。 */
+sealed interface HomeEvent {
+    data class Notice(val title: String, val message: String) : HomeEvent
+}
+
+/**
+ * 首页编排：聚合 store 与隧道状态；网络开关、加入网络、添加行星等全部
+ * 配置变更走本类（对齐 iOS AppState + HomeView 编排职责）。
+ *
+ * 数据契约：configChanges 有损合并 → 订阅即全量重读（level-triggered）；
+ * 隧道侧五流为 StateFlow 热流，直接映射。写配置后显式 reload（selectPlanet/
+ * activatePlanet 静默不发信号）。
+ */
+class HomeViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val _state = MutableStateFlow(HomeUiState())
+    val state: StateFlow<HomeUiState> = _state.asStateFlow()
+
+    private val _events = MutableSharedFlow<HomeEvent>(extraBufferCapacity = 8)
+    val events: SharedFlow<HomeEvent> = _events.asSharedFlow()
+
+    /** 开关请求处理中（加载圈替代 Toggle；iOS pendingNetworks 上移至 VM）。 */
+    private val _pending = MutableStateFlow<Set<String>>(emptySet())
+    val pendingNetworks: StateFlow<Set<String>> = _pending.asStateFlow()
+
+    /** VPN 授权请求器（MainActivity.requestVpnPermission，组合期注入）。 */
+    private var permissionRequester: ((onGranted: () -> Unit) -> Unit)? = null
+
+    /** 非空 = 有进行中的启动尝试（Failed 到来时据此区分「启动失败」与运行期 TUN 故障）。 */
+    private var startAttemptAt = 0L
+
+    private val appContext get() = getApplication<Application>()
+
+    init {
+        viewModelScope.launch {
+            // 启动时隧道未存活：上次标记为已连接的网络实际已离线，复位避免
+            // 「等待 VPN 连接」悬置与下次启动悄悄重连（iOS resetStaleNetworksIfNeeded）
+            if (!TunnelController.isRunning) StoreRepo.store.resetAllNetworkActivation()
+            reload()
+        }
+        viewModelScope.launch { StoreRepo.configChanges.collect { reload() } }
+        viewModelScope.launch { TunnelStateBus.tunnelState.collect { onTunnelState(it) } }
+        viewModelScope.launch {
+            TunnelStateBus.nodeStatus.collect { info ->
+                val id = info?.nodeId.orEmpty()
+                if (id.isNotEmpty()) cacheNodeId(id)
+            }
+        }
+        viewModelScope.launch {
+            TunnelStateBus.networkStatuses.collect {
+                _state.update { s -> s.copy(networkStatuses = it) }
+                checkAlertableStatus(it)
+            }
+        }
+        viewModelScope.launch {
+            TunnelStateBus.networkConfigs.collect { configs ->
+                _state.update { s ->
+                    s.copy(
+                        assignedAddrs = configs.mapValues { (_, conf) ->
+                            conf.assignedAddrs.map { addr -> addr.substringBefore('/') }
+                        },
+                    )
+                }
+                cacheNetworkNames(configs)
+            }
+        }
+    }
+
+    // MARK: - 状态聚合
+
+    /** store 全量重读（level-triggered；任何写路径后亦显式调用）。 */
+    private suspend fun reload() {
+        val store = StoreRepo.store
+        val planets = store.readPlanets()
+        val selected = store.selectedPlanetId()
+        val active = store.activePlanetId()
+        val hasActivated = store.hasActivatedPlanet()
+        val prefs = store.readPrefs()
+        val networks = store.readNetworksByPlanet()
+        val moonCounts = planets.associate { it.id to 0 }.toMutableMap()
+        for (moon in store.readAllMoons()) {
+            val key = moon.planetId ?: selected
+            moonCounts[key] = (moonCounts[key] ?: 0) + 1
+        }
+        _state.update {
+            it.copy(
+                loaded = true,
+                planets = planets,
+                selectedPlanetId = selected,
+                activePlanetId = active,
+                hasActivatedPlanet = hasActivated,
+                planetNetworks = networks,
+                moonCounts = moonCounts,
+                planetNodeIds = planets.mapNotNull { p -> p.lastNodeId?.let { id -> p.id to id } }.toMap(),
+                maxNetworks = max(2, prefs.maxNetworks),
+            )
+        }
+    }
+
+    private fun onTunnelState(st: TunnelState) {
+        _state.update {
+            it.copy(
+                tunnelRunning = st is TunnelState.Running ||
+                    st is TunnelState.Starting || st is TunnelState.Reconnecting
+            )
+        }
+        when (st) {
+            is TunnelState.Running -> startAttemptAt = 0
+            is TunnelState.Failed -> {
+                val fromStartAttempt = startAttemptAt > 0
+                startAttemptAt = 0
+                // 仅启动尝试期的 Failed 报「无法启动 VPN」；运行期 TUN 故障由状态行呈现
+                if (fromStartAttempt) emitNotice("无法启动 VPN", st.reason)
+            }
+            else -> Unit
+        }
+    }
+
+    // MARK: - 行星浏览
+
+    /** 只切换浏览上下文，不触碰隧道（iOS AppState.selectPlanet）。 */
+    fun selectPlanet(id: String) {
+        viewModelScope.launch {
+            StoreRepo.store.selectPlanet(id)
+            reload()
+        }
+    }
+
+    // MARK: - 网络开关
+
+    /**
+     * 开/关网络（对齐 iOS HomeView.setNetworkActive + performNetworkActivate）。
+     * 开：软上限判定 → 达限回调 [onOverLimit]（UI 弹确认，「仍要开启」执行 force）；
+     * 关：写配置后该行星（当前隧道行星）零启用网络则停隧道。
+     */
+    fun setNetworkActive(
+        planetId: String,
+        entry: NetworkEntry,
+        active: Boolean,
+        onOverLimit: (force: () -> Unit) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            if (!active) {
+                deactivate(planetId, entry)
+                return@launch
+            }
+            val networks = StoreRepo.store.readNetworks(planetId)
+            val activeCount = networks.count { it.lastActivated && it.networkId != entry.networkId }
+            if (activeCount >= _state.value.maxNetworks) {
+                onOverLimit { viewModelScope.launch { activate(planetId, entry) } }
+                return@launch
+            }
+            activate(planetId, entry)
+        }
+    }
+
+    /** 关网络：置 lastActivated=false → 写配置 → 该行星零启用则停隧道。 */
+    private suspend fun deactivate(planetId: String, entry: NetworkEntry) {
+        val store = StoreRepo.store
+        val networks = store.readNetworks(planetId)
+        val index = networks.indexOfFirst { it.networkId == entry.networkId }
+        if (index < 0) return
+        val updated = networks.toMutableList()
+        updated[index] = updated[index].copy(lastActivated = false)
+        store.writeNetworks(updated, planetId)
+        val selected = store.selectedPlanetId()
+        if (planetId == selected && selected == store.activePlanetId() &&
+            updated.none { it.lastActivated }
+        ) {
+            TunnelController.stop(appContext)
+        }
+    }
+
+    /**
+     * 开网络（对齐 iOS performNetworkActivate）：置 lastActivated + 清 lastConflict +
+     * 多网自动关 routeVia（一次性提示）→ 快速路径（同行星且隧道在跑：writeNetworks
+     * 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈）；否则激活行星 + 起停隧道。
+     */
+    private suspend fun activate(planetId: String, entry: NetworkEntry) {
+        val store = StoreRepo.store
+        val networks = store.readNetworks(planetId)
+        val index = networks.indexOfFirst { it.networkId == entry.networkId }
+        if (index < 0) return
+        val updated = networks.toMutableList()
+        // 重新手动开启视为用户已知冲突，清除上次的冲突断开记录
+        updated[index] = updated[index].copy(lastActivated = true, lastConflict = null)
+        var routeViaTurnedOff = false
+        if (updated.count { it.lastActivated } > 1) {
+            for (i in updated.indices) if (updated[i].routeViaZeroTier) {
+                updated[i] = updated[i].copy(routeViaZeroTier = false)
+                routeViaTurnedOff = true
+            }
+        }
+        store.writeNetworks(updated, planetId)
+        if (routeViaTurnedOff) {
+            emitNotice("多网络连接", "已自动关闭「经 ZeroTier 路由（默认路由）」：多网络同时连接时不可用")
+        }
+
+        val selected = store.selectedPlanetId()
+        val wasRunning = TunnelController.isRunning
+        val fastPath = planetId == selected && selected == store.activePlanetId() && wasRunning
+        _pending.value = _pending.value + entry.networkId
+        if (fastPath) {
+            // 给隧道一个响应窗口，避免开关上的加载圈一闪而过（iOS 600ms 同构）
+            delay(600)
+            clearPending(entry.networkId)
+            return
+        }
+        applySelectedPlanetAndStart(selected)
+        waitTunnelSettled(requireLeaveRunning = wasRunning)
+        clearPending(entry.networkId)
+    }
+
+    /**
+     * 应用所选行星到隧道并确保运行（对齐 iOS applySelectedPlanetAndStartVPN）：
+     * 行星变化且隧道在跑 → 热重启（核心 planet 文件只在启动时装载，必须重启）；
+     * 未跑 → 授权后启动；Failed 存活态先停再启（服务双 START 守卫会吞掉
+     * ensureStarted 的启动指令，用户无法经开关恢复）。
+     */
+    private suspend fun applySelectedPlanetAndStart(selectedPlanetId: String) {
+        val planetChanged = StoreRepo.store.activatePlanet(selectedPlanetId)
+        _state.update { it.copy(activePlanetId = StoreRepo.store.activePlanetId()) }
+        when {
+            TunnelController.isRunning ->
+                if (planetChanged) TunnelController.restartIfRunning(appContext)
+            else -> {
+                if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                    TunnelController.stop(appContext)
+                }
+                startAttemptAt = System.currentTimeMillis()
+                TunnelController.ensureStarted(
+                    appContext,
+                    requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
+                    onPermissionDenied = { emitNotice("无法启动 VPN", "VPN 授权被拒") },
+                )
+            }
+        }
+    }
+
+    /** 等待起停/重启收口（Running/Failed 或超时）；重启路径先等状态离开 Running。 */
+    private suspend fun waitTunnelSettled(requireLeaveRunning: Boolean) {
+        var leftRunning = !requireLeaveRunning
+        var waited = 0
+        while (waited < 15_000) {
+            delay(250)
+            waited += 250
+            when (val st = TunnelStateBus.tunnelState.value) {
+                is TunnelState.Failed -> return
+                is TunnelState.Running -> if (leftRunning) return
+                else -> leftRunning = true
+            }
+        }
+    }
+
+    private fun clearPending(networkId: String) {
+        _pending.value = _pending.value - networkId
+    }
+
+    // MARK: - 加入网络
+
+    /**
+     * 加入网络（仅保存不连接，iOS JoinNetworkSheet.join）：
+     * 当前行星内按 ID 查重，重复经 [onDuplicate] 回调由 UI 弹窗。
+     */
+    fun joinNetwork(entry: NetworkEntry, onDuplicate: () -> Unit) {
+        viewModelScope.launch {
+            val store = StoreRepo.store
+            val planetId = store.selectedPlanetId()
+            val existing = store.readNetworks(planetId)
+            if (existing.any { it.networkId == entry.networkId }) {
+                onDuplicate()
+                return@launch
+            }
+            store.writeNetworks(existing + entry, planetId)
+        }
+    }
+
+    // MARK: - 添加行星
+
+    /**
+     * 从文件数据添加行星：World ID 查重（含官方内置）→ 落库 → 选中新行星。
+     * [onDone] 二参为错误文案（含查重与导入失败），null = 成功。
+     */
+    fun importPlanetFile(data: ByteArray, name: String, onDone: (PlanetProfile?, String?) -> Unit) {
+        viewModelScope.launch {
+            val result = runCatching {
+                val worldId = PlanetImporter.worldIdOf(data)
+                if (worldId != null && worldId in StoreRepo.planetImporter.existingWorldIds()) {
+                    error("已存在相同的 Planet（World ID $worldId），不能重复添加。")
+                }
+                StoreRepo.planetImporter.importPlanetData(data, name)
+            }
+            result.fold(
+                onSuccess = { profile ->
+                    StoreRepo.store.selectPlanet(profile.id)
+                    reload()
+                    onDone(profile, null)
+                },
+                onFailure = { onDone(null, it.message ?: "导入失败") },
+            )
+        }
+    }
+
+    /** 仅下载 planet 文件内容（「先就绪、后添加」交互；校验与落库归 importPlanetFile）。 */
+    fun downloadPlanet(url: String, onDone: (ByteArray?, String?) -> Unit) {
+        viewModelScope.launch {
+            runCatching { StoreRepo.planetImporter.downloadPlanetFile(url) }.fold(
+                onSuccess = { onDone(it, null) },
+                onFailure = { onDone(null, it.message ?: "planet 下载失败") },
+            )
+        }
+    }
+
+    // MARK: - 隧道运行期回写缓存
+
+    /** 节点 ID 缓存：隧道在跑读到即持久化到激活行星（iOS AppState.cacheNodeId）。 */
+    private suspend fun cacheNodeId(nodeId: String) {
+        val store = StoreRepo.store
+        val activeId = store.activePlanetId()
+        val planets = store.readPlanets()
+        val index = planets.indexOfFirst { it.id == activeId }
+        if (index < 0 || planets[index].lastNodeId == nodeId) return
+        val updated = planets.toMutableList()
+        updated[index] = updated[index].copy(lastNodeId = nodeId)
+        store.writePlanets(updated)
+        reload()
+    }
+
+    /** 网络名缓存：连接后快照名非空且与存量不同则回写（iOS cacheNetworkName）。 */
+    private suspend fun cacheNetworkNames(configs: Map<String, NetConf>) {
+        if (configs.isEmpty()) return
+        val store = StoreRepo.store
+        val planetId = store.activePlanetId()
+        val networks = store.readNetworks(planetId)
+        var changed = false
+        val updated = networks.map { entry ->
+            val name = configs[entry.networkId]?.name?.trim().orEmpty()
+            if (name.isNotEmpty() && name != entry.networkName) {
+                changed = true
+                entry.copy(networkName = name)
+            } else {
+                entry
+            }
+        }
+        if (changed) store.writeNetworks(updated, planetId)
+    }
+
+    // MARK: - 交互辅助
+
+    /** VPN 授权请求器注入（HomeView 组合期绑定 MainActivity 既有链）。 */
+    fun attachPermissionRequester(requester: (onGranted: () -> Unit) -> Unit) {
+        permissionRequester = requester
+    }
+
+    /**
+     * 需要弹窗提醒的异常网络状态（对齐 iOS onChange(networkStatuses)）：
+     * 当前隧道行星且隧道在跑时，notFound/portError/clientTooOld 触发提示
+     * （待授权 2/6 属正常流程不弹，状态行显示即可）。
+     */
+    private fun checkAlertableStatus(statuses: Map<String, Int>) {
+        val s = _state.value
+        if (s.selectedPlanetId != s.activePlanetId || !s.tunnelRunning) return
+        for ((nwid, code) in statuses) {
+            if (code == 3 || code == 4 || code == 5) {
+                val name = s.planetNetworks[s.selectedPlanetId]
+                    ?.firstOrNull { it.networkId == nwid }?.networkName ?: nwid
+                emitNotice("网络状态异常", "网络 $name：${ztStatusText(code)}")
+                break
+            }
+        }
+    }
+
+    private fun emitNotice(title: String, message: String) {
+        _events.tryEmit(HomeEvent.Notice(title, message))
+    }
+}
