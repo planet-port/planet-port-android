@@ -3,6 +3,7 @@ package cn.imgozi.planetport.tunnel
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
 import kotlinx.coroutines.CoroutineScope
@@ -40,17 +41,22 @@ internal class ZeroTierVpnService : VpnService() {
         private const val ACTION_START = "cn.imgozi.planetport.action.START"
         private const val ACTION_STOP = "cn.imgozi.planetport.action.STOP"
 
-        fun start(context: Context) {
-            context.startService(
-                Intent(context, ZeroTierVpnService::class.java).setAction(ACTION_START)
-            )
+        // 统一 startForegroundService：app 退后台后 startService 抛
+        // IllegalStateException（后台启动限制），VPN 启停常发生在通知快捷方式/
+        // 恢复路径等后台时刻。Service 侧各 action 分支保证 5s 窗口内
+        // startForeground（见 startTunnel 守卫与 stopTunnel 前置调用）
+        private fun dispatch(context: Context, action: String) {
+            val intent = Intent(context, ZeroTierVpnService::class.java).setAction(action)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
-        fun stop(context: Context) {
-            context.startService(
-                Intent(context, ZeroTierVpnService::class.java).setAction(ACTION_STOP)
-            )
-        }
+        fun start(context: Context) = dispatch(context, ACTION_START)
+
+        fun stop(context: Context) = dispatch(context, ACTION_STOP)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -63,8 +69,16 @@ internal class ZeroTierVpnService : VpnService() {
 
     private fun startTunnel() {
         // 双 START 守卫：二轮启动会 bind 9994 失败错置 Failed 状态；一轮存活则忽略
-        // 重复指令（通知在守卫之后——否则运行中被重复 START 会把常驻通知改回"启动中"）
-        if (scope?.isActive == true) return
+        // 重复指令。守卫内也须 startForeground——本意图经 startForegroundService
+        // 下发时系统要求 5s 窗口内起前台，否则崩。重发当前态通知而非「启动中」，
+        // 保持「通知文案不改回启动中」的既有语义
+        if (scope?.isActive == true) {
+            VpnNotification.start(
+                this,
+                if (TunnelStateBus.tunnelState.value is TunnelState.Running) "运行中" else "启动中",
+            )
+            return
+        }
         VpnNotification.start(this, "启动中")
         TunnelStateBus.setTunnelState(TunnelState.Starting)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -154,6 +168,10 @@ internal class ZeroTierVpnService : VpnService() {
     }
 
     private fun stopTunnel() {
+        // ACTION_STOP 同样可能经 startForegroundService 下发（后台停止场景）：
+        // 先起前台满足 5s 窗口义务，再走 stopForeground(true) 收口，通知随收口
+        // 移除不留存。onRevoke/启动失败路径重复 startForeground 幂等无害
+        VpnNotification.start(this, "已停止")
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
         scope?.cancel()
         scope = null
