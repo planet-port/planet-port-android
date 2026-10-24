@@ -42,7 +42,9 @@ internal class JsonFileStore(private val json: Json) {
             tmp.writeText(text)
             if (!tmp.renameTo(file)) {
                 tmp.delete()
-                throw IOException("配置写入失败（rename）: ${file.name}")
+                // 稳定英文技术标识串：磁盘故障才触发，message 可能经 VM 兜底透出，
+                // 不承载用户文案（消费侧有本地化兜底文案）
+                throw IOException("config write failed (rename): ${file.name}")
             }
         }
     }
