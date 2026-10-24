@@ -165,6 +165,9 @@
     <string name="home_alert_networkStatusError">Network Status Issue</string>
     <string name="home_alert_openAnyway">Enable Anyway</string>
     <string name="home_alert_openMore">Enable More Networks</string>
+    <string name="home_alert_switchPlanet">Switch Planet</string>
+    <string name="home_alert_switchPlanetMessage">The current planet is connected. Enabling this network will disconnect it and switch to the planet this network belongs to. Enable anyway?</string>
+    <string name="home_switch_disconnecting">Disconnecting current connection…</string>
     <string name="home_error_multiNetworkMessage">"Route via ZeroTier (default route)" was turned off automatically: it is unavailable while multiple networks are connected</string>
     <string name="home_error_cellularTitle">Cellular Data Not Enabled</string>
     <string name="home_error_cellularMessage">Currently on cellular data, which is not allowed in Settings</string>

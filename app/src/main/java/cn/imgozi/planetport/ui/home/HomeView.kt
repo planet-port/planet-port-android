@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -277,6 +279,47 @@ fun HomeView(activity: MainActivity) {
             confirmButton = {
                 TextButton(onClick = { notice = null }) {
                     Text(stringResource(R.string.common_ok))
+                }
+            },
+        )
+    }
+
+    // 跨行星切换交接弹窗（用户裁定交互，两阶段）：确认阶段提示 + 可取消；
+    // 断开阶段无按钮、不可取消、显示断开进度，停机终态确认后由 VM 关闭弹窗
+    state.switchDialog?.let { dlg ->
+        AlertDialog(
+            // 断开阶段不可点外取消（交接已启动，配置已落）
+            onDismissRequest = { if (!dlg.disconnecting) vm.cancelSwitchPlanet() },
+            title = { Text(stringResource(R.string.home_alert_switchPlanet)) },
+            text = {
+                if (dlg.disconnecting) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(stringResource(R.string.home_switch_disconnecting))
+                    }
+                } else {
+                    Text(stringResource(R.string.home_alert_switchPlanetMessage))
+                }
+            },
+            dismissButton = {
+                if (!dlg.disconnecting) {
+                    TextButton(onClick = { vm.cancelSwitchPlanet() }) {
+                        Text(stringResource(R.string.common_cancel))
+                    }
+                }
+            },
+            confirmButton = {
+                if (!dlg.disconnecting) {
+                    TextButton(onClick = { vm.confirmSwitchPlanet() }) {
+                        Text(
+                            stringResource(R.string.home_alert_openAnyway),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             },
         )

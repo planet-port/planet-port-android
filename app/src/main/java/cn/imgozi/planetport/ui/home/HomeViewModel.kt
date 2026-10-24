@@ -26,10 +26,25 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.max
+
+/**
+ * 跨行星切换交接弹窗（用户裁定的交互动效）：确认阶段提示切换会断开当前行星；
+ * 确认后进入断开阶段（弹窗保持打开、显示断开进度、不可取消），当前 VPN 确认
+ * 停机后关闭弹窗再起新行星。
+ */
+data class SwitchPlanetDialog(
+    /** 待开启的网络条目。 */
+    val entry: NetworkEntry,
+    /** 该网络归属的行星（切换目标）。 */
+    val planetId: String,
+    /** true = 已确认，正在断开当前 VPN（无按钮、不可取消）。 */
+    val disconnecting: Boolean = false,
+)
 
 /** 首页聚合状态（store 全量 + TunnelStateBus 五流的 level-triggered 快照）。 */
 data class HomeUiState(
@@ -64,6 +79,8 @@ data class HomeUiState(
     val networkConflicts: Map<String, String> = emptyMap(),
     /** nwid → 已分配地址（去前缀，仅当前隧道行星有数据）。 */
     val assignedAddrs: Map<String, List<String>> = emptyMap(),
+    /** 跨行星切换交接弹窗；null = 无弹窗。 */
+    val switchDialog: SwitchPlanetDialog? = null,
 )
 
 /** 首页一次性弹窗事件（iOS 的多组 .alert 均为「标题 + 内容」形态，收敛为一类）。 */
@@ -364,6 +381,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 deactivate(planetId, entry)
                 return@launch
             }
+            // 跨行星开启先确认（用户裁定交互）：当前行星隧道在跑时，开启另一行星
+            // 的网络必须先确认；确认后走「先断开、后启动」交接（confirmSwitchPlanet），
+            // 不确认不落任何配置。顺序在软上限之前（iOS switchConfirmTarget 同序）
+            if (planetId != StoreRepo.store.activePlanetId() && TunnelController.isRunning) {
+                _state.update {
+                    it.copy(switchDialog = SwitchPlanetDialog(entry, planetId))
+                }
+                return@launch
+            }
             val networks = StoreRepo.store.readNetworks(planetId)
             val activeCount = networks.count { it.lastActivated && it.networkId != entry.networkId }
             if (activeCount >= _state.value.maxNetworks) {
@@ -406,6 +432,32 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             )
             return
         }
+        writeActivatedConfig(planetId, entry)
+
+        // 应用目标全程锚定网络归属行星（iOS performNetworkActivate →
+        // applyPlanetAndStartVPN(planetId) 同构）：不重读 selectedPlanetId——
+        // 滑页竞态下选中态先行变化，以 selected 应用会激活错行星
+        val wasRunning = TunnelController.isRunning
+        // 快速路径=网络所属行星就是隧道行星且隧道在跑（iOS 同构）：writeNetworks
+        // 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈不重启
+        val fastPath = planetId == StoreRepo.store.activePlanetId() && wasRunning
+        _pending.value = _pending.value + entry.networkId
+        if (fastPath) {
+            // 给隧道一个响应窗口，避免开关上的加载圈一闪而过（iOS 600ms 同构）
+            delay(600)
+            clearPending(entry.networkId)
+            return
+        }
+        applySelectedPlanetAndStart(planetId)
+        waitTunnelSettled(requireLeaveRunning = wasRunning)
+        clearPending(entry.networkId)
+    }
+
+    /**
+     * 开启网络的落盘段（activate 与跨行星交接共用）：置 lastActivated + 清
+     * lastConflict + 多网自动关 routeVia（一次性提示）。
+     */
+    private suspend fun writeActivatedConfig(planetId: String, entry: NetworkEntry) {
         val store = StoreRepo.store
         val networks = store.readNetworks(planetId)
         val index = networks.indexOfFirst { it.networkId == entry.networkId }
@@ -427,24 +479,119 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 appContext.getString(R.string.home_error_multiNetworkMessage),
             )
         }
+    }
 
-        // 应用目标全程锚定网络归属行星（iOS performNetworkActivate →
-        // applyPlanetAndStartVPN(planetId) 同构）：不重读 selectedPlanetId——
-        // 滑页竞态下选中态先行变化，以 selected 应用会激活错行星
-        val wasRunning = TunnelController.isRunning
-        // 快速路径=网络所属行星就是隧道行星且隧道在跑（iOS 同构）：writeNetworks
-        // 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈不重启
-        val fastPath = planetId == store.activePlanetId() && wasRunning
-        _pending.value = _pending.value + entry.networkId
-        if (fastPath) {
-            // 给隧道一个响应窗口，避免开关上的加载圈一闪而过（iOS 600ms 同构）
-            delay(600)
+    /** 取消跨行星切换（仅确认阶段可取消；此时未落任何配置，直接收弹窗）。 */
+    fun cancelSwitchPlanet() {
+        _state.update { it.copy(switchDialog = null) }
+    }
+
+    /**
+     * 确认跨行星切换，交接时序（用户裁定，五步）：
+     * 1-2. 弹窗确认（本函数入口）；
+     * 3. 落配置 + 切指针 + 交接收敛 → **先停当前 VPN**，弹窗保持打开显示断开状态；
+     * 4. 停机终态确认后关闭弹窗；
+     * 5. 停→起之间留 [HANDOVER_DELAY_MS] 收口窗口再起新行星（核心按新指针装载）。
+     *
+     * 显式「先停后起」替代热重启编排：交接各阶段对用户可见、可判定，旧核心
+     * 在新核心启动前必然已收口，不存在两套启停交错。
+     */
+    fun confirmSwitchPlanet() {
+        val dlg = _state.value.switchDialog ?: return
+        if (dlg.disconnecting) return
+        viewModelScope.launch {
+            val entry = dlg.entry
+            _state.update { it.copy(switchDialog = dlg.copy(disconnecting = true)) }
+            _pending.value = _pending.value + entry.networkId
+            // 移动数据门控（与 activate 同口径）：拦截则收弹窗，不落任何配置
+            if (!StoreRepo.store.readPrefs().allowCellular && isMeteredNetwork()) {
+                _state.update { it.copy(switchDialog = null) }
+                clearPending(entry.networkId)
+                emitNotice(
+                    appContext.getString(R.string.home_error_cellularTitle),
+                    appContext.getString(R.string.home_error_cellularMessage),
+                )
+                return@launch
+            }
+            writeActivatedConfig(dlg.planetId, entry)
+            switchPlanetPointer(dlg.planetId)
+            // 先断开当前 VPN；弹窗不关，断开进度由 disconnecting 态呈现
+            if (TunnelController.isRunning) {
+                TunnelController.stop(appContext)
+                val settled = withTimeoutOrNull(STOP_SETTLE_TIMEOUT_MS) {
+                    TunnelStateBus.tunnelState.first {
+                        it !is TunnelState.Running && it !is TunnelState.Starting &&
+                            it !is TunnelState.Reconnecting
+                    }
+                }
+                if (settled == null) TunnelStateBus.log("切换行星：等待停机终态超时")
+            }
+            // 停机确认后关闭弹窗
+            _state.update { it.copy(switchDialog = null) }
+            // 停→起收口窗口（用户裁定 50~150ms 取中值）
+            delay(HANDOVER_DELAY_MS)
+            if (TunnelController.isRunning) {
+                // 停机超时兜底：仍在跑则走热重启（排队补发已内建），确保核心按新指针重建
+                TunnelController.restartIfRunning(appContext)
+            } else {
+                if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                    TunnelController.stop(appContext)
+                }
+                startAttemptAt = System.currentTimeMillis()
+                TunnelController.ensureStarted(
+                    appContext,
+                    requestPermission = { onGranted -> permissionRequester?.invoke(onGranted) },
+                    onPermissionDenied = {
+                        emitNotice(
+                            appContext.getString(R.string.home_error_vpnStartTitle),
+                            appContext.getString(R.string.home_error_vpnPermissionDenied),
+                        )
+                    },
+                )
+            }
+            waitTunnelSettled(requireLeaveRunning = false)
             clearPending(entry.networkId)
-            return
         }
-        applySelectedPlanetAndStart(planetId)
-        waitTunnelSettled(requireLeaveRunning = wasRunning)
-        clearPending(entry.networkId)
+    }
+
+    /**
+     * 行星指针切换 + 交接收敛（applySelectedPlanetAndStart 与跨行星交接共用）：
+     * activatePlanet 落指针后，旧行星启用标记清零（隧道已不再承载，残留会让
+     * 旧行星卡片显示错态；lastConflict 保留真实历史）、总线共享状态清空（旧核心
+     * 会话遗留不再有所属行星）、连接超时周期重置（新行星重新起算）。
+     * 返回 planetChanged（指针未变时跳过收敛，幂等无害）。
+     */
+    private suspend fun switchPlanetPointer(newPlanetId: String): Boolean {
+        val store = StoreRepo.store
+        val previousPlanetId = store.activePlanetId()
+        var planetChanged = false
+        // activatePlanet 失败只记日志：planetChanged 保持 false，后续重启联动按原
+        // 语义照走（指针未换成功时不重启与磁盘态一致；即便触发重启亦无害幂等）
+        storeWrite("activatePlanet") {
+            planetChanged = StoreRepo.store.activatePlanet(newPlanetId)
+        }
+        _state.update { it.copy(activePlanetId = StoreRepo.store.activePlanetId()) }
+        if (planetChanged) {
+            storeWrite("writeNetworks") {
+                val old = store.readNetworks(previousPlanetId)
+                if (old.any { it.lastActivated }) {
+                    store.writeNetworks(
+                        old.map { e -> if (e.lastActivated) e.copy(lastActivated = false) else e },
+                        previousPlanetId,
+                    )
+                }
+            }
+            // 总线清空（对齐 iOS b4fb534：activePlanetId 已指向新行星，遗留状态
+            // 不再有所属行星可用）——重启后由新会话重写
+            TunnelStateBus.clearNetworkStatuses()
+            TunnelStateBus.clearNetworkConflicts()
+            TunnelStateBus.setNodeStatus(null)
+            // 核心随行星重建，旧连接周期作废（新周期由新会话的隧道边沿重新起算）
+            connectTimeoutJob?.cancel()
+            connectTimeoutJob = null
+            _state.update { it.copy(connectStartedAtMs = null) }
+        }
+        return planetChanged
     }
 
     /**
@@ -458,23 +605,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      *   （scope 未取消），双 START 守卫会吞掉启动指令；STOP/START intent 在服务
      *   主线程按序派发且 stopTunnel 同步收口，后续 START 必落在停完之后（iOS 无
      *   「失败但进程存活」态，此分支为 Android 平台特有）。
+     *
+     * 指针切换与交接收敛收敛在 [switchPlanetPointer]（与跨行星交接共用）。
+     * 跨行星开启已在本类入口处走显式交接（confirmSwitchPlanet），本路径的
+     * planetChanged 分支实际只覆盖「同行星指针未变 + 隧道未跑」等场景，保留
+     * restartIfRunning 兜底不动。
      */
     private suspend fun applySelectedPlanetAndStart(selectedPlanetId: String) {
-        // activatePlanet 失败只记日志：planetChanged 保持 false，后续重启联动按原
-        // 语义照走（指针未换成功时不重启与磁盘态一致；即便触发重启亦无害幂等）
-        var planetChanged = false
-        storeWrite("activatePlanet") {
-            planetChanged = StoreRepo.store.activatePlanet(selectedPlanetId)
-        }
-        _state.update { it.copy(activePlanetId = StoreRepo.store.activePlanetId()) }
-        if (planetChanged) {
-            // 行星切换窗口期数据对齐（对齐 iOS b4fb534：核心随行星重启，重启收口前
-            // 旧核心会话仍可能在写总线；activePlanetId 已指向新行星，遗留状态不再
-            // 有所属行星可用）——总线状态/冲突/在线位整体清空，重启后由新会话重写
-            TunnelStateBus.clearNetworkStatuses()
-            TunnelStateBus.clearNetworkConflicts()
-            TunnelStateBus.setNodeStatus(null)
-        }
+        val planetChanged = switchPlanetPointer(selectedPlanetId)
         when {
             TunnelController.isRunning ->
                 if (planetChanged) TunnelController.restartIfRunning(appContext)
@@ -724,5 +862,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val TAG = "HomeViewModel"
+
+        /** 跨行星交接停→起收口窗口（用户裁定 50~150ms 区间取中值）。 */
+        const val HANDOVER_DELAY_MS = 100L
+
+        /** 交接等待停机终态上限（与 TunnelController.awaitSettled 默认口径一致）。 */
+        const val STOP_SETTLE_TIMEOUT_MS = 15_000L
     }
 }

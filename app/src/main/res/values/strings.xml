@@ -165,6 +165,9 @@
     <string name="home_alert_networkStatusError">网络状态异常</string>
     <string name="home_alert_openAnyway">仍要开启</string>
     <string name="home_alert_openMore">开启更多网络</string>
+    <string name="home_alert_switchPlanet">切换行星</string>
+    <string name="home_alert_switchPlanetMessage">当前行星正在连接中。开启此网络将断开现有连接并切换到该网络所属的行星，仍要开启？</string>
+    <string name="home_switch_disconnecting">正在断开当前连接…</string>
     <string name="home_error_multiNetworkMessage">已自动关闭「经 ZeroTier 路由（默认路由）」：多网络同时连接时不可用</string>
     <string name="home_error_cellularTitle">移动数据未开启</string>
     <string name="home_error_cellularMessage">当前使用移动数据，未在设置中允许移动数据</string>
