@@ -14,7 +14,10 @@ import cn.imgozi.planetport.tunnel.NetConf
 import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
+import cn.imgozi.planetport.ui.CONFLICT_TIMEOUT
+import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MS
 import cn.imgozi.planetport.ui.ztStatusLabel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +49,14 @@ data class HomeUiState(
     val maxNetworks: Int = 2,
     /** 隧道在跑（Running/Starting/Reconnecting，对齐 iOS vpnRunning 判定）。 */
     val tunnelRunning: Boolean = false,
+    /** 核心是否已连通行星根服务器（VPN 级共享状态，iOS AppState.online 同构）。 */
+    val nodeOnline: Boolean = false,
+    /**
+     * 连接周期起点（毫秒 epoch）：vpnRunning 且未 online 且有启用网络时起算，
+     * online 达成或隧道停止即清空（iOS AppState.connectStartedAt 同构）。
+     * 「连接服务器」分段展示与 [CONNECT_TIMEOUT_MS] 超时判定的共同起点。
+     */
+    val connectStartedAtMs: Long? = null,
     /** nwid → ZT 原始状态码（隧道侧契约：文案在 UI 层生成）。 */
     val networkStatuses: Map<String, Int> = emptyMap(),
     /** nwid → 实时冲突原因码 "address"/"subnet"（隧道侧契约：文案在 UI 层生成；空表 = 无冲突）。 */
@@ -119,6 +130,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { TunnelStateBus.tunnelState.collect { onTunnelState(it) } }
         viewModelScope.launch {
             TunnelStateBus.nodeStatus.collect { info ->
+                _state.update { it.copy(nodeOnline = info?.online ?: false) }
+                evaluateConnectTimer()
                 val id = info?.nodeId.orEmpty()
                 if (id.isNotEmpty()) cacheNodeId(id)
             }
@@ -196,6 +209,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     st is TunnelState.Starting || st is TunnelState.Reconnecting
             )
         }
+        // 起跑/停机边沿即连接计时起点/取消点（iOS connectionStatus 边沿 evaluateConnectTimer）
+        evaluateConnectTimer()
         when (st) {
             is TunnelState.Running -> startAttemptAt = 0
             is TunnelState.Failed -> {
@@ -225,6 +240,96 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             reason
         }
+
+    // MARK: - 连接计时与超时自动断开（对齐 iOS AppState.evaluateConnectTimer）
+
+    /** 连接超时任务（App 侧计时；进程冻结期 delay 顺延，解冻后迟到即补触发）。 */
+    private var connectTimeoutJob: Job? = null
+
+    /**
+     * 连接计时的起止判定：tunnelRunning 且未 online 且活跃行星有启用网络时起算；
+     * online 达成或隧道停止即取消。超时到点走 [disconnectOnConnectTimeout]——
+     * Android 与核心同进程（TunnelStateBus 直读核心回调线程），无 iOS Darwin
+     * 通知送达延迟，无需断开前向隧道复核 online 的竞态防护（b4fb534）。
+     */
+    private fun evaluateConnectTimer() {
+        viewModelScope.launch {
+            val s = _state.value
+            val shouldRun = s.tunnelRunning && !s.nodeOnline &&
+                StoreRepo.store.readActiveNetworks().any { it.lastActivated }
+            if (shouldRun) {
+                if (_state.value.connectStartedAtMs != null) return@launch
+                _state.update { it.copy(connectStartedAtMs = System.currentTimeMillis()) }
+                // 新连接周期开始：上一轮的超时断开记录随之失效（超时是整轮共享事件，
+                // 不该在新周期里继续显示在未参与连接的网络上；冲突记录单网络事件，保留）
+                clearStaleTimeoutRecords()
+                connectTimeoutJob?.cancel()
+                connectTimeoutJob = launch {
+                    delay(CONNECT_TIMEOUT_MS)
+                    disconnectOnConnectTimeout()
+                }
+            } else {
+                connectTimeoutJob?.cancel()
+                connectTimeoutJob = null
+                _state.update { it.copy(connectStartedAtMs = null) }
+            }
+        }
+    }
+
+    /** 清除活跃行星上一轮连接周期遗留的超时记录（仅 [CONFLICT_TIMEOUT]，对齐 iOS clearStaleTimeoutRecords）。 */
+    private suspend fun clearStaleTimeoutRecords() {
+        val store = StoreRepo.store
+        val planetId = store.activePlanetId()
+        val networks = store.readNetworks(planetId)
+        if (networks.none { it.lastConflict == CONFLICT_TIMEOUT }) return
+        storeWrite("writeNetworks") {
+            store.writeNetworks(
+                networks.map { entry ->
+                    if (entry.lastConflict == CONFLICT_TIMEOUT) {
+                        entry.copy(lastConflict = null)
+                    } else {
+                        entry
+                    }
+                },
+                planetId,
+            )
+        }
+    }
+
+    /**
+     * 连接超时自动断开：核心起跑超过 [CONNECT_TIMEOUT_MS] 仍未连通行星根服务器，
+     * 判定物理网络故障，当前行星全部启用网络关闭并记录原因 [CONFLICT_TIMEOUT]
+     * （服务器连不上是共享故障，单关一个无意义），隧道随 configChanges 差分 leave；
+     * 无剩余启用网络则停隧道。与冲突自动断开同构。
+     */
+    private suspend fun disconnectOnConnectTimeout() {
+        val s = _state.value
+        if (!s.tunnelRunning || s.nodeOnline) return
+        // 只置空引用，不 cancel：本函数正是由该 Job 执行，cancel 自身会让
+        // 下一个挂起点（readNetworks）抛 CancellationException，静默吞掉后续写盘
+        connectTimeoutJob = null
+        _state.update { it.copy(connectStartedAtMs = null) }
+        val store = StoreRepo.store
+        val planetId = store.activePlanetId()
+        val networks = store.readNetworks(planetId)
+        if (networks.none { it.lastActivated }) return
+        storeWrite("writeNetworks") {
+            store.writeNetworks(
+                networks.map { entry ->
+                    if (entry.lastActivated) {
+                        entry.copy(lastActivated = false, lastConflict = CONFLICT_TIMEOUT)
+                    } else {
+                        entry
+                    }
+                },
+                planetId,
+            )
+        }
+        // 空跑收敛：无剩余启用网络则停隧道（stopVPNIfNoActiveNetworks 同构）
+        if (store.readActiveNetworks().none { it.lastActivated }) {
+            TunnelController.stop(appContext)
+        }
+    }
 
     // MARK: - 行星浏览
 
@@ -347,6 +452,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             planetChanged = StoreRepo.store.activatePlanet(selectedPlanetId)
         }
         _state.update { it.copy(activePlanetId = StoreRepo.store.activePlanetId()) }
+        if (planetChanged) {
+            // 行星切换窗口期数据对齐（对齐 iOS b4fb534：核心随行星重启，重启收口前
+            // 旧核心会话仍可能在写总线；activePlanetId 已指向新行星，遗留状态不再
+            // 有所属行星可用）——总线状态/冲突/在线位整体清空，重启后由新会话重写
+            TunnelStateBus.clearNetworkStatuses()
+            TunnelStateBus.clearNetworkConflicts()
+            TunnelStateBus.setNodeStatus(null)
+        }
         when {
             TunnelController.isRunning ->
                 if (planetChanged) TunnelController.restartIfRunning(appContext)
@@ -489,14 +602,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * 隧道侧隔离（冲突网络不进聚合），此处只收敛配置态。
      *
      * lastConflict 只在用户重开网络时清除（activate）：冲突解除（网络出冲突表）不清，
-     * 卡片持稳显示「<原因>，断开」（五级判定第 3 级）。跨行星处理：冲突网络可能属于
-     * 非当前浏览行星，按 readNetworksByPlanet 全量扫。
+     * 卡片持稳显示「<原因>，断开」（五级判定第 3 级）。作用域：冲突只可能来自当前
+     * 隧道会话（= 活跃行星），只处理活跃行星——同一 networkId 可存在于多个行星，
+     * 全量扫会把其它行星同 ID 网络误关（iOS b4fb534 同款隔离修正）。
      */
     private suspend fun autoDisconnectConflictedNetworks(conflicts: Map<String, String>) {
         if (conflicts.isEmpty()) return
         val store = StoreRepo.store
-        for ((planetId, networks) in store.readNetworksByPlanet()) {
-            if (networks.none { it.lastActivated && conflicts[it.networkId] != null }) continue
+        val planetId = store.activePlanetId()
+        val networks = store.readNetworks(planetId)
+        if (networks.any { it.lastActivated && conflicts[it.networkId] != null }) {
             storeWrite("writeNetworks") {
                 store.writeNetworks(
                     networks.map { entry ->

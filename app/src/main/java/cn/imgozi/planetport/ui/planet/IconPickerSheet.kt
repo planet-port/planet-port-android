@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -27,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.theme.ThemeManager
 
 /**
@@ -79,60 +81,72 @@ fun IconPickerSheet(
     val accentHex by ThemeManager.accent.collectAsState()
     val accent = remember(accentHex) { Color(ThemeManager.accent.value.toInt()) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(bottom = 16.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    stringResource(R.string.icon_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = {
-                    onSelect(selectedAnimal, selectedColor)
-                    onDismiss()
-                }) { Text(stringResource(R.string.common_done)) }
-            }
-
-            // 分段：图形 / 底色（iOS Picker segmented）
-            SingleChoiceSegmentedButtonRow(
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
                 Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .fillMaxSize()
+                    .padding(bottom = 16.dp),
             ) {
-                SegmentedButton(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text(stringResource(R.string.icon_graphic)) }
-                SegmentedButton(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text(stringResource(R.string.icon_color)) }
-            }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        stringResource(R.string.icon_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = {
+                        onSelect(selectedAnimal, selectedColor)
+                        onDismiss()
+                    }) { Text(stringResource(R.string.common_done)) }
+                }
 
-            if (tab == 0) {
-                AnimalGrid(
-                    selectedAnimal = selectedAnimal,
-                    selectedColor = selectedColor,
-                    accent = accent,
-                    onSelect = { selectedAnimal = it },
-                )
-            } else {
-                ColorGrid(
-                    selectedAnimal = selectedAnimal,
-                    selectedColor = selectedColor,
-                    onSelect = { selectedColor = it },
-                    onRandom = { selectedColor = PlanetIcon.randomColorHex() },
-                )
+                // 分段：图形 / 底色（iOS Picker segmented）
+                SingleChoiceSegmentedButtonRow(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    SegmentedButton(
+                        selected = tab == 0,
+                        onClick = { tab = 0 },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    ) { Text(stringResource(R.string.icon_graphic)) }
+                    SegmentedButton(
+                        selected = tab == 1,
+                        onClick = { tab = 1 },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    ) { Text(stringResource(R.string.icon_color)) }
+                }
+
+                if (tab == 0) {
+                    AnimalGrid(
+                        selectedAnimal = selectedAnimal,
+                        selectedColor = selectedColor,
+                        accent = accent,
+                        onSelect = { selectedAnimal = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    ColorGrid(
+                        selectedAnimal = selectedAnimal,
+                        selectedColor = selectedColor,
+                        onSelect = { selectedColor = it },
+                        onRandom = { selectedColor = PlanetIcon.randomColorHex() },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -154,15 +168,15 @@ private fun AnimalGrid(
     selectedColor: String,
     accent: Color,
     onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val tileBg = PlanetIcon.parseHex(selectedColor) ?: Color(0xFF6B7280) // 深灰兜底
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .heightIn(max = 440.dp),
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -230,10 +244,11 @@ private fun ColorGrid(
     selectedColor: String,
     onSelect: (String) -> Unit,
     onRandom: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),

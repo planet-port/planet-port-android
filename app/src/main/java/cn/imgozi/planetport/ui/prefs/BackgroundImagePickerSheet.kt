@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Photo
@@ -23,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +47,7 @@ import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.store.StreamTooLargeException
 import cn.imgozi.planetport.store.readBounded
 import cn.imgozi.planetport.ui.components.SectionCard
+import cn.imgozi.planetport.ui.components.SheetScaffold
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -148,125 +152,132 @@ fun BackgroundImagePickerSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // 标题行：bg.title + 右上「完成」（iOS toolbar Done）
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.bg_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
-            }
-
-            // —— 从相册选择 ——
-            val choosePhoto = stringResource(R.string.bg_choosePhoto)
-            Text(
-                stringResource(R.string.bg_albumHeader),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SectionCard(
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClickLabel = choosePhoto) {
-                        photoPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
-                    },
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                PickerRow(
-                    icon = {
-                        Icon(
-                            Icons.Filled.Photo,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    label = choosePhoto,
-                )
-            }
-
-            // —— 从 URL 下载 ——
-            val downloadLabel = stringResource(R.string.bg_download)
-            Text(
-                stringResource(R.string.bg_urlHeader),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = urlText,
-                onValueChange = { urlText = it },
-                placeholder = { Text("https://example.com/bg.jpg") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    autoCorrectEnabled = false,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            SectionCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        onClickLabel = downloadLabel,
-                        enabled = urlText.isNotBlank() && !downloading,
-                    ) { download() },
-            ) {
-                PickerRow(
-                    icon = {
-                        Icon(
-                            Icons.Filled.ArrowDownward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    label = downloadLabel,
+                // 标题行：bg.title + 右上「完成」（iOS toolbar Done）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (downloading) {
-                        Spacer(Modifier.weight(1f))
-                        CircularProgressIndicator(Modifier.size(16.dp))
-                    }
+                    Text(
+                        stringResource(R.string.bg_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
                 }
-            }
 
-            errorText?.let {
+                // —— 从相册选择 ——
+                val choosePhoto = stringResource(R.string.bg_choosePhoto)
                 Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    stringResource(R.string.bg_albumHeader),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-
-            // —— 清除（已设置才显示，对齐 iOS if app.backgroundImage != nil）——
-            if (hasImage) {
-                val clearLabel = stringResource(R.string.bg_clear)
                 SectionCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClickLabel = clearLabel) {
-                            // 清除走 VM：删文件 + AppPrefs.backgroundImage 归位（无失败分支）
-                            vm.clearBackgroundImage()
-                            onApplied()
+                        .clickable(onClickLabel = choosePhoto) {
+                            photoPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
                         },
                 ) {
-                    Text(
-                        clearLabel,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.error,
+                    PickerRow(
+                        icon = {
+                            Icon(
+                                Icons.Filled.Photo,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        label = choosePhoto,
                     )
+                }
+
+                // —— 从 URL 下载 ——
+                val downloadLabel = stringResource(R.string.bg_download)
+                Text(
+                    stringResource(R.string.bg_urlHeader),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = urlText,
+                    onValueChange = { urlText = it },
+                    placeholder = { Text("https://example.com/bg.jpg") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Uri,
+                        autoCorrectEnabled = false,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                SectionCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            onClickLabel = downloadLabel,
+                            enabled = urlText.isNotBlank() && !downloading,
+                        ) { download() },
+                ) {
+                    PickerRow(
+                        icon = {
+                            Icon(
+                                Icons.Filled.ArrowDownward,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        label = downloadLabel,
+                    ) {
+                        if (downloading) {
+                            Spacer(Modifier.weight(1f))
+                            CircularProgressIndicator(Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                errorText?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                // —— 清除（已设置才显示，对齐 iOS if app.backgroundImage != nil）——
+                if (hasImage) {
+                    val clearLabel = stringResource(R.string.bg_clear)
+                    SectionCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClickLabel = clearLabel) {
+                                // 清除走 VM：删文件 + AppPrefs.backgroundImage 归位（无失败分支）
+                                vm.clearBackgroundImage()
+                                onApplied()
+                            },
+                    ) {
+                        Text(
+                            clearLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
         }

@@ -61,7 +61,6 @@ import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.components.CopyableRow
-import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
 import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
@@ -354,26 +353,25 @@ private fun IconRow(
     ) {
         Text(stringResource(R.string.common_icon), style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.weight(1f))
-        if (isOfficial) {
-            // 官方磁贴（与首页共用 ui.components.OfficialPlanetIcon，石绿线稿行星）
-            OfficialPlanetIcon(modifier = Modifier.size(24.dp))
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(tint),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painter = painterResource(
-                        PlanetIcon.drawableId(context, PlanetIcon.animalKey(planet)),
-                    ),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
+        // 官方行星与私有行星同图标体系（iOS 图标行无特判）：动物磁贴 + tint 底；
+        // 官方不可改（disabled），故无 chevron
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(tint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(
+                    PlanetIcon.drawableId(context, PlanetIcon.animalKey(planet)),
+                ),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+        if (!isOfficial) {
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = null,

@@ -123,6 +123,7 @@
     <string name="card_conflict_address">地址冲突</string>
     <string name="card_conflict_offline">%1$s,断开</string>
     <string name="card_conflict_subnet">网段冲突</string>
+    <string name="card_timeout_offline">连接超时</string>
     <string name="common_allowed">允许</string>
     <string name="common_cancel">取消</string>
     <string name="common_copyIp">复制 IP</string>
@@ -168,6 +169,7 @@
     <string name="home_error_multiNetworkTitle">多网络连接</string>
     <string name="home_error_vpnStartTitle">无法启动 VPN</string>
     <string name="home_network_connected">已连接 %1$d</string>
+    <string name="home_network_connecting">连接中 %1$d</string>
     <string name="home_network_emptyHint">点击此处或右下角 + 添加</string>
     <string name="home_network_emptyTitle">这颗行星还没有网络</string>
     <string name="home_network_header">网络 · %1$d</string>
@@ -215,14 +217,16 @@
     <string name="network_route">路由</string>
     <string name="network_routeLabel">路由%1$d</string>
     <string name="network_routeVia">经 ZeroTier 路由（默认路由）</string>
-    <string name="network_routeVia_footer">开启后该网络的默认路由经 ZeroTier，立即生效</string>
+    <string name="network_routeVia_footer">开启后网络的默认路由经 ZeroTier。多网络同时连接时不可用。</string>
     <string name="network_routeVia_lockedFooter">多网络同时连接时不可用</string>
     <string name="network_status_accessDenied">拒绝访问</string>
     <string name="network_status_authRequired">需要认证</string>
     <string name="network_status_clientTooOld">客户端过旧</string>
+    <string name="network_status_connectingServer">连接服务器</string>
     <string name="network_status_notFound">网络不存在</string>
     <string name="network_status_ok">在线</string>
     <string name="network_status_portError">端口错误</string>
+    <string name="network_status_requestingConfig">请求网络配置</string>
     <string name="network_status_requestingConfiguration">正在初始化</string>
     <string name="network_status_unknown">未知</string>
     <string name="peers_emptyTitle">“%1$s”暂无 Peers</string>

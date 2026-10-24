@@ -2,6 +2,7 @@ package cn.imgozi.planetport.ui.prefs
 
 import android.app.Application
 import android.util.Log
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
@@ -163,12 +164,17 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
     /** Core 版本（编译期静态常量，停机不清——对齐 iOS StatusStore.coreVersion 语义）。 */
     val coreVersion: StateFlow<String> get() = TunnelStateBus.coreVersion
 
-    /** App 版本（versionName (versionCode)，对齐 iOS CFBundleShortVersionString 拼装）。 */
+    /**
+     * App 版本行（对齐 iOS PrefsView.appVersion 拼装，PrefsView.swift:153-157）：
+     * "短版本 (构建号)"——半角括号 + 括号前一个空格，构建号缺失时只显短版本，
+     * 两者皆缺为 "—"。Android 构建号恒存在，实际恒输出 "x.y.z (n)" 形态。
+     */
     val appVersion: String by lazy {
         runCatching {
             val info = getApplication<Application>().packageManager
                 .getPackageInfo(getApplication<Application>().packageName, 0)
-            "${info.versionName} (${info.versionCode})"
+            val short = info.versionName ?: "—"
+            "$short (${PackageInfoCompat.getLongVersionCode(info)})"
         }.getOrDefault("—")
     }
 

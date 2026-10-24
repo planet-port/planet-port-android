@@ -111,8 +111,9 @@ fun SectionCard(
 /**
  * 可复制值文本（iOS CopyableValue 1:1）：点击复制到剪贴板，图标位置短暂变
  * 对勾（0.8s 还原）；[showsIcon] 为 false 时无常驻图标，仅复制成功瞬间显示。
- * 空串与「—」「-」占位不响应。iOS 以透明热区外扩 5pt 补命中区，Compose 布局
- * 不可越界，热区 = 文本 + 图标内容本身（行场景另有 44dp 行高兜底）。
+ * 空串与「—」「-」占位不响应，且常驻图标随之隐藏（iOS 8e24915：避免「看着
+ * 能点、点了没反应」），复制守卫同源收敛。iOS 以透明热区外扩 5pt 补命中区，
+ * Compose 布局不可越界，热区 = 文本 + 图标内容本身（行场景另有 44dp 行高兜底）。
  */
 @Composable
 fun CopyableValue(
@@ -123,6 +124,8 @@ fun CopyableValue(
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     iconSize: Dp = 11.dp,
 ) {
+    // 占位值（空 / 「—」/「-」，调用方无数据时的显示约定）：不可复制
+    val isPlaceholder = text.isEmpty() || text == "—" || text == "-"
     // LocalClipboardManager.setText：现代 LocalClipboard 为 suspend API，
     // 此处同步拷贝即可（小文本，无需协程），deprecation 由 T7 资源化时一并处理
     @Suppress("DEPRECATION")
@@ -141,7 +144,7 @@ fun CopyableValue(
     Row(
         modifier = modifier.clickable(
             onClickLabel = copyLabel,
-            enabled = text.isNotEmpty() && text != "—" && text != "-",
+            enabled = !isPlaceholder,
         ) {
             clipboard.setText(AnnotatedString(text))
             copied = true
@@ -161,7 +164,7 @@ fun CopyableValue(
             maxLines = 1,
             overflow = TextOverflow.MiddleEllipsis,
         )
-        if (showsIcon || copied) {
+        if ((showsIcon && !isPlaceholder) || copied) {
             Icon(
                 imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
                 contentDescription = null,

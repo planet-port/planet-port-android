@@ -1,8 +1,19 @@
 package cn.imgozi.planetport.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -55,14 +66,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -77,11 +90,10 @@ import cn.imgozi.planetport.ui.NetworkCardStatus
 import cn.imgozi.planetport.ui.Page
 import cn.imgozi.planetport.ui.components.EmptyStateCard
 import cn.imgozi.planetport.ui.deriveNetworkCardStatus
+import cn.imgozi.planetport.ui.rememberConnectNowMs
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * 主页（对齐 iOS HomeView.swift）：头区（logo/标题/当前行星链接 chip/设置）+
@@ -290,13 +302,16 @@ private fun PlanetPage(
     val networks = state.planetNetworks[planet.id].orEmpty()
     val running = state.tunnelRunning
     val activeId = state.activePlanetId
+    // 连接分段展示的秒级时钟（到点瞬间驱动「连接服务器 → 连接超时」重组切换）
+    val nowMs = rememberConnectNowMs(state.connectStartedAtMs).value
 
     Column(
         Modifier
             .fillMaxSize()
             // 头区为顶部 overlay（固定 88dp 内容顶，对齐 iOS pageTopPadding；
-            // 不叠加 statusBarsPadding——双计导致机型间头区高度漂移，审查移交项）
-            .padding(top = HomeMetrics.pageTopPadding)
+            // 不叠加 statusBarsPadding——双计导致机型间头区高度漂移，审查移交项）。
+            // 走查追加：行星页顶部再预留 40dp 空白，首卡与头区拉开呼吸位
+            .padding(top = HomeMetrics.pageTopPadding + 40.dp)
             .padding(horizontal = HomeMetrics.pageHMargin),
     ) {
         // 行星身份卡：整卡可点（无涟漪），按压缩放由卡片自持
@@ -323,29 +338,36 @@ private fun PlanetPage(
             )
         }
 
-        // 发丝线 + 计数行（iOS networkHeader：网络 · N；连接 >1 时追加已连接数）
+        // 发丝线 + 计数行（iOS networkHeader：网络 · N；启用网络按实时状态分桶追加）
         Spacer(
             Modifier
                 .fillMaxWidth()
                 .height(0.5.dp)
                 .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)),
         )
-        // 已连接数剔除冲突网络（iOS networkHeader：lastActivated 且不在冲突表；
-        // lastConflict 非空 = 已收敛断开的网络，同样不计）
-        val connectedCount = networks.count {
-            it.lastActivated && it.lastConflict == null &&
-                state.networkConflicts[it.networkId] == null
-        }
-        // header 与 connected 分开取串（stringResource 是组合期调用，不能进 buildString）；
+        // header 与分桶文案分开取串（stringResource 是组合期调用，不能进 buildString）；
         // 中缀「 · 」与 iOS 硬拼一致
         val headerText = stringResource(R.string.home_network_header, networks.size)
-        val connectedText = if (isActivePage && running && connectedCount > 1) {
-            stringResource(R.string.home_network_connected, connectedCount)
+        // 计数行分桶（iOS b4fb534 networkHeader）：启用网络（lastActivated 且不在实时
+        // 冲突表）按核心实时状态分「连接中 X | 已连接 Y」（已连接 = 核心报 OK），
+        // 计数为 0 的桶不显示，全 0 不追加
+        val enabled = networks.filter {
+            it.lastActivated && state.networkConflicts[it.networkId] == null
+        }
+        val okCount = enabled.count { state.networkStatuses[it.networkId] == 1 }
+        val connectingCount = enabled.size - okCount
+        val connectingText = stringResource(R.string.home_network_connecting, connectingCount)
+        val okText = stringResource(R.string.home_network_connected, okCount)
+        val countText = if (isActivePage && running) {
+            listOfNotNull(
+                if (connectingCount > 0) connectingText else null,
+                if (okCount > 0) okText else null,
+            ).joinToString(" | ")
         } else {
             null
         }
         Text(
-            text = if (connectedText != null) "$headerText · $connectedText" else headerText,
+            text = if (countText != null) "$headerText · $countText" else headerText,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 12.dp),
@@ -396,6 +418,9 @@ private fun PlanetPage(
                             },
                             hasStatus = isActivePage &&
                                 state.networkStatuses.containsKey(entry.networkId),
+                            nodeOnline = state.nodeOnline,
+                            connectStartedAtMs = state.connectStartedAtMs,
+                            nowMs = nowMs,
                         ),
                         isPending = entry.networkId in pending,
                         appearsActive = planet.id == activeId && entry.lastActivated,
@@ -438,6 +463,16 @@ private fun Modifier.zeroHeightOverlayAt(dotCenterOffset: androidx.compose.ui.un
         },
     )
 
+/** chip 转场时长 280ms（iOS .transaction .easeOut(duration: 0.28)，HomeView.swift:227）。 */
+private const val ChipAnimMs = 280
+
+/** iOS SwiftUI .easeOut ≈ cubic-bezier(0, 0, 0.58, 1)。 */
+private val ChipEaseOut = CubicBezierEasing(0f, 0f, 0.58f, 1f)
+
+private val ChipAnimFloat = tween<Float>(ChipAnimMs, easing = ChipEaseOut)
+private val ChipAnimOffset = tween<IntOffset>(ChipAnimMs, easing = ChipEaseOut)
+private val ChipAnimSize = tween<IntSize>(ChipAnimMs, easing = ChipEaseOut)
+
 @Composable
 private fun HeaderZone(
     state: HomeUiState,
@@ -449,17 +484,20 @@ private fun HeaderZone(
     onSelectPage: (Int) -> Unit,
 ) {
     val bg = MaterialTheme.colorScheme.background
+    // chip 转场位移 10dp → px（slideIn/Out 的 lambda 无 Density 作用域，组合期换算）
+    val chipShiftPx = with(LocalDensity.current) { 10.dp.roundToPx() }
     Column(
         Modifier
             .fillMaxWidth()
             .drawBehind {
-                // 三段渐隐对齐 iOS mask stops（白 0→0.85、clear 1.0）：85% 高度内
-                // 保持不透明，圆点指示器下方才渐隐，内容滚过时不穿字
+                // 三段渐隐对齐 iOS mask stops（白 0→0.85、clear 1.0）；iOS 实底为
+                // .ultraThinMaterial 毛玻璃，Android 以背景色 8% 半透明近似
+                // （走查：不用近实底纯白）
                 drawRect(
                     brush = Brush.verticalGradient(
                         colorStops = arrayOf(
-                            0f to bg.copy(alpha = 0.85f),
-                            0.85f to bg.copy(alpha = 0.85f),
+                            0f to bg.copy(alpha = 0.08f),
+                            0.85f to bg.copy(alpha = 0.08f),
                             1f to bg.copy(alpha = 0f),
                         ),
                     ),
@@ -472,7 +510,8 @@ private fun HeaderZone(
         // Spacer/offset 确定参照系；标题行在顶、指示器沉底
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppLogo(Modifier.size(40.dp))
-            Spacer(Modifier.size(10.dp))
+            // iOS headerZone HStack spacing 5.5（HomeView.swift:187）
+            Spacer(Modifier.size(5.5.dp))
             Column(
                 Modifier
                     .weight(1f)
@@ -488,7 +527,21 @@ private fun HeaderZone(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.weight(1f))
-                    if (!browsingActive && state.tunnelRunning) {
+                    // 活跃行星 chip（iOS HomeView.swift:202-228）：出现自下方 10dp 淡入
+                    // 上移、隐藏反向下移淡出（.flyFromPlanetCard :584-598），曲线 easeOut
+                    // 0.28s（.transaction :227）；横向占位同步展开/收起（iOS 布局随
+                    // .animation(:241) 平滑让位，gear 不跳位）。
+                    // 配色对齐 iOS :211/216/217：次级文字 + secondarySystemGroupedBackground
+                    // 胶囊底 + 0.5pt quaternary 描边——不随主题主色变化。
+                    AnimatedVisibility(
+                        visible = !browsingActive && state.tunnelRunning,
+                        enter = fadeIn(ChipAnimFloat) +
+                            slideInVertically(ChipAnimOffset) { chipShiftPx } +
+                            expandHorizontally(ChipAnimSize),
+                        exit = fadeOut(ChipAnimFloat) +
+                            slideOutVertically(ChipAnimOffset) { chipShiftPx } +
+                            shrinkHorizontally(ChipAnimSize),
+                    ) {
                         val activeName = state.planets.firstOrNull { it.id == state.activePlanetId }
                             ?.displayNameRes()
                             ?: stringResource(R.string.planet_official_name)
@@ -497,7 +550,12 @@ private fun HeaderZone(
                             modifier = Modifier
                                 .padding(end = 8.dp)
                                 .clip(RoundedCornerShape(50))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(
+                                    width = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    shape = RoundedCornerShape(50),
+                                )
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
@@ -508,14 +566,14 @@ private fun HeaderZone(
                             Icon(
                                 imageVector = Icons.Filled.Link,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(12.dp),
                             )
                             Spacer(Modifier.size(4.dp))
                             Text(
                                 activeName,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -542,15 +600,17 @@ private fun HeaderZone(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                // 圆点指示器（iOS indicator :289-312）：视觉中心 ≈ logo 底上 4dp、
-                // leading 起点；选中 20×6 主色胶囊 / 未选 6×6 灰。
+                // 圆点指示器（iOS indicator :289-312）：leading 起点（与标题左对齐）；
+                // iOS 布局沉底后 .offset(y: -2)（HomeView.swift:248）——dot 高 6pt，
+                // 视觉中心 = 右列底上方 5pt，dotCenterOffset 即取 -5（居中偏差已修）。
+                // 选中 20×6 主色胶囊 / 未选 6×6 灰。
                 // iOS 热区 = background 44pt 方形（以点为中心、不参与布局可越界）；
                 // Compose 等价 = [zeroHeightOverlayAt]：本节点占 0 高度（不消耗右列
                 // 40dp 预算），dot 行以点中心为锚绝对放置，越界绘制与命中皆可。
                 // 横向热区 = 间隙均分（相邻各让 3.5dp 相接，视觉间隙 7dp 无死角）
                 Row(
                     modifier = Modifier
-                        .zeroHeightOverlayAt(dotCenterOffset = (-2).dp),
+                        .zeroHeightOverlayAt(dotCenterOffset = (-5).dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     repeat(pageCount) { idx ->
@@ -598,37 +658,16 @@ private fun HeaderZone(
 }
 
 /**
- * App logo（iOS 资产 AppLogo：红渐变圆角方块 + 白色轮辐网络图形）。约束不改
- * res 资源结构，以 Canvas 复刻；后续引入 vector 资产可整体替换。
+ * App logo：iOS 同款位图资产（planetportlogo.png，256×256，透明圆角已内嵌）。
+ * 此前以 Canvas 均分轮辐近似复刻，节点布局/渐变与真图标不符（走查「格式不正确」）；
+ * 现直接引用 iOS Assets 的原 PNG，尺寸 40dp + 9dp 圆角裁切与 iOS
+ * Image("PlanetPortLogo").frame(40).clipShape(RoundedRectangle(9)) 一致。
  */
 @Composable
 private fun AppLogo(modifier: Modifier = Modifier) {
-    Canvas(modifier.clip(RoundedCornerShape(HomeMetrics.radiusLogo))) {
-        val s = size.minDimension
-        val center = Offset(size.width / 2f, size.height / 2f)
-        drawRoundRect(
-            brush = Brush.linearGradient(
-                colors = listOf(Color(0xFFF13C31), Color(0xFFBE332B)),
-            ),
-            cornerRadius = CornerRadius(s * 0.225f),
-        )
-        // 中心轮辐 + 相邻外节点连线（0-2、1-3 两条对角线示意网状）
-        val nodes = (0 until 5).map { i ->
-            val angle = Math.toRadians((i * 72 - 90).toDouble())
-            Offset(
-                center.x + (s * 0.30f * cos(angle)).toFloat(),
-                center.y + (s * 0.30f * sin(angle)).toFloat(),
-            )
-        }
-        val stroke = s * 0.045f
-        for (node in nodes) {
-            drawLine(Color.White, center, node, strokeWidth = stroke, cap = StrokeCap.Round)
-        }
-        drawLine(Color.White, nodes[0], nodes[2], strokeWidth = stroke, cap = StrokeCap.Round)
-        drawLine(Color.White, nodes[1], nodes[3], strokeWidth = stroke, cap = StrokeCap.Round)
-        for (node in nodes) {
-            drawCircle(Color.White, radius = s * 0.045f, center = node)
-        }
-        drawCircle(Color.White, radius = s * 0.10f, center = center)
-    }
+    Image(
+        painter = painterResource(R.drawable.planet_port_logo),
+        contentDescription = null,
+        modifier = modifier.clip(RoundedCornerShape(HomeMetrics.radiusLogo)),
+    )
 }

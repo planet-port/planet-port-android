@@ -123,6 +123,7 @@
     <string name="card_conflict_address">Address Conflict</string>
     <string name="card_conflict_offline">%1$s — disconnected</string>
     <string name="card_conflict_subnet">Subnet Conflict</string>
+    <string name="card_timeout_offline">Connection Timed Out</string>
     <string name="common_allowed">Allowed</string>
     <string name="common_cancel">Cancel</string>
     <string name="common_copyIp">Copy IP</string>
@@ -168,6 +169,7 @@
     <string name="home_error_multiNetworkTitle">Multiple Networks</string>
     <string name="home_error_vpnStartTitle">Could Not Start VPN</string>
     <string name="home_network_connected">%1$d connected</string>
+    <string name="home_network_connecting">%1$d connecting</string>
     <string name="home_network_emptyHint">Tap here or the + at the bottom right to add</string>
     <string name="home_network_emptyTitle">No networks on this planet yet</string>
     <string name="home_network_header">Networks · %1$d</string>
@@ -215,14 +217,16 @@
     <string name="network_route">Route</string>
     <string name="network_routeLabel">Route %1$d</string>
     <string name="network_routeVia">Route via ZeroTier (Default Route)</string>
-    <string name="network_routeVia_footer">When enabled, this network\'s default route goes through ZeroTier, effective immediately</string>
+    <string name="network_routeVia_footer">When enabled, this network\'s default route goes through ZeroTier. Unavailable while multiple networks are connected</string>
     <string name="network_routeVia_lockedFooter">Unavailable while multiple networks are connected</string>
     <string name="network_status_accessDenied">Access Denied</string>
     <string name="network_status_authRequired">Authentication Required</string>
     <string name="network_status_clientTooOld">Client Too Old</string>
+    <string name="network_status_connectingServer">Connecting to Server</string>
     <string name="network_status_notFound">Network Not Found</string>
     <string name="network_status_ok">Online</string>
     <string name="network_status_portError">Port Error</string>
+    <string name="network_status_requestingConfig">Requesting Network Config</string>
     <string name="network_status_requestingConfiguration">Initializing</string>
     <string name="network_status_unknown">Unknown</string>
     <string name="peers_emptyTitle">No peers on "%1$s"</string>

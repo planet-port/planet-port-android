@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,10 +61,14 @@ import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.ui.components.CopyableRow
 import cn.imgozi.planetport.ui.components.CopyableValue
 import cn.imgozi.planetport.ui.components.DnsConfigSection
+import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.components.isDnsConfigValid
+import cn.imgozi.planetport.ui.connectPhaseLabelRes
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
+import cn.imgozi.planetport.ui.home.HomeViewModel
+import cn.imgozi.planetport.ui.rememberConnectNowMs
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.ztStatusLabel
 import kotlinx.coroutines.Dispatchers
@@ -98,6 +103,11 @@ fun NetworkDetailView(
     }
     val ui by vm.ui.collectAsState()
     val entry = ui.entry
+    // 连接分段展示依赖 App 侧连接计时（对齐 iOS NetworkDetailView 持 app: AppState）：
+    // HomeViewModel 是 Activity 级单例，此处取得与首页同一实例
+    val homeVm: HomeViewModel = viewModel()
+    val homeState by homeVm.state.collectAsState()
+    val connectNowMs = rememberConnectNowMs(homeState.connectStartedAtMs).value
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -137,6 +147,9 @@ fun NetworkDetailView(
         NetworkDetailContent(
             entry = entry,
             snapshot = ui.snapshot,
+            nodeOnline = homeState.nodeOnline,
+            connectStartedAtMs = homeState.connectStartedAtMs,
+            connectNowMs = connectNowMs,
             // 锁定判定锚定本网络归属行星（iOS 19f7681）：只有隧道行星下才存在
             // 「同时连接」的其他网络；全局选中页锚定在滑页竞态下会瞬时翻转
             routeViaLocked = ui.entryPlanetId != null &&
@@ -155,6 +168,9 @@ fun NetworkDetailView(
 private fun NetworkDetailContent(
     entry: NetworkEntry,
     snapshot: NetworkSnapshot?,
+    nodeOnline: Boolean,
+    connectStartedAtMs: Long?,
+    connectNowMs: Long,
     routeViaLocked: Boolean,
     onApplyDns: (DnsMode, List<String>) -> Unit,
     onSetRouteVia: (Boolean) -> Unit,
@@ -186,7 +202,15 @@ private fun NetworkDetailContent(
             )
             FormRow(
                 stringResource(R.string.common_status),
-                snapshot?.let { stringResource(ztStatusLabel(it.statusCode)) } ?: "—",
+                snapshot?.let {
+                    // REQUESTING_CONFIGURATION 与卡片一致按 online 分段
+                    //（连接服务器/请求网络配置/连接超时，iOS 897245a）
+                    if (it.statusCode == 0) {
+                        stringResource(connectPhaseLabelRes(nodeOnline, connectStartedAtMs, connectNowMs))
+                    } else {
+                        stringResource(ztStatusLabel(it.statusCode))
+                    }
+                } ?: "—",
             )
             FormRow(stringResource(R.string.common_type), snapshot?.type ?: "—")
             CopyableRow("MAC", macText(snapshot))
@@ -374,42 +398,48 @@ private fun NetworkQRSheet(
     val qr by produceState<ImageBitmap?>(initialValue = null, networkId) {
         value = withContext(Dispatchers.Default) { qrImage(networkId) }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                stringResource(R.string.qrcode_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            qr?.let { bitmap ->
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = stringResource(R.string.qrcode_title),
-                    // 最近邻缩放保持模块边缘锐利（iOS interpolation(.none)）
-                    filterQuality = FilterQuality.None,
-                    modifier = Modifier.size(200.dp),
-                )
-            }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        // 统一 large detent 高度容器（屏幕高度 - 16dp，与其他弹窗一致）
+        SheetScaffold {
             Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    networkName.ifEmpty { networkId },
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    stringResource(R.string.qrcode_title),
+                    style = MaterialTheme.typography.titleMedium,
                 )
-                CopyableValue(
-                    networkId,
-                    style = PlanetFonts.MonoCaption,
-                    iconSize = 9.dp,
-                )
+                qr?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = stringResource(R.string.qrcode_title),
+                        // 最近邻缩放保持模块边缘锐利（iOS interpolation(.none)）
+                        filterQuality = FilterQuality.None,
+                        modifier = Modifier.size(200.dp),
+                    )
+                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        networkName.ifEmpty { networkId },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    CopyableValue(
+                        networkId,
+                        style = PlanetFonts.MonoCaption,
+                        iconSize = 9.dp,
+                    )
+                }
             }
         }
     }

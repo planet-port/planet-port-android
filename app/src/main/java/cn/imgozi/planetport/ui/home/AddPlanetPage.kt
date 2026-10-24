@@ -11,16 +11,21 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
@@ -30,6 +35,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,6 +62,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.imgozi.planetport.R
@@ -261,6 +269,8 @@ private fun PreviewIdentity(
                 value = name,
                 onValueChange = onNameChange,
                 placeholder = stringResource(R.string.addplanet_namePlaceholder),
+                // iOS AddPlanetPage.swift:multilineTextAlignment(.center)
+                textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f),
             )
             Box(
@@ -387,53 +397,42 @@ private fun AddPlanetForm(
                 }
             }
 
-            // URL 输入 + 导入按钮（56×42，下载中转圈）
+            // URL 输入（OutlinedTextField，与加入网络弹窗输入框同形态）+ 导入按钮
+            // （OutlinedButton，与输入框同高；下载中转圈）
             Row(
+                modifier = Modifier.height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FormField(
+                OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    placeholder = stringResource(R.string.addplanet_urlPlaceholder),
-                    keyboardType = KeyboardType.Uri,
+                    placeholder = { Text(stringResource(R.string.addplanet_urlPlaceholder)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.weight(1f),
                 )
-                Box(
-                    modifier = Modifier
-                        .size(width = 56.dp, height = 42.dp)
-                        .clip(RoundedCornerShape(HomeMetrics.radiusSmall))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            enabled = url.isNotEmpty() && !downloading,
-                        ) {
-                            downloading = true
-                            vm.downloadPlanet(url) { data, error ->
-                                downloading = false
-                                when {
-                                    error != null -> alert = error
-                                    data != null && (data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE) ->
-                                        alert = badHeader
-                                    data != null -> pendingData = data
-                                }
+                OutlinedButton(
+                    onClick = {
+                        downloading = true
+                        vm.downloadPlanet(url) { data, error ->
+                            downloading = false
+                            when {
+                                error != null -> alert = error
+                                data != null && (data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE) ->
+                                    alert = badHeader
+                                data != null -> pendingData = data
                             }
-                        },
-                    contentAlignment = Alignment.Center,
+                        }
+                    },
+                    enabled = url.isNotEmpty() && !downloading,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.fillMaxHeight(),
                 ) {
                     if (downloading) {
                         CircularProgressIndicator(Modifier.size(18.dp))
                     } else {
-                        Text(
-                            stringResource(R.string.common_import),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (url.isEmpty() || downloading) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
+                        Text(stringResource(R.string.common_import))
                     }
                 }
             }
@@ -494,6 +493,7 @@ private fun FormField(
     placeholder: String,
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     BasicTextField(
         value = value,
@@ -502,6 +502,7 @@ private fun FormField(
         textStyle = TextStyle(
             fontSize = 15.sp,
             color = MaterialTheme.colorScheme.onSurface,
+            textAlign = textAlign,
         ),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
@@ -515,7 +516,7 @@ private fun FormField(
                 if (value.isEmpty()) {
                     Text(
                         placeholder,
-                        style = TextStyle(fontSize = 15.sp),
+                        style = TextStyle(fontSize = 15.sp, textAlign = textAlign),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

@@ -32,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +51,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.ui.components.SheetScaffold
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -90,42 +92,48 @@ fun QrScannerSheet(
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-        ) {
-            // 头部：左「取消」+ 居中标题（对齐 iOS navigationTitle + cancellationAction）
-            Row(
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(bottom = 16.dp),
             ) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    stringResource(R.string.qr_title),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.width(64.dp))
-            }
+                // 头部：左「取消」+ 居中标题（对齐 iOS navigationTitle + cancellationAction）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        stringResource(R.string.qr_title),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.width(64.dp))
+                }
 
-            if (granted) {
-                ScannerContent(
-                    onScanned = onScanned,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(360.dp),
-                )
-            } else {
-                DeniedGuide(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(360.dp),
-                )
+                if (granted) {
+                    ScannerContent(
+                        onScanned = onScanned,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(360.dp),
+                    )
+                } else {
+                    DeniedGuide(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(360.dp),
+                    )
+                }
             }
         }
     }

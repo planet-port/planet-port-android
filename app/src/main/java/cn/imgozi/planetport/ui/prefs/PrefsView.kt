@@ -38,9 +38,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -63,6 +65,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -73,6 +76,7 @@ import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.ui.MainActivity
+import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
@@ -101,9 +105,18 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
     val node by vm.nodeStatus.collectAsState()
     val coreVersion by vm.coreVersion.collectAsState()
 
+    // 背景图在场判定（走查修复）：以 store 内存位图为单一事实源（对齐 iOS
+    // app.backgroundImage != nil 的「图本体在场」语义），AppPrefs.backgroundImage
+    // 布尔仅作进入首帧的回显兜底（store 尚未 refresh 时防视差行闪灰）。
+    // 旧版只落了图没落布尔的设备（布尔恒 false）由此自愈：清除入口恢复显示、
+    // 视差开关恢复可用——此前两处都被假 false 锁死。
+    val bgState by BackgroundImageStore.state.collectAsState()
+    val hasBackgroundImage = bgState.bitmap != null || prefs.backgroundImage
+
     // 背景图选取弹层（T7 实装）
     var showBgPicker by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -159,14 +172,15 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
             }
 
             // 语言即时切换：AppCompatDelegate.setApplicationLocales（autoStoreLocales
-            // 持久化），AppPrefs.language 仅作展示态同步（审查 M4：占位 footer 已删）
-            FormSection(header = stringResource(R.string.prefs_language_sectionHeader)) {
-                LanguageOptions(
-                    selected = prefs.language,
-                    onSelect = { code ->
-                        vm.setLanguage(code)
-                        AppCompatDelegate.setApplicationLocales(localeListFor(code))
-                    },
+            // 持久化），AppPrefs.language 仅作展示态同步（审查 M4：占位 footer 已删）。
+            // 形态对齐 iOS Form Picker（PrefsView.swift:44-54）：节内单行「语言 +
+            // 当前值 + chevron」，点开选择层选完即回；选项以自身名称显示，
+            // 「跟随系统」随界面语言本地化
+            FormSection {
+                PickerRow(
+                    title = stringResource(R.string.prefs_language_sectionHeader),
+                    value = languageDisplayName(activity, prefs.language),
+                    onClick = { showLanguagePicker = true },
                 )
             }
 
@@ -216,8 +230,7 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Spacer(Modifier.weight(1f))
-                    val bgBitmap by BackgroundImageStore.state.collectAsState()
-                    val thumb = bgBitmap.bitmap
+                    val thumb = bgState.bitmap
                     if (thumb != null) {
                         Image(
                             bitmap = thumb.asImageBitmap(),
@@ -245,9 +258,10 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                     title = stringResource(R.string.prefs_appearance_parallax),
                     checked = prefs.parallax,
                     onCheckedChange = vm::setParallax,
-                    // 无背景图时禁用且标签置灰（对齐 iOS disabled + Color.secondary）
-                    enabled = prefs.backgroundImage,
-                    titleColor = if (prefs.backgroundImage) {
+                    // 无背景图时禁用且标签置灰（对齐 iOS disabled + Color.secondary）；
+                    // 门控走 hasBackgroundImage（图本体在场），不再依赖可失真的布尔
+                    enabled = hasBackgroundImage,
+                    titleColor = if (hasBackgroundImage) {
                         Color.Unspecified
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -308,7 +322,7 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
     if (showBgPicker) {
         BackgroundImagePickerSheet(
             vm = vm,
-            hasImage = prefs.backgroundImage,
+            hasImage = hasBackgroundImage,
             onApplied = { showBgPicker = false },
             onDismiss = { showBgPicker = false },
         )
@@ -319,6 +333,101 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
             vm = vm,
             prefs = prefs,
             onDismiss = { showThemePicker = false },
+        )
+    }
+
+    // 语言选择弹层（iOS Picker 推入列表的等价形态）：单选即应用并关闭
+    if (showLanguagePicker) {
+        LanguagePickerSheet(
+            selected = prefs.language,
+            onSelect = { code ->
+                vm.setLanguage(code)
+                AppCompatDelegate.setApplicationLocales(localeListFor(code))
+                showLanguagePicker = false
+            },
+            onDismiss = { showLanguagePicker = false },
+        )
+    }
+}
+
+/** 存储码 → 语言选项显示名（null = 跟随系统，随界面语言本地化）。 */
+private fun languageDisplayName(context: android.content.Context, code: String?): String =
+    if (code == null) {
+        context.getString(R.string.prefs_language_system)
+    } else {
+        // 各选项以自身名称显示（对齐 iOS AppLanguage.nativeName），不本地化
+        when (code) {
+            "zh" -> "简体中文"
+            "zh-rTW" -> "繁體中文"
+            "en" -> "English"
+            else -> context.getString(R.string.prefs_language_system)
+        }
+    }
+
+/**
+ * 语言选择弹层：标题 + 单选列表，点选即应用并关闭（iOS 推入列表选中即弹回）。
+ * 选项集与 iOS AppLanguage.allCases 一致：跟随系统/简体中文/繁體中文/English。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LanguagePickerSheet(
+    selected: String?,
+    onSelect: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.prefs_language_sectionHeader),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+                LanguageOptions(selected = selected, onSelect = onSelect)
+            }
+        }
+    }
+}
+
+/** Form Picker 行：title 左 + 当前值（次要色）右 + chevron（iOS Picker 行形态）。 */
+@Composable
+private fun PickerRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.weight(1f).padding(start = 12.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.MiddleEllipsis,
+        )
+        Icon(
+            Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.padding(start = 4.dp).size(20.dp),
         )
     }
 }
@@ -460,60 +569,74 @@ private fun ThemeColorPickerSheet(
     // 叠加在示例色块上的随机小动物（行星图标同套资源），每次打开弹窗随机一只
     val animalKey = remember { PlanetIcon.catalog.random() }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            Text(
-                stringResource(R.string.prefs_theme_sectionHeader),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-
-            // 示例色块 + 预置色板（iOS 同组无标题 Section）
-            FormSection {
-                val accentHex by ThemeManager.accent.collectAsState()
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(vertical = 4.dp)
-                        .size(120.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Color(accentHex.toInt())),
-                    contentAlignment = Alignment.Center,
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                // 标题行：prefs_theme_sectionHeader + 右侧「完成」（对齐 iOS theme sheet
+                // 的 toolbar Done——背景图 sheet 同范式，此前主题色 sheet 缺这一出口）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        painter = painterResource(PlanetIcon.drawableId(context, animalKey)),
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(64.dp),
+                    Text(
+                        stringResource(R.string.prefs_theme_sectionHeader),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
+                }
+
+                // 示例色块 + 预置色板（iOS 同组无标题 Section）
+                FormSection {
+                    val accentHex by ThemeManager.accent.collectAsState()
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(vertical = 4.dp)
+                            .size(120.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(accentHex.toInt())),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(PlanetIcon.drawableId(context, animalKey)),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(64.dp),
+                        )
+                    }
+                    PresetPalette(
+                        selected = (prefs.themeColorCustom == null) to
+                            (prefs.themeColor ?: ThemeManager.presets.first()),
+                        onSelect = vm::setThemePreset,
                     )
                 }
-                PresetPalette(
-                    selected = (prefs.themeColorCustom == null) to
-                        (prefs.themeColor ?: ThemeManager.presets.first()),
-                    onSelect = vm::setThemePreset,
-                )
-            }
 
-            FormSection(header = stringResource(R.string.prefs_theme_wheel)) {
-                HslColorPicker(
-                    onPreview = vm::previewThemeCustom,
-                    onCommit = vm::setThemeCustom,
-                )
-            }
+                FormSection(header = stringResource(R.string.prefs_theme_wheel)) {
+                    HslColorPicker(
+                        onPreview = vm::previewThemeCustom,
+                        onCommit = vm::setThemeCustom,
+                    )
+                }
 
-            FormSection(footer = stringResource(R.string.prefs_theme_footer)) {
-                FormToggleRow(
-                    title = stringResource(R.string.prefs_theme_deriveStatus),
-                    checked = prefs.successDerived,
-                    onCheckedChange = vm::setSuccessDerived,
-                )
+                FormSection(footer = stringResource(R.string.prefs_theme_footer)) {
+                    FormToggleRow(
+                        title = stringResource(R.string.prefs_theme_deriveStatus),
+                        checked = prefs.successDerived,
+                        onCheckedChange = vm::setSuccessDerived,
+                    )
+                }
             }
         }
     }

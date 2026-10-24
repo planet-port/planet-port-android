@@ -47,7 +47,6 @@ import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.components.CopyableValue
-import cn.imgozi.planetport.ui.components.OfficialPlanetIcon
 import cn.imgozi.planetport.ui.planet.PlanetIcon
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
@@ -120,10 +119,9 @@ fun PlanetCardView(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box {
-            when (planet.kind) {
-                PlanetKind.official -> OfficialPlanetIcon(Modifier.size(HomeMetrics.iconTileSize))
-                PlanetKind.custom -> CustomPlanetTile(planet)
-            }
+            // 官方行星与私有行星同规则（iOS PlanetIcon：无特判，动物图标按名称
+            // 哈希回退 + tint 底色），不渲染 ZeroTier 默认图标
+            CustomPlanetTile(planet)
             if (showBadge && !isPreview) {
                 StatusBadge(
                     badgeInUse,
@@ -248,7 +246,3 @@ private fun IdLine(nodeId: String, moonCount: Int, tertiary: Color) {
     }
 }
 
-/**
- * 官方行星整块磁贴（iOS 资产 OfficialPlanetIcon：线稿带环行星 · 石绿底，浅深自适应）。
- * 图标本体已提升至 ui.components.OfficialPlanetIcon 与行星设置页共用。
- */

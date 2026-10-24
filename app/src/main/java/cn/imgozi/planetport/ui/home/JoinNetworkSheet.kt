@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
@@ -14,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -34,6 +37,7 @@ import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.ui.components.DnsConfigSection
+import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.components.isDnsConfigValid
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 
@@ -61,112 +65,119 @@ internal fun JoinNetworkSheet(
     }
     val dnsValid = isDnsConfigValid(dnsMode, dnsServers)
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-                Spacer(Modifier.weight(1f))
-                Text(stringResource(R.string.join_title), style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.weight(1f))
-                TextButton(
-                    enabled = idValid && dnsValid,
-                    onClick = {
-                        // 加入=仅保存不连接，无数量上限（iOS join() 同构）——maxNetworks
-                        // 软上限只作用于激活路径（HomeView 开关处，可强制开启）
-                        val newId = networkId.lowercase()
-                        // 网络 ID 查重：已存在视为同一网络，禁止重复添加（iOS join()）
-                        val existing = state.planetNetworks[state.selectedPlanetId].orEmpty()
-                        if (existing.any { it.networkId == newId }) {
-                            duplicateAlert = true
-                            return@TextButton
-                        }
-                        vm.joinNetwork(
-                            NetworkEntry(
-                                networkId = newId,
-                                networkName = newId,
-                                // 仅保存不自动连接
-                                lastActivated = false,
-                                routeViaZeroTier = routeVia,
-                                dnsMode = dnsMode,
-                                customDns = if (dnsMode == DnsMode.custom) dnsServers else emptyList(),
-                            ),
-                        )
-                        onDismiss()
-                    },
-                ) { Text(stringResource(R.string.join_action)) }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(
-                    value = networkId,
-                    onValueChange = { networkId = it },
-                    label = { Text(stringResource(R.string.join_idPlaceholder)) },
-                    singleLine = true,
-                    textStyle = PlanetFonts.MonoBody.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Ascii,
-                        capitalization = KeyboardCapitalization.Characters,
-                    ),
-                    trailingIcon = {
-                        // 扫码回填（iOS QRScannerView）：识别到 16 位 hex 即填入
-                        IconButton(onClick = { showScanner = true }) {
-                            Icon(
-                                imageVector = Icons.Outlined.QrCodeScanner,
-                                contentDescription = stringResource(R.string.join_a11yScan),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (networkId.isNotEmpty() && !idValid) {
-                    Text(
-                        stringResource(R.string.join_idInvalid),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        stringResource(R.string.join_routeVia),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                     Spacer(Modifier.weight(1f))
-                    Switch(checked = routeVia, onCheckedChange = { routeVia = it })
+                    Text(stringResource(R.string.join_title), style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(
+                        enabled = idValid && dnsValid,
+                        onClick = {
+                            // 加入=仅保存不连接，无数量上限（iOS join() 同构）——maxNetworks
+                            // 软上限只作用于激活路径（HomeView 开关处，可强制开启）
+                            val newId = networkId.lowercase()
+                            // 网络 ID 查重：已存在视为同一网络，禁止重复添加（iOS join()）
+                            val existing = state.planetNetworks[state.selectedPlanetId].orEmpty()
+                            if (existing.any { it.networkId == newId }) {
+                                duplicateAlert = true
+                                return@TextButton
+                            }
+                            vm.joinNetwork(
+                                NetworkEntry(
+                                    networkId = newId,
+                                    networkName = newId,
+                                    // 仅保存不自动连接
+                                    lastActivated = false,
+                                    routeViaZeroTier = routeVia,
+                                    dnsMode = dnsMode,
+                                    customDns = if (dnsMode == DnsMode.custom) dnsServers else emptyList(),
+                                ),
+                            )
+                            onDismiss()
+                        },
+                    ) { Text(stringResource(R.string.join_action)) }
                 }
-                Text(
-                    stringResource(R.string.join_routeViaFooter),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
 
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("DNS", style = MaterialTheme.typography.labelLarge)
-                DnsConfigSection(
-                    mode = dnsMode,
-                    dns = dnsServers,
-                    enabled = true,
-                    onChange = { mode, servers ->
-                        dnsMode = mode
-                        dnsServers = servers
-                    },
-                    showNetworkDns = null,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = networkId,
+                        onValueChange = { networkId = it },
+                        label = { Text(stringResource(R.string.join_idPlaceholder)) },
+                        singleLine = true,
+                        textStyle = PlanetFonts.MonoBody.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Ascii,
+                            capitalization = KeyboardCapitalization.Characters,
+                        ),
+                        trailingIcon = {
+                            // 扫码回填（iOS QRScannerView）：识别到 16 位 hex 即填入
+                            IconButton(onClick = { showScanner = true }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.QrCodeScanner,
+                                    contentDescription = stringResource(R.string.join_a11yScan),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (networkId.isNotEmpty() && !idValid) {
+                        Text(
+                            stringResource(R.string.join_idInvalid),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            stringResource(R.string.join_routeVia),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Switch(checked = routeVia, onCheckedChange = { routeVia = it })
+                    }
+                    Text(
+                        stringResource(R.string.join_routeViaFooter),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("DNS", style = MaterialTheme.typography.labelLarge)
+                    DnsConfigSection(
+                        mode = dnsMode,
+                        dns = dnsServers,
+                        enabled = true,
+                        onChange = { mode, servers ->
+                            dnsMode = mode
+                            dnsServers = servers
+                        },
+                        showNetworkDns = null,
+                    )
+                }
             }
         }
     }

@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.Button
@@ -17,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.ui.components.SectionCard
+import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 
 /**
@@ -56,89 +60,96 @@ fun AddMoonSheet(
     val valid = isHex16(worldIdText) && isHex16(seedText)
     val worldId = if (valid) worldIdText.toULongOrNull(16) else null
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.moon_addTitle),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-            }
-
-            // —— 从文件导入 ——
-            Text(
-                stringResource(R.string.moon_importFileHeader),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SectionCard(
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClickLabel = moonChooseFile) { onFileImport() },
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Description,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.moon_addTitle),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Text(moonChooseFile, style = MaterialTheme.typography.labelLarge)
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                 }
-            }
 
-            // —— 手动入轨 ——
-            Text(
-                stringResource(R.string.moon_manualHeader),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = worldIdText,
-                onValueChange = { worldIdText = it },
-                label = { Text(stringResource(R.string.moon_worldIdPlaceholder)) },
-                singleLine = true,
-                textStyle = PlanetFonts.MonoBody,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Ascii,
-                    capitalization = KeyboardCapitalization.Characters,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = seedText,
-                onValueChange = { seedText = it },
-                label = { Text(stringResource(R.string.moon_seedPlaceholder)) },
-                singleLine = true,
-                textStyle = PlanetFonts.MonoBody,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Ascii,
-                    capitalization = KeyboardCapitalization.Characters,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                onClick = {
-                    val id = worldId ?: return@Button
-                    val seed = seedText.toULongOrNull(16) ?: return@Button
-                    onManualOrbit(id, seed)
-                },
-                enabled = valid,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.moon_orbit))
+                // —— 从文件导入 ——
+                Text(
+                    stringResource(R.string.moon_importFileHeader),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SectionCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClickLabel = moonChooseFile) { onFileImport() },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Description,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(moonChooseFile, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+
+                // —— 手动入轨 ——
+                Text(
+                    stringResource(R.string.moon_manualHeader),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = worldIdText,
+                    onValueChange = { worldIdText = it },
+                    label = { Text(stringResource(R.string.moon_worldIdPlaceholder)) },
+                    singleLine = true,
+                    textStyle = PlanetFonts.MonoBody,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        capitalization = KeyboardCapitalization.Characters,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = seedText,
+                    onValueChange = { seedText = it },
+                    label = { Text(stringResource(R.string.moon_seedPlaceholder)) },
+                    singleLine = true,
+                    textStyle = PlanetFonts.MonoBody,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        capitalization = KeyboardCapitalization.Characters,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = {
+                        val id = worldId ?: return@Button
+                        val seed = seedText.toULongOrNull(16) ?: return@Button
+                        onManualOrbit(id, seed)
+                    },
+                    enabled = valid,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.moon_orbit))
+                }
             }
         }
     }
