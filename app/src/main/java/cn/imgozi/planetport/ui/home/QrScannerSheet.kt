@@ -257,36 +257,48 @@ internal object QrNetworkId {
 }
 
 /**
- * 单帧解码（zxing）：Y 平面亮度 + 全幅源；传感器数据为横屏行序，竖屏
- * （rotation 90/270）经 rotateCounterClockwise 转正后解码，未命中返回 null。
+ * 单帧解码（zxing）：Y 平面亮度 + 全幅源；传感器帧为横屏行序，竖屏
+ * （rotation 90/270）手动旋转 Y 阵转正后解码，未命中返回 null。
+ *
+ * 注意：[PlanarYUVLuminanceSource] 不支持旋转（isRotateSupported=false，
+ * BinaryBitmap.rotateCounterClockwise 会抛 UnsupportedOperationException），
+ * 必须自己旋转数据，不能用 BinaryBitmap 的旋转入口。
  */
 @androidx.annotation.OptIn(ExperimentalGetImage::class)
 private fun decodeQr(reader: MultiFormatReader, proxy: ImageProxy): String? {
     val plane = proxy.planes[0] ?: return null
     val buffer = plane.buffer ?: return null
-    val rotated = proxy.imageInfo.rotationDegrees.let { it == 90 || it == 270 }
+    val rotation = proxy.imageInfo.rotationDegrees
+    val rotated = rotation == 90 || rotation == 270
 
-    // ByteBuffer → ByteArray（Y 平面亮度；rowStride 通常等于 width，直接整块取）
-    val data = ByteArray(buffer.remaining()).also {
+    // ByteBuffer → ByteArray（Y 平面亮度）
+    var data = ByteArray(buffer.remaining()).also {
         buffer.position(0)
         buffer.get(it)
     }
-    var bitmap = BinaryBitmap(
+    var frameW = proxy.width
+    var frameH = proxy.height
+    if (plane.rowStride != frameW) {
+        // 行距含填充（部分设备 rowStride > width）：逐行压缩为紧凑行序
+        val packed = ByteArray(frameW * frameH)
+        for (row in 0 until frameH) {
+            System.arraycopy(data, row * plane.rowStride, packed, row * frameW, frameW)
+        }
+        data = packed
+    }
+    if (rotated) {
+        // 旋转后宽高互换（90 顺时针 / 270 逆时针，均转至自然竖直方向）
+        data = rotateYPlane(data, frameW, frameH, frameW, clockwise = rotation == 90)
+        val w = frameW
+        frameW = frameH
+        frameH = w
+    }
+
+    val bitmap = BinaryBitmap(
         HybridBinarizer(
-            PlanarYUVLuminanceSource(
-                data,
-                proxy.width,
-                proxy.height,
-                0,
-                0,
-                proxy.width,
-                proxy.height,
-                false,
-            ),
+            PlanarYUVLuminanceSource(data, frameW, frameH, 0, 0, frameW, frameH, false),
         ),
     )
-    if (rotated) bitmap = bitmap.rotateCounterClockwise()
-
     return try {
         reader.decodeWithState(bitmap).text
     } catch (_: NotFoundException) {
@@ -294,4 +306,34 @@ private fun decodeQr(reader: MultiFormatReader, proxy: ImageProxy): String? {
     } finally {
         reader.reset()
     }
+}
+
+/**
+ * Y 平面旋转：源宽 [w]、高 [h]（行距 [rowStride]），[clockwise] 为真顺时针
+ * 90°，否则逆时针 90°；输出为宽 h、高 w 的紧凑行序数据。
+ *
+ * 映射推导（源坐标 (x,y)，目标坐标 (x',y')，目标宽 h、高 w）：
+ * - 顺时针：dest[y'*h+x'] = src[(h-1-x')*rowStride + y']
+ * - 逆时针：dest[y'*h+x'] = src[x'*rowStride + (w-1-y')]
+ */
+private fun rotateYPlane(
+    data: ByteArray,
+    w: Int,
+    h: Int,
+    rowStride: Int,
+    clockwise: Boolean,
+): ByteArray {
+    val out = ByteArray(w * h)
+    for (yp in 0 until w) {
+        val dstRow = yp * h
+        for (xp in 0 until h) {
+            val srcIdx = if (clockwise) {
+                (h - 1 - xp) * rowStride + yp
+            } else {
+                xp * rowStride + (w - 1 - yp)
+            }
+            out[dstRow + xp] = data[srcIdx]
+        }
+    }
+    return out
 }
