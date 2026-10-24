@@ -178,8 +178,8 @@ fun HomeView(activity: MainActivity) {
                         state = state,
                         pending = pending,
                         planet = planet,
-                        // iOS 19f7681：锚定本页行星而非全局选中页——滑页过半时选中先变，
-                        // 旁页卡片会瞬时取错「隧道行星」身份（状态/地址串台）
+                        // 本页是否隧道行星锚定本页自身（iOS 19f7681：selectedPlanetId 全局
+                        // 锚定在滑页过半时先变，旁页仍可见的卡片会瞬时丢实时状态/计数）
                         isActivePage = planet.id == state.activePlanetId,
                         // 整卡点击先 selectPlanet 再入设置（iOS HomeView.swift:372-375 同序；
                         // Moon 页归属与 moon 文件落盘目录都取 selectedPlanetId，此序是一致性前提）
@@ -410,9 +410,10 @@ private fun PlanetProfile.displayNameRes(): String =
     if (kind == PlanetKind.official) stringResource(R.string.planet_official_name) else name
 
 /**
- * 头区（iOS headerZone）：半透明背景渐变盖过状态栏，左 40dp logo + 标题，
- * 非当前隧道行星浏览且隧道在跑时显示「跳回活跃行星」链接 chip，右侧设置入口；
- * 圆点指示器随头区固定（iOS indicator 沉底 logo 右列，Android 保持居中行样式）。
+ * 头区（iOS headerZone :178-244）：半透明背景渐变盖过状态栏。行结构 = 左 40dp
+ * logo + 右列（高锁 40dp 与 logo 等高）：标题行（标题 + 活跃行星 chip + 设置
+ * 入口）在顶，圆点指示器沉底 offset -2——位于标题正下方、logo 右缘起点处，
+ * 非屏幕居中（此前居中行样式为视觉偏差）。
  */
 @Composable
 private fun HeaderZone(
@@ -443,99 +444,113 @@ private fun HeaderZone(
             }
             .statusBarsPadding()
             .padding(start = 20.dp, end = 12.dp, top = 6.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        // 行结构对齐 iOS：logo 左，右列高锁 40dp（与 logo 等高）给内部
+        // Spacer/offset 确定参照系；标题行在顶、指示器沉底
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppLogo(Modifier.size(40.dp))
             Spacer(Modifier.size(10.dp))
-            Text(
-                "Planet Port",
-                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onOpenPrefs) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = stringResource(R.string.common_settings),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-        if (!browsingActive && state.tunnelRunning) {
-            val activeName = state.planets.firstOrNull { it.id == state.activePlanetId }
-                ?.displayNameRes()
-                ?: stringResource(R.string.planet_official_name)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onOpenActive,
-                    )
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            Column(
+                Modifier
+                    .weight(1f)
+                    .height(40.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Link,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(12.dp),
-                )
-                Spacer(Modifier.size(4.dp))
-                Text(
-                    activeName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-
-        // 圆点指示器：选中 20×6 主色胶囊 / 未选 6×6 灰，44dp 热区（iOS :349-378）
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            repeat(pageCount) { idx ->
-                val selected = currentPage == idx
-                // 颜色在组合期取值，draw lambda 非 composable 上下文
-                val dotColor = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                }
-                // 无障碍标签：行星页 = 浏览 X，末位 = 添加行星（iOS dot(isSelected:label:)）
-                val planet = state.planets.getOrNull(idx)
-                val dotLabel = planet
-                    ?.let { stringResource(R.string.home_a11y_browsePlanet, it.displayNameRes()) }
-                    ?: stringResource(R.string.planet_add_title)
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { onSelectPage(idx) }
-                        .padding(12.dp)
-                        .semantics { contentDescription = dotLabel },
-                    contentAlignment = Alignment.Center,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Canvas(
-                        Modifier.size(
-                            width = if (selected) 20.dp else 6.dp,
-                            height = 6.dp,
-                        ),
-                    ) {
-                        drawRoundRect(
-                            color = dotColor,
-                            cornerRadius = CornerRadius(size.height),
+                    Text(
+                        "Planet Port",
+                        style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (!browsingActive && state.tunnelRunning) {
+                        val activeName = state.planets.firstOrNull { it.id == state.activePlanetId }
+                            ?.displayNameRes()
+                            ?: stringResource(R.string.planet_official_name)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onOpenActive,
+                                )
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Link,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp),
+                            )
+                            Spacer(Modifier.size(4.dp))
+                            Text(
+                                activeName,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    IconButton(onClick = onOpenPrefs) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = stringResource(R.string.common_settings),
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                // 圆点指示器（iOS indicator :289-312）：沉底右列 leading 起点，
+                // 再上提 2dp（offset 纯视觉）；选中 20×6 主色胶囊 / 未选 6×6 灰。
+                // 视觉间隙 7dp = 相邻各让 3.5；热区竖向 44dp、横向吃满间隙——
+                // iOS 用 background 44pt 热区不撑布局（可重叠），Compose 命中区
+                // 不可越布局边界，取「间隙均分」保 7dp 视觉无死角
+                Row(
+                    modifier = Modifier.offset(y = (-2).dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    repeat(pageCount) { idx ->
+                        val selected = currentPage == idx
+                        // 颜色在组合期取值，draw lambda 非 composable 上下文
+                        val dotColor = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        }
+                        // 无障碍标签：行星页 = 浏览 X，末位 = 添加行星（iOS dot(isSelected:label:)）
+                        val planet = state.planets.getOrNull(idx)
+                        val dotLabel = planet
+                            ?.let { stringResource(R.string.home_a11y_browsePlanet, it.displayNameRes()) }
+                            ?: stringResource(R.string.planet_add_title)
+                        Box(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .clip(CircleShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { onSelectPage(idx) }
+                                .padding(horizontal = 3.5.dp)
+                                .semantics { contentDescription = dotLabel },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Canvas(
+                                Modifier.size(
+                                    width = if (selected) 20.dp else 6.dp,
+                                    height = 6.dp,
+                                ),
+                            ) {
+                                drawRoundRect(
+                                    color = dotColor,
+                                    cornerRadius = CornerRadius(size.height),
+                                )
+                            }
+                        }
                     }
                 }
             }
