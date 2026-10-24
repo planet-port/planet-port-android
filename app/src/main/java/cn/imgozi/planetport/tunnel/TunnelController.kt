@@ -2,8 +2,13 @@ package cn.imgozi.planetport.tunnel
 
 import android.content.Context
 import android.net.VpnService
-import android.os.Handler
-import android.os.Looper
+import cn.imgozi.planetport.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 隧道启停编排门面（UI 层唯一入口；对齐 iOS VPNManager 职责）。
@@ -13,6 +18,18 @@ import android.os.Looper
  * 防止 Activity 泄漏到延迟回调。
  */
 object TunnelController {
+
+    /** 重启编排：只跑「等停机终态 → 再启动」的短任务，主线程即时派发（无长期驻留协程） */
+    private val restartScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /**
+     * 切网重连进行中标记：重连窗口（STOP 下发 → 停机终态 → START 下发）内后续路径
+     * 变化一律合并。合并的原因：窗口内再下一次 STOP 会排在迟到 START 之前/之后不
+     * 确定，最坏产生一次多余的停启循环；且触发期间核心本来就要整体重启重探测，
+     * 合并不损失语义。
+     */
+    @Volatile
+    private var reconnectInFlight = false
 
     /**
      * 隧道是否存活：Running/Starting/Reconnecting 视为在跑；
@@ -61,11 +78,57 @@ object TunnelController {
     }
 
     /**
+     * 等隧道离开存活态（Running/Starting/Reconnecting → Stopped/Idle/Failed）；
+     * 超时返回 false。供「stop → 等终态 → start」编排用：停机是异步收口
+     * （消费协程 join 上限 500ms + JNI shutdown），固定延迟无法覆盖所有路径，
+     * 以状态流事件为准才不会把 START 递进未停完的服务。
+     */
+    internal suspend fun awaitSettled(timeoutMs: Long = 15_000): Boolean =
+        withTimeoutOrNull(timeoutMs) {
+            TunnelStateBus.tunnelState.first {
+                it !is TunnelState.Running && it !is TunnelState.Starting && it !is TunnelState.Reconnecting
+            }
+        } != null
+
+    /**
+     * 网络路径变化触发的核心整体重启（对齐 iOS restartCore，PacketTunnelProvider.swift:204-218）。
+     * 核心缓存的直连路径基于旧网络的 NAT 映射，接口切换后失效且无法主动重置——
+     * Android UDP 虽是通配 bind 天然容忍，但核心重建才能重探测直连路径，与 iOS 同理。
+     *
+     * 时序：置 Reconnecting（通知/状态行可见）→ STOP → 等停机终态 → START。
+     * 未跑 no-op；重连窗口内的重复触发合并（见 [reconnectInFlight]）；等待超时只
+     * 记日志放弃迟到启动，不留半启动状态（停机侧 join/JNI 收口有界，超时即进程级
+     * 异常，交由用户手动重连）。
+     */
+    fun reconnectForNetworkChange(context: Context) {
+        if (!isRunning) return
+        if (reconnectInFlight) {
+            TunnelStateBus.log("网络切换合并：重连进行中，忽略重复触发")
+            return
+        }
+        reconnectInFlight = true
+        val app = context.applicationContext
+        TunnelStateBus.setTunnelState(TunnelState.Reconnecting("network_change"))
+        VpnNotification.update(app, app.getString(R.string.tunnel_status_reconnecting))
+        TunnelStateBus.log("网络切换，重启核心")
+        ZeroTierVpnService.stop(app)
+        restartScope.launch {
+            try {
+                if (awaitSettled()) ZeroTierVpnService.start(app)
+                else TunnelStateBus.log("重连等待停机终态超时，放弃迟到启动")
+            } finally {
+                reconnectInFlight = false
+            }
+        }
+    }
+
+    /**
      * 在跑则热重启（disableIpv6 等偏好的可靠生效路径，对齐 iOS VPNManager
-     * restartIfRunning）：停 + 1s 后启；未跑 no-op（偏好已落盘，下次启动自然生效）。
-     * 停机是异步收口（join 消费协程/关 Node），1s 窗口保证 UDP 9994 释放与
-     * native 资源落定。窗口内用户手动停止则会被这次迟到启动顶回（与 iOS 同构的
-     * 既有竞态，窗口短可接受）。
+     * restartIfRunning）：停 → 等停机终态 → 启；未跑 no-op（偏好已落盘，下次启动
+     * 自然生效）。原 1s 固定延迟改走 [awaitSettled]：START 只在服务真正停完后下发，
+     * 消除「停机慢于固定窗口时迟到启动撞进收口中」的竞态；等待期也把顶回用户手动
+     * 停止的窗口从固定 1s 压缩到实际停机耗时（窗口内用户主动停止的完全裁决归 T3
+     * 调用面收口）。
      *
      * disableIpv6 已纳入 TunnelManager 的 appliedEntries 比较（configChanges 驱动
      * 的 applyConfig 可感知并热重套），但 writePrefs 静默不发变更信号——UI 写完
@@ -75,8 +138,9 @@ object TunnelController {
         if (!isRunning) return
         val app = context.applicationContext
         ZeroTierVpnService.stop(app)
-        Handler(Looper.getMainLooper()).postDelayed({
-            ZeroTierVpnService.start(app)
-        }, 1_000)
+        restartScope.launch {
+            if (awaitSettled()) ZeroTierVpnService.start(app)
+            else TunnelStateBus.log("重启等待停机终态超时，放弃迟到启动")
+        }
     }
 }

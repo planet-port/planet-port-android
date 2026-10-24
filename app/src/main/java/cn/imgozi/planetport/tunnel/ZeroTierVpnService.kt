@@ -154,6 +154,12 @@ internal class ZeroTierVpnService : VpnService() {
                 started = true
                 TunnelStateBus.setTunnelState(TunnelState.Running)
                 VpnNotification.update(this@ZeroTierVpnService, getString(R.string.tunnel_status_running))
+                // 切网自愈：隧道全链起来后才注册路径监听——失败路径的 finally 兜底不含
+                // NetWatch 注销，半启动状态不得持注册（回调持服务引用）。重复 START 守卫
+                // 分支不至此，NetWatch.start 幂等仍兜底
+                NetWatch.start(this@ZeroTierVpnService) {
+                    TunnelController.reconnectForNetworkChange(this@ZeroTierVpnService)
+                }
             } finally {
                 if (!started) {
                     // 局部引用兜底清理（幂等，与 stopTunnel 双清安全）；finally 内全非挂起，
@@ -183,6 +189,9 @@ internal class ZeroTierVpnService : VpnService() {
         // 移除不留存。onRevoke/启动失败路径重复 startForeground 幂等无害
         VpnNotification.start(this, getString(R.string.tunnel_status_stopped))
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
+        // 先摘路径监听再拆链：teardown 期间的路径回调不得再触发重连（幂等，未注册时无害；
+        // 重连编排的等待协程已捕获计划，不受此处注销影响）
+        NetWatch.stop()
         scope?.cancel()
         scope = null
         tunnelManager?.stop()
@@ -230,6 +239,9 @@ internal class ZeroTierVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        // 兜底注销（stopTunnel 已覆盖正常/撤销路径）：系统直接销毁服务时不残留
+        // 持服务引用的路径回调
+        NetWatch.stop()
         TunnelStateBus.setTunnelState(TunnelState.Idle)
         super.onDestroy()
     }
