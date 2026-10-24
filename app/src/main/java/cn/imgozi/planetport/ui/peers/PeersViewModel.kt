@@ -1,7 +1,10 @@
 package cn.imgozi.planetport.ui.peers
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.PeerInfo
@@ -22,7 +25,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * [loaded] 表达「查询中 → 已查询」迁移：等待首个非空推流（至多一个推流周期，
  * 6s 超时），超时按「已查询」处理（隧道在跑但确实没有 peer 的情形）。
  */
-class PeersViewModel : ViewModel() {
+class PeersViewModel(app: Application) : AndroidViewModel(app) {
 
     val peers: StateFlow<List<PeerInfo>> = TunnelStateBus.peers
 
@@ -33,7 +36,7 @@ class PeersViewModel : ViewModel() {
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
 
     /** 活跃行星展示名（空态文案用，对齐 iOS app.activePlanet.displayName）。 */
-    private val _planetName = MutableStateFlow(PlanetProfile.OFFICIAL.name)
+    private val _planetName = MutableStateFlow(displayPlanetName(null))
     val planetName: StateFlow<String> = _planetName.asStateFlow()
 
     init {
@@ -53,7 +56,18 @@ class PeersViewModel : ViewModel() {
     private suspend fun refreshPlanetName() {
         val store = StoreRepo.store
         val id = store.activePlanetId()
-        _planetName.value = store.readPlanets().firstOrNull { it.id == id }?.name
-            ?: PlanetProfile.OFFICIAL.name
+        _planetName.value = displayPlanetName(store.readPlanets().firstOrNull { it.id == id })
+    }
+
+    /** VM 侧资源解析（非 Composable 上下文）。 */
+    private fun string(resId: Int): String = getApplication<Application>().getString(resId)
+
+    /**
+     * 行星展示名：官方行星存储名不翻译，显示侧映射本地化文案
+     * （对齐 iOS PlanetProfile.displayName；档案缺失时按官方语义回退）。
+     */
+    private fun displayPlanetName(planet: PlanetProfile?): String = when {
+        planet == null || planet.kind == PlanetKind.official -> string(R.string.planet_official_name)
+        else -> planet.name
     }
 }

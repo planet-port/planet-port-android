@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.MoonEntry
 import cn.imgozi.planetport.store.MoonImporter
+import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.TunnelController
@@ -45,6 +46,15 @@ class MoonViewModel(application: Application, private val planetId: String) : An
     /** VM 侧资源解析（非 Composable 上下文）。 */
     private fun string(resId: Int): String = getApplication<Application>().getString(resId)
 
+    /**
+     * 行星展示名：官方行星存储名不翻译，显示侧映射本地化文案
+     * （对齐 iOS PlanetProfile.displayName；档案缺失时按官方语义回退）。
+     */
+    private fun displayPlanetName(planet: PlanetProfile?): String = when {
+        planet == null || planet.kind == PlanetKind.official -> string(R.string.planet_official_name)
+        else -> planet.name
+    }
+
     private val _moons = MutableStateFlow<List<MoonRow>>(emptyList())
     val moons: StateFlow<List<MoonRow>> = _moons.asStateFlow()
 
@@ -52,7 +62,7 @@ class MoonViewModel(application: Application, private val planetId: String) : An
     private val _loaded = MutableStateFlow(false)
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
 
-    private val _planetName = MutableStateFlow(PlanetProfile.OFFICIAL.name)
+    private val _planetName = MutableStateFlow(displayPlanetName(null))
     val planetName: StateFlow<String> = _planetName.asStateFlow()
 
     init {
@@ -155,8 +165,7 @@ class MoonViewModel(application: Application, private val planetId: String) : An
         _moons.value = withContext(Dispatchers.IO) {
             entries.map { MoonRow(it, cacheFile(it).exists()) }
         }
-        _planetName.value = store.readPlanets().firstOrNull { it.id == planetId }?.name
-            ?: PlanetProfile.OFFICIAL.name
+        _planetName.value = displayPlanetName(store.readPlanets().firstOrNull { it.id == planetId })
         _loaded.value = true
     }
 

@@ -95,7 +95,18 @@ fun PlanetSettingsView(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(planet?.name ?: stringResource(R.string.planet_title)) },
+                title = {
+                    // 官方行星存储名不翻译，显示侧映射本地化文案（iOS PlanetProfile.displayName）
+                    Text(
+                        planet?.let {
+                            if (it.kind == PlanetKind.official) {
+                                stringResource(R.string.planet_official_name)
+                            } else {
+                                it.name
+                            }
+                        } ?: stringResource(R.string.planet_title),
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -289,7 +300,7 @@ private fun NameRow(
         Spacer(Modifier.weight(1f))
         if (isOfficial) {
             Text(
-                planet.name,
+                stringResource(R.string.planet_official_name),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

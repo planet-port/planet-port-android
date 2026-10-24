@@ -146,7 +146,12 @@ fun PlanetCardView(
             }
         }
         Text(
-            planet.name,
+            // 官方行星存储名不翻译，显示侧映射本地化文案（iOS PlanetProfile.displayName）
+            if (planet.kind == PlanetKind.official) {
+                stringResource(R.string.planet_official_name)
+            } else {
+                planet.name
+            },
             style = MaterialTheme.typography.titleMedium,
             maxLines = 1,
             textAlign = TextAlign.Center,
