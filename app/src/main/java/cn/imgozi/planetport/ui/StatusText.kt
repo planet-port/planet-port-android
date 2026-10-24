@@ -30,7 +30,7 @@ fun ztNetworkStatusText(code: Int): String = when (code) {
     5 -> "客户端过旧"
     6 -> "需要认证"
     -1 -> "未知"
-    else -> "未知($code)"
+    else -> "未知"
 }
 
 /** 隧道宏观状态文案（自 ui/P2SelfCheck.kt:39-46 上移，T3 换挂后脚手架页退役）。 */
@@ -75,7 +75,7 @@ fun deriveNetworkCardStatus(
             NetworkCardStatus("未连接", StatusColor.Neutral)
         }
     }
-    liveConflict?.let {
+    liveConflict?.takeIf { lastActivated }?.let {
         return NetworkCardStatus(conflictLabel(it), StatusColor.Danger)
     }
     if (!lastActivated) {

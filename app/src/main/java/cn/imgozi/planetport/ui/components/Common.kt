@@ -123,7 +123,7 @@ fun CopyableText(
 
     LaunchedEffect(copied) {
         if (copied) {
-            delay(1500)
+            delay(800)
             copied = false
         }
     }

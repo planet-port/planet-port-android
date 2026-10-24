@@ -50,7 +50,8 @@ data class DnsSlots(
     }
 }
 
-/** 手写 IPv4 校验：点分四段、每段 0..255、无前导零（对齐 inet_pton(AF_INET) 严格语义）。 */
+/** 手写 IPv4 校验：点分四段、每段 0..255、拒绝前导零（较传统 inet_pton 更严格——
+ *  后者把 010 视作十进制 10 接受；无功能危害，取向更严）。 */
 fun isValidIpv4(value: String): Boolean {
     val parts = value.split('.')
     if (parts.size != 4) return false
@@ -101,22 +102,24 @@ private fun hexGroups(part: String): List<String>? {
 }
 
 /**
- * DNS 配置合法性口径（供 T3「加入」按钮 / T4「应用 DNS 配置」按钮门控）：
- * custom 模式要求 IPv4 DNS 1 必填且合法、其余槽位合法或空；其余模式恒合法。
+ * DNS 配置合法性口径（供 T3「加入」按钮 / T4「应用 DNS 配置」按钮门控），
+ * 对齐 iOS DNSConfig.isValid：非空槽位必须合法，且至少一项非空（IPv4 DNS 1
+ * 可空——只配 IPv6 DNS 是合法用法）；其余模式恒合法。
  */
 fun isDnsConfigValid(mode: DnsMode, dns: List<String>): Boolean {
     if (mode != DnsMode.custom) return true
     val s = DnsSlots.from(dns)
-    return s.v4a.isNotEmpty() && isValidIpv4(s.v4a) &&
-        (s.v4b.isEmpty() || isValidIpv4(s.v4b)) &&
-        (s.v6a.isEmpty() || isValidIpv6(s.v6a)) &&
-        (s.v6b.isEmpty() || isValidIpv6(s.v6b))
+    fun slotOk(v: String, valid: (String) -> Boolean) = v.isEmpty() || valid(v)
+    return slotOk(s.v4a, ::isValidIpv4) && slotOk(s.v4b, ::isValidIpv4) &&
+        slotOk(s.v6a, ::isValidIpv6) && slotOk(s.v6b, ::isValidIpv6) &&
+        (s.v4a.isNotEmpty() || s.v4b.isNotEmpty() || s.v6a.isNotEmpty() || s.v6b.isNotEmpty())
 }
 
 /**
  * DNS 三模式配置区（iOS DNSConfigSection 等价，加入网络弹窗与详情页共用）：
  * 三段分段选择「不使用 / 使用网络 DNS / 自定义」；custom 展开四个输入槽位，
- * 非法时红色 caption「DNS 地址格式不正确」（含 IPv4 DNS 1 留空）。
+ * 非空且非法时红色 caption「DNS 地址格式不正确」（空槽不标红，按钮门控由
+ * [isDnsConfigValid] 统一判断「至少一项非空」）。
  *
  * @param dns 持久化的 customDns 列表（与 NetworkEntry.customDns 同布局）
  * @param onChange 任一槽位/模式变更即上报（列表含未通过校验的非空值，与 iOS 一致，
@@ -235,7 +238,8 @@ private fun DnsField(
         enabled = enabled,
         isError = value.isNotBlank() && !(if (ipv4) isValidIpv4(value) else isValidIpv6(value)),
         keyboardOptions = KeyboardOptions(
-            keyboardType = if (ipv4) KeyboardType.Number else KeyboardType.Text,
+            // Decimal 含点号（Number 面板无「.」无法输入合法 IPv4，对齐 iOS .decimalPad）
+            keyboardType = if (ipv4) KeyboardType.Decimal else KeyboardType.Text,
         ),
         modifier = Modifier.fillMaxWidth(),
     )
