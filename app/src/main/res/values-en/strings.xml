@@ -12,7 +12,6 @@
     <string name="addplanet_duplicate">A planet with the same World ID (%1$s) already exists and cannot be added again.</string>
     <string name="addplanet_importFailed">Import Failed</string>
     <string name="addplanet_namePlaceholder">Planet name</string>
-    <string name="addplanet_previewName">New Planet</string>
     <string name="addplanet_randomIcon">Randomize icon</string>
     <string name="addplanet_ready">Ready · %1$s</string>
     <string name="addplanet_subtitle">Import a planet file, or enter a download URL</string>

@@ -12,7 +12,6 @@
     <string name="addplanet_duplicate">已存在相同的 Planet（World ID %1$s），不能重复添加。</string>
     <string name="addplanet_importFailed">导入失败</string>
     <string name="addplanet_namePlaceholder">行星名称</string>
-    <string name="addplanet_previewName">新行星</string>
     <string name="addplanet_randomIcon">换个随机图标</string>
     <string name="addplanet_ready">已就绪 · %1$s</string>
     <string name="addplanet_subtitle">导入 planet 文件，或输入下载地址</string>

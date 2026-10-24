@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
+import android.graphics.drawable.Icon
 import android.os.Build
 import cn.imgozi.planetport.R
 
@@ -28,7 +29,10 @@ internal object VpnNotification {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL_ID)
             else @Suppress("DEPRECATION") Notification.Builder(context)
         return builder
+            // 状态栏小图标 = 品牌轮辐白色剪影（仅 alpha）；通知栏内展示与 App
+            // 图标一致的品牌 logo（largeIcon，minSdk 23 起 Builder 支持 Icon 重载）
             .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(Icon.createWithResource(context, R.drawable.planet_port_logo))
             .setContentTitle("Planet Port")
             .setContentText(text)
             .setOngoing(true)

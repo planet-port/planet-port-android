@@ -4,12 +4,27 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- 行星本体（圆环描边） -->
+    <!-- 品牌轮辐图形（ic_launcher_fg 同造型，仅 alpha 通道）：中心 hub + 四向
+         辐条带端点节点 + 左上→右下贯穿斜线。状态栏小图标按规范只取白色剪影，
+         比例按 1024 前景稿规整化（辐条扶正为正交、斜线取 45°），线宽加粗保小尺寸可辨 -->
+    <!-- 贯穿斜线 -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M6.8,6.8 L17.2,17.2" />
+    <!-- 四向辐条 -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M12,4.2 V19.8 M4.2,12 H19.8" />
+    <!-- 中心 hub -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M12,4a8,8 0 1,0 0.001,0z M12,6a6,6 0 1,1 -0.001,0z" />
-    <!-- 斜环带 -->
+        android:pathData="M12,9.56a2.44,2.44 0 1,0 0.001,0z" />
+    <!-- 四个端点节点 -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M3.2,13.6 l17.2,-7.4 0.5,1.1 -17.2,7.4z" />
+        android:pathData="M12,2.09a2.11,2.11 0 1,0 0.001,0z M19.8,9.89a2.11,2.11 0 1,0 0.001,0z M12,17.69a2.11,2.11 0 1,0 0.001,0z M4.2,9.89a2.11,2.11 0 1,0 0.001,0z" />
 </vector>
