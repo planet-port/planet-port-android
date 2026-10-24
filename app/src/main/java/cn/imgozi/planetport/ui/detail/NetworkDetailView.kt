@@ -46,7 +46,7 @@ import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
 import cn.imgozi.planetport.ui.theme.PlanetFonts
-import cn.imgozi.planetport.ui.ztNetworkStatusText
+import cn.imgozi.planetport.ui.ztStatusText
 
 /**
  * 网络详情页（iOS NetworkDetailView.swift 1:1）：
@@ -143,7 +143,7 @@ private fun NetworkDetailContent(
         FormSection {
             FormRow("网络 ID", entry.networkId)
             FormRow("名称", snapshot?.name ?: entry.networkName)
-            FormRow("状态", snapshot?.let { ztNetworkStatusText(it.statusCode) } ?: "—")
+            FormRow("状态", snapshot?.let { ztStatusText(it.statusCode) } ?: "—")
             FormRow("类型", snapshot?.type ?: "—")
             FormRow("MAC", snapshot?.mac ?: "—")
             FormRow("MTU", snapshot?.let { it.mtu.toString() } ?: "—")
