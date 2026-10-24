@@ -73,7 +73,9 @@
 
 ---
 
-### Task 2: 开机自启（BootCompletedReceiver + connectOnBoot 偏好）
+### Task 2: 开机自启（BootCompletedReceiver + connectOnBoot 偏好）——**用户裁定暂不实施（2026-10-24）**
+
+> 实现已完成且编译通过（c470ceb，分支 worktree-agent-af794183e9c6e08da 保留、未合入 master；报告 .superpowers/sdd/p5-task-2-report-shelved.md）。恢复时直接 cherry-pick 该分支。**连带影响**：①T6 死 key 终裁时 `prefs_ondemand`/`prefs_ondemand_footer` 按「仍死」处理删除（三语文案在 git 历史可随时恢复）；②T7 验收矩阵第 3 项（开机自启 reboot 验证）取消。以下原文仅作恢复时的需求留档。
 
 **Files:**
 - Create: `app/src/main/java/cn/imgozi/planetport/tunnel/BootCompletedReceiver.kt`
@@ -256,9 +258,9 @@ if (rc != ResultCode.RESULT_OK) {
 
 | 波次 | 任务 | 领地 | 并行性 |
 |---|---|---|---|
-| 1 | T1 切网自愈 ∥ T2 开机自启 ∥ T3 驱动失败置位+UI映射 | T1=tunnel/{NetWatch新,TunnelController,ZeroTierVpnService通知段}；T2={manifest,Models.kt一行,ui/prefs两文件,strings两值}；T3={NodeRuntime,HomeViewModel映射函数区} | 3 并行（T1/T3 同在 tunnel 包但文件不相交；strings.xml 仅 T2 碰且只改值；HomeViewModel 仅 T3 碰） |
+| 1 | T1 切网自愈 ∥ ~~T2 开机自启（暂不实施）~~ ∥ T3 驱动失败置位+UI映射 | T1=tunnel/{NetWatch新,TunnelController,ZeroTierVpnService通知段}；T3={NodeRuntime,HomeViewModel映射函数区} | 2 并行（T1/T3 同在 tunnel 包但文件不相交；HomeViewModel 仅 T3 碰） |
 | 2 | T4 UI 清理组 | ui/home 三文件+ui/prefs 两文件+strings 增一 | 单发（HomeViewModel 与波 1 T3 串行消歧；PrefsViewModel 与 T2 同文件不同函数，波 1 已合入） |
 | 3 | T5 planet 编排收敛 ∥ T6 死 key 终裁+归属+deprecated | T5={TunnelController注释,HomeViewModel,PlanetSettingsViewModel}；T6={strings×3,PrefsView声明区,ZeroTierVpnService杂项} | 2 并行（T5 碰 HomeViewModel 与 T4 串行消歧已由波次保证；T6 strings 与 T4 增 key 串行已保证） |
 | 4 | T7 真机验收+终审+iOS 1:1 终核 | 无代码 | 串行收尾 |
 
-依赖链：T6 依赖 T1/T2/T4（死 key 复活落点）；T5 依赖 T1（awaitSettled）与 T4（HomeViewModel 串行）；T7 依赖全部。
+依赖链：T6 依赖 T1/T4（死 key 复活落点；T2 暂不实施，prefs_ondemand* 按仍死删除）；T5 依赖 T1（awaitSettled）与 T4（HomeViewModel 串行）；T7 依赖全部。
