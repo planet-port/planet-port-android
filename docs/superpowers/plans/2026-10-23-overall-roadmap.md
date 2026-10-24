@@ -16,7 +16,7 @@
 | P0 工程骨架 | Gradle 工程/vendor 组件接入/JNI 桥/CI/骨架页 | APK 启动 + libZeroTierOneJNI 加载成功 | ✅ 闭合（2026-10-23） |
 | P1 数据层 | 模型/JSON 存储/planet·moon 导入/自检页 | 导入 planet/moon、切换、持久化正确 | ✅ 闭合（2026-10-23） |
 | P2 隧道核心 | 单网络隧道全链路（服务壳/核心/UDP/数据面/聚合/验证页） | 加入 → 连通 → 退出 | ✅ 闭合（2026-10-24，判定线版） |
-| P3 多网络数据面 | ping 闭环 + 多网络隔离验证 + 数据面调优 | 双网络不串扰、切换不风暴、首访不丢包 | 🔶 代码面闭合（2026-10-24，终审通过）；T1 判层/T4 真机验证挂起（手机断网） |
+| P3 多网络数据面 | ping 闭环 + 多网络隔离验证 + 数据面调优 | 双网络不串扰、切换不风暴、首访不丢包 | ✅ 闭合（2026-10-24，真机验证完成） |
 | P4 UI 全量 | 正式 UI 全页面 | 三波 14 任务+终审 Ready to merge | ✅ 完成 |
 | P5 收尾 | 稳定性生命周期功能 | 锁屏/切网重连、开机自启、DNS 三模式热重配 | ⬜ 未开始（P4 归档批次并入） |
 
@@ -58,7 +58,7 @@
 
 **结论**：代码终审 **Ready to merge: Yes**——无 Critical；校验和经审查者独立 5000 用例数值验证；「签名≡TUN 实况」四路径成立；无 GPL 引入。T3 审查曾出 Critical（拆 TUN 复用 shutdown 致恢复链路闩死），修复 580ad3e 复核 Approved。
 
-**挂起（真机验证两项，等手机网络恢复）**：T1 ping 判层（BLOCKED 于手机断 WiFi+SIM 无服务，聚合语义正确自洽；续跑步骤在 task-1-report.md Step 3）；T4 多网络验证（计划 Step 2 已补终审 Important 必验项——被踢全链 logcat 盯 onRevoke，触发则就地加来源标志；装机须用最新 HEAD）。真机验证完成后本阶段转 ✅。
+**挂起项闭合（2026-10-24 真机验证完成）**：T1 ping 判层完成——四方证据（tun TX=0 / ip neigh 空+ARP问=0 / 全 uid 全 mark route get 全正确 / 入栈完好）交叉定位断点在系统层「内核本地产→tun0」出栈丢弃，app 代码零缺陷（Builder 全默认配置核实）；出栈通不通需 ZerotierFix 同机对照实验区分设备/配置（用户侧）。T4 多网络验证完成——双网并发、路由隔离、名称回写、计数、部分 leave TUN 重建、被踢全链（橙点+无黑洞+重授权恢复）全过；T6b 冲突链路五点全过（收敛写回/弹窗/持稳/路由收敛/重开清除含物理网段挖洞）。onRevoke 的 UI 触发被 MIUI 无锁屏密码死锁堵死（平台不可达），转用户配合项。附带修复 895055c（NavStackViewModel 可见性真机首启崩溃）。
 
 **移交新增**：P4 顺手项四条（DAD 响应形态组播 NA+Solicited=0、withContext(NonCancellable) establish、拆 TUN 后状态/通知保真、NdpTable 注释）；onRevoke 平台交互证据作为 release 前置闸门（并入 T4）。
 
@@ -87,14 +87,14 @@
 | CI 首跑 | P0 | 用户侧 | 待 push |
 | configChanges level-triggered 契约 | P1 | P2（已消费） | 闭合 |
 | activatePlanet 重启联动 | P1 | P5 | 挂起 |
-| ping 判层复验 + 组播/帧路径调优 | P2 | P3 | T1 BLOCKED 挂起（真机网络） |
+| ping 判层复验 + 组播/帧路径调优 | P2 | P3 | 闭合（判层完成：断点在系统层出栈丢弃，app 零缺陷；ZerotierFix 同机对照归用户侧） |
 | NDP 校验和恒 0 | P2 | P3（Android）/P5（iOS 同步） | Android 侧闭合（0a7b31d） |
 | 被踢单网不拆 TUN 黑洞 | P2 | P3 | 闭合（8af95ba/580ad3e） |
 | split-tunnel 默认路由策略 | P2 | P3 | 已决策：与 iOS 同构语义（单网 routeVia 才接管，物理网段挖洞），非缺陷 |
 | 停机窄窗五项 | P2 | P3 顺手 | 闭合 |
 | Builder try-catch / appliedEntries+disableIpv6 / leave 拆 TUN / store 单例 / startForegroundService | P2 | P4 | 闭合（leave 拆 TUN=P3，余项=T6 86e9e84） |
 | P4 顺手四项（DAD 形态/NonCancellable establish/拆 TUN 状态保真/NdpTable 注释） | P3 终审 | P4 | 闭合（T6 全落地） |
-| onRevoke 平台交互证据 | P3 终审 | T4 | 待验（release 前置闸门） |
+| onRevoke 平台交互证据 | P3 终审 | T4 | 平台不可达（MIUI 无锁屏密码死锁），转用户配合项 |
 | planet 下载上限 / moon worldId 查重 | P1 终审 | P4 | 闭合（T5/T6 8MiB cap；moon 同 worldId 替换语义） |
 | 停止按钮人工确认 / 长期回归网络 | P2 | 用户侧 | 待确认 |
 | iOS NDP 构造错位（跨平台 v6 互通） | P2 | P5 备忘 | 待接 |
