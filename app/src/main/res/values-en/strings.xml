@@ -253,6 +253,6 @@
     <string name="tunnel_error_tunEstablish">Failed to establish TUN interface</string>
     <string name="error_moon_tooLarge">File exceeds the size limit</string>
     <string name="error_moon_writeFailed">Failed to write moon file</string>
-    <string name="error_planet_tooLarge">Planet file exceeds the 8 MB size limit</string>
+    <string name="error_planet_tooLarge">Planet file exceeds the 8 MiB size limit</string>
     <string name="error_planet_writeFailed">Failed to write planet file</string>
 </resources>

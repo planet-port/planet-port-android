@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.planet
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
@@ -79,15 +80,14 @@ class PlanetSettingsViewModel(
             runCatching { StoreRepo.planetImporter.rename(requirePlanet(), name) }
                 .onFailure { e ->
                     // 导入器 message 为稳定英文标识串（无 Context 无法本地化），
-                    // 已知类型映射资源，其余兜底通用文案
-                    onError(
-                        if (e is PlanetImporter.ImportError.EmptyName) {
-                            getApplication<Application>().getString(R.string.error_planet_emptyName)
-                        } else {
-                            e.message
-                                ?: getApplication<Application>().getString(R.string.planet_renameFailed)
-                        },
-                    )
+                    // 已知类型映射资源；其余（写盘失败等）不透出技术串给用户，
+                    // 原始异常进日志供诊断（T7b 审查 I-1）
+                    if (e is PlanetImporter.ImportError.EmptyName) {
+                        onError(getApplication<Application>().getString(R.string.error_planet_emptyName))
+                    } else {
+                        Log.w(TAG, "rename 失败", e)
+                        onError(getApplication<Application>().getString(R.string.planet_renameFailed))
+                    }
                 }
         }
     }
@@ -97,9 +97,9 @@ class PlanetSettingsViewModel(
         viewModelScope.launch {
             runCatching { StoreRepo.planetImporter.updateIcon(requirePlanet(), symbol) }
                 .onFailure {
-                    onError(
-                        it.message ?: getApplication<Application>().getString(R.string.planet_iconUpdateFailed),
-                    )
+                    // 写盘失败等技术串不透出用户，进日志（T7b 审查 I-1）
+                    Log.w(TAG, "updateIcon 失败", it)
+                    onError(getApplication<Application>().getString(R.string.planet_iconUpdateFailed))
                 }
         }
     }
@@ -121,4 +121,8 @@ class PlanetSettingsViewModel(
 
     private fun requirePlanet(): PlanetProfile =
         _ui.value.planet ?: throw IllegalStateException("行星不存在")
+
+    private companion object {
+        const val TAG = "PlanetSettingsVM"
+    }
 }

@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.home
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
@@ -359,8 +360,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val result = runCatching {
                 val worldId = PlanetImporter.worldIdOf(data)
                 if (worldId != null && worldId in StoreRepo.planetImporter.existingWorldIds()) {
-                    // 查重在 VM 内抛、同链路 catch 回传，抛点直接资源化（iOS addplanet.duplicate）
-                    error(appContext.getString(R.string.addplanet_duplicate, worldId.toString()))
+                    // 查重经专用类型走同链路回传，文案在消费侧映射——本地化文案
+                    // 不混入异常 message 通道（iOS addplanet.duplicate；T7b 审查 I-1）
+                    throw DuplicateWorld(worldId)
                 }
                 StoreRepo.planetImporter.importPlanetData(data, name)
             }
@@ -386,9 +388,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 导入/下载链异常 → 用户文案：按 [PlanetImporter.ImportError] 子类映射资源。
-     * store 层 message 是稳定英文标识串（导入器无 Context 无法本地化），仅作
-     * 未识别异常的兜底展示，正常路径不会直接透出。
+     * 导入/下载链异常 → 用户文案：按 [PlanetImporter.ImportError] 子类与
+     * [DuplicateWorld] 映射资源。store 层 message 是稳定英文标识串（无 Context
+     * 无法本地化），未识别异常不再透出 message——技术串进日志，用户见通用文案
+     * （T7b 审查 I-1）。
      */
     private fun importErrorText(e: Throwable): String = when (e as? PlanetImporter.ImportError) {
         is PlanetImporter.ImportError.BadHeader ->
@@ -401,8 +404,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             appContext.getString(R.string.error_planet_tooLarge)
         is PlanetImporter.ImportError.WriteFailed ->
             appContext.getString(R.string.error_planet_writeFailed)
-        null -> e.message ?: appContext.getString(R.string.addplanet_importFailed)
+        null -> when (e) {
+            is DuplicateWorld ->
+                appContext.getString(R.string.addplanet_duplicate, e.worldId.toString())
+            else -> {
+                Log.w(TAG, "导入链未识别异常", e)
+                appContext.getString(R.string.addplanet_importFailed)
+            }
+        }
     }
+
+    /** 添加行星查重（VM 层编排，不属导入器校验域）。 */
+    private class DuplicateWorld(val worldId: ULong) : RuntimeException("duplicate world id")
 
     // MARK: - 隧道运行期回写缓存
 
@@ -501,5 +514,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun emitNotice(title: String, message: String) {
         _events.tryEmit(HomeEvent.Notice(title, message))
+    }
+
+    private companion object {
+        const val TAG = "HomeViewModel"
     }
 }
