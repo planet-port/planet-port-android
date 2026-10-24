@@ -264,10 +264,10 @@
     <string name="prefs_support_donate">Donate</string>
     <string name="prefs_support_sectionHeader">Support</string>
     <string name="prefs_theme_a11yPreset">Accent %1$s</string>
-    <string name="prefs_theme_custom">Custom Color</string>
     <string name="prefs_theme_deriveStatus">Derive Status Color from Accent</string>
     <string name="prefs_theme_footer">The accent color drives buttons, indicators and planet decorations, adapting to light and dark mode; status colors keep green/orange/red semantics by default — enable the switch to derive the success color from the accent.</string>
     <string name="prefs_theme_sectionHeader">Accent Color</string>
+    <string name="prefs_theme_wheel">Color Picker</string>
     <string name="qr_deniedMessage">Please allow PlanetPort to use the camera in system Settings and try again</string>
     <string name="qr_deniedTitle">Camera Unavailable</string>
     <string name="qr_title">Scan to Join</string>
@@ -311,9 +311,6 @@
     <string name="addplanet_badHeader">Invalid planet file (first byte must be 0x01)</string>
     <string name="prefs_stepperDecrease">Decrease</string>
     <string name="prefs_stepperIncrease">Increase</string>
-    <string name="prefs_theme_hue">Hue</string>
-    <string name="prefs_theme_saturation">Saturation</string>
-    <string name="prefs_theme_brightness">Brightness</string>
     <string name="common_operationRetry">Operation failed; try again</string>
     <string name="moon_importFailed">Failed to import moon file</string>
     <string name="planet_renameFailed">Rename failed</string>

@@ -264,10 +264,10 @@
     <string name="prefs_support_donate">捐赠</string>
     <string name="prefs_support_sectionHeader">支持</string>
     <string name="prefs_theme_a11yPreset">主色 %1$s</string>
-    <string name="prefs_theme_custom">自定义主色</string>
     <string name="prefs_theme_deriveStatus">状态色跟随主色派生</string>
     <string name="prefs_theme_footer">主色决定按钮、指示器与行星装饰色，深浅模式自动适配；状态色默认保持绿/橙/红语义，打开开关后成功色随主色三角派生。</string>
     <string name="prefs_theme_sectionHeader">主题色</string>
+    <string name="prefs_theme_wheel">色盘</string>
     <string name="qr_deniedMessage">请在系统设置中允许 PlanetPort 使用相机后重试</string>
     <string name="qr_deniedTitle">无法访问相机</string>
     <string name="qr_title">扫码加入</string>
@@ -311,9 +311,6 @@
     <string name="addplanet_badHeader">planet 文件头无效（首字节应为 0x01）</string>
     <string name="prefs_stepperDecrease">减小</string>
     <string name="prefs_stepperIncrease">增大</string>
-    <string name="prefs_theme_hue">色相</string>
-    <string name="prefs_theme_saturation">饱和度</string>
-    <string name="prefs_theme_brightness">亮度</string>
     <string name="common_operationRetry">操作失败，请重试</string>
     <string name="moon_importFailed">moon 文件导入失败</string>
     <string name="planet_renameFailed">重命名失败</string>

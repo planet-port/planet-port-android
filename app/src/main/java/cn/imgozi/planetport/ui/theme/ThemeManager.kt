@@ -104,12 +104,13 @@ object ThemeManager {
         return tints[index]
     }
 
-    // MARK: - 色彩数学（HSL，Compose 无现成 API，手写对齐 iOS 私有实现）
+    // MARK: - 色彩数学（HSL，Compose 无现成 API，手写对齐 iOS 实现；
+    // 设置页取色器复用故开放，iOS fe0db0a 同款 private→internal）
 
     /** h: 0..<360，s/l: 0..1。 */
-    private data class Hsl(val h: Double, val s: Double, val l: Double)
+    data class Hsl(val h: Double, val s: Double, val l: Double)
 
-    private fun hsl(argb: Long): Hsl {
+    fun hsl(argb: Long): Hsl {
         val r = ((argb shr 16) and 0xFF).toDouble() / 255.0
         val g = ((argb shr 8) and 0xFF).toDouble() / 255.0
         val b = (argb and 0xFF).toDouble() / 255.0
@@ -127,7 +128,7 @@ object ThemeManager {
         return Hsl(h = h, s = s, l = l)
     }
 
-    private fun hslToColor(c: Hsl): Color {
+    fun hslToColor(c: Hsl): Color {
         val h = c.h / 60
         val chroma = (1 - kotlin.math.abs(2 * c.l - 1)) * c.s
         val x = chroma * (1 - kotlin.math.abs(h.mod(2.0) - 1))

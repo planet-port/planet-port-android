@@ -1,13 +1,16 @@
 package cn.imgozi.planetport.ui.prefs
 
 import android.app.Application
-import android.graphics.Color as AndroidColor
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.Image
@@ -33,9 +37,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -43,36 +47,44 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
 import cn.imgozi.planetport.ui.MainActivity
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
-import cn.imgozi.planetport.ui.theme.PlanetFonts
+import cn.imgozi.planetport.ui.planet.PlanetIcon
 import cn.imgozi.planetport.ui.theme.ThemeManager
 
 /**
  * 全局设置页（iOS PrefsView.swift 可适用项移植）：
  * 网络（禁用 IPv6 热重启 / 同时连接上限）、按需连接（app 启动自动恢复隧道；
  * iOS NEOnDemandRuleConnect 的 Android 落地）、语言（本任务只建 UI + 持久化，切换接线归 T7）、
- * 外观（背景图入口壳——选取器归 T7；视差无图禁用）、主题色（8 预设色板 + 自定义拾色 +
- * 派生开关，双写 ThemeManager 与 AppPrefs）、关于（Core 版本 / App 版本 +
+ * 外观（主题色入口首位——弹窗收编预设色板与 HSL 色盘（iOS fe0db0a）；背景图入口壳——
+ * 选取器归 T7；视差无图禁用）、关于（Core 版本 / App 版本 +
  * MPL-2.0 归属声明 footer）。
  * iOS 的「允许移动数据」无 Android 等价，不移植；捐赠 Section 以 if(false) 隐藏对齐。
  *
@@ -90,6 +102,7 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
 
     // 背景图选取弹层（T7 实装）
     var showBgPicker by remember { mutableStateOf(false) }
+    var showThemePicker by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -160,6 +173,34 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                 header = stringResource(R.string.prefs_appearance_sectionHeader),
                 footer = stringResource(R.string.prefs_appearance_footer),
             ) {
+                // 主题色入口（组内首位，iOS fe0db0a）：预设色板与自定义取色收进弹窗，
+                // 外观区只留一行——右侧 24dp 主色圆点 + chevron
+                val accentHex by ThemeManager.accent.collectAsState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showThemePicker = true }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.prefs_theme_sectionHeader),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Box(
+                        Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color(accentHex.toInt())),
+                    )
+                    Icon(
+                        Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(start = 4.dp).size(20.dp),
+                    )
+                }
                 // 背景图行：点击开选取弹层；已设置显示 44dp 缩略图（store 内存位图，
                 // 与首页视差层同源，换图/清除后即时刷新）
                 Row(
@@ -213,27 +254,7 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                 )
             }
 
-            FormSection(
-                header = stringResource(R.string.prefs_theme_sectionHeader),
-                footer = stringResource(R.string.prefs_theme_footer),
-            ) {
-                PresetPalette(
-                    selected = (prefs.themeColorCustom == null) to
-                        (prefs.themeColor ?: ThemeManager.presets.first()),
-                    onSelect = vm::setThemePreset,
-                )
-                Spacer(Modifier.height(6.dp))
-                ThemeColorPickerRow(
-                    initial = prefs.themeColorCustom ?: prefs.themeColor ?: ThemeManager.presets.first(),
-                    onPreview = vm::previewThemeCustom,
-                    onCommit = vm::setThemeCustom,
-                )
-                FormToggleRow(
-                    title = stringResource(R.string.prefs_theme_deriveStatus),
-                    checked = prefs.successDerived,
-                    onCheckedChange = vm::setSuccessDerived,
-                )
-            }
+            // 主题色独立分区已收进弹窗（iOS fe0db0a）：入口在外观组首位
 
             // MPL-2.0 归属声明（P4 终审归档项）：静态 footer 行，样式对齐页内既有
             // section footer；MPL 2.0 要求的源码可得性由 externals/ 源码随仓满足
@@ -289,6 +310,14 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
             hasImage = prefs.backgroundImage,
             onApplied = { showBgPicker = false },
             onDismiss = { showBgPicker = false },
+        )
+    }
+
+    if (showThemePicker) {
+        ThemeColorPickerSheet(
+            vm = vm,
+            prefs = prefs,
+            onDismiss = { showThemePicker = false },
         )
     }
 }
@@ -414,102 +443,248 @@ private val presetNames: Map<Long, Int> = mapOf(
 )
 
 /**
- * 自定义主色拾取（iOS ColorPicker 等价，色相/饱和度/亮度三滑杆 + 预览圆点）：
- * 拖动中仅更新 ThemeManager 内存态（即时生效不落盘），拖动结束一次性持久化——
- * 避免滑杆高频写盘。
+ * 主题色选择弹窗（iOS ThemeColorPickerSheet 1:1）：示例色块（随机小动物叠加）
+ * + 预置色板（同组无标题）→ HSL 色盘 → 状态色派生开关。单一数据源
+ * ThemeManager.accent 驱动，预设与色盘双向同步（预设点击落盘 custom=null，
+ * 色盘拖动中只写内存、抬手落盘——写路径与旧三滑杆一致）。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThemeColorPickerSheet(
+    vm: PrefsViewModel,
+    prefs: AppPrefs,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    // 叠加在示例色块上的随机小动物（行星图标同套资源），每次打开弹窗随机一只
+    val animalKey = remember { PlanetIcon.catalog.random() }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            Text(
+                stringResource(R.string.prefs_theme_sectionHeader),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+
+            // 示例色块 + 预置色板（iOS 同组无标题 Section）
+            FormSection {
+                val accentHex by ThemeManager.accent.collectAsState()
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(vertical = 4.dp)
+                        .size(120.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(accentHex.toInt())),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(PlanetIcon.drawableId(context, animalKey)),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(64.dp),
+                    )
+                }
+                PresetPalette(
+                    selected = (prefs.themeColorCustom == null) to
+                        (prefs.themeColor ?: ThemeManager.presets.first()),
+                    onSelect = vm::setThemePreset,
+                )
+            }
+
+            FormSection(header = stringResource(R.string.prefs_theme_wheel)) {
+                HslColorPicker(
+                    onPreview = vm::previewThemeCustom,
+                    onCommit = vm::setThemeCustom,
+                )
+            }
+
+            FormSection(footer = stringResource(R.string.prefs_theme_footer)) {
+                FormToggleRow(
+                    title = stringResource(R.string.prefs_theme_deriveStatus),
+                    checked = prefs.successDerived,
+                    onCheckedChange = vm::setSuccessDerived,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 自绘 HSL 取色器（iOS HSLColorPicker 1:1）：饱和度（横向 白→纯色）× 亮度
+ * （纵向 白→透明→黑）平面 + 色相彩虹条，三值一个控件。不用系统 ColorPicker——
+ * Android 侧同样有二次弹层与不可隐藏最近颜色的问题。读写直接走
+ * ThemeManager.accent 单一数据源，与预置色板自动互相同步。
  */
 @Composable
-private fun ThemeColorPickerRow(
-    initial: Long,
+private fun HslColorPicker(
     onPreview: (Long) -> Unit,
     onCommit: (Long) -> Unit,
 ) {
-    var hsv by remember(initial) {
-        mutableStateOf(FloatArray(3).also { AndroidColor.colorToHSV(initial.toInt(), it) })
+    val accentHex by ThemeManager.accent.collectAsState()
+    val hsl = ThemeManager.hsl(accentHex)
+
+    // 增量合成：未给的维度实时读 accent（单一数据源）——拖平面只改 s/l（hue 取
+    // 实时），拖色相条只改 h（s/l 取实时）。若用组合帧捕获的 hsl，跨帧拖动的
+    // 后续帧会拿陈旧值把另一维度打回原点。
+    fun apply(h: Double? = null, s: Double? = null, l: Double? = null) {
+        val cur = ThemeManager.hsl(ThemeManager.accent.value and 0xFFFFFFFFL)
+        val argb = ThemeManager.hslToColor(
+            ThemeManager.Hsl(h ?: cur.h, s ?: cur.s, l ?: cur.l),
+        ).toArgb().toLong() and 0xFFFFFFFFL
+        onPreview(argb)
     }
 
-    fun argb(): Long = AndroidColor.HSVToColor(hsv).toLong() and 0xFFFFFFFFL
-
-    Column(Modifier.padding(vertical = 6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                stringResource(R.string.prefs_theme_custom),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Box(
-                Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(colorOf(argb())),
-            )
-        }
-        HslSlider(
-            label = stringResource(R.string.prefs_theme_hue),
-            value = hsv[0],
-            range = 0f..360f,
-            display = { it.toInt().toString() },
-            onValueChange = {
-                hsv = floatArrayOf(it, hsv[1], hsv[2])
-                onPreview(argb())
-            },
-            onFinished = { onCommit(argb()) },
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // 抬手落盘读 accent.value 实时值——最后一帧取色后组合帧 accentHex 可能未及刷新
+        SatLightField(
+            hue = hsl.h,
+            saturation = hsl.s,
+            lightness = hsl.l,
+            onChanged = { s, l -> apply(s = s, l = l) },
+            onFinished = { onCommit(ThemeManager.accent.value and 0xFFFFFFFFL) },
         )
-        HslSlider(
-            label = stringResource(R.string.prefs_theme_saturation),
-            value = hsv[1],
-            range = 0f..1f,
-            display = { "%d%%".format((it * 100).toInt()) },
-            onValueChange = {
-                hsv = floatArrayOf(hsv[0], it, hsv[2])
-                onPreview(argb())
-            },
-            onFinished = { onCommit(argb()) },
-        )
-        HslSlider(
-            label = stringResource(R.string.prefs_theme_brightness),
-            value = hsv[2],
-            range = 0f..1f,
-            display = { "%d%%".format((it * 100).toInt()) },
-            onValueChange = {
-                hsv = floatArrayOf(hsv[0], hsv[1], it)
-                onPreview(argb())
-            },
-            onFinished = { onCommit(argb()) },
+        HueBar(
+            hue = hsl.h,
+            onChanged = { h -> apply(h = h) },
+            onFinished = { onCommit(ThemeManager.accent.value and 0xFFFFFFFFL) },
         )
     }
 }
 
+/** 饱和度×亮度平面：横向 白→纯色（s: 0→1），纵向 白→透明→黑（l: 1→0.5→0）。 */
 @Composable
-private fun HslSlider(
-    label: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    display: (Float) -> String,
-    onValueChange: (Float) -> Unit,
+private fun SatLightField(
+    hue: Double,
+    saturation: Double,
+    lightness: Double,
+    onChanged: (Double, Double) -> Unit,
     onFinished: () -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(width = 56.dp, height = 20.dp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+    val hueColor = ThemeManager.hslToColor(ThemeManager.Hsl(hue, s = 1.0, l = 0.5))
+    // 手势回调走 rememberUpdatedState + pointerInput(Unit)：若以 hue 作 key，
+    // 拖动中 hsl 往返舍入的微漂会让 block 重启、进行中的 drag 被静默取消
+    // （onDragEnd 不回调 → 不落盘，剩余 move 漏给父级——sheet 被拽走）
+    val currentOnChanged by rememberUpdatedState(onChanged)
+    val currentOnFinished by rememberUpdatedState(onFinished)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Brush.horizontalGradient(listOf(Color.White, hueColor)))
+            // 点按即取色并落盘（iOS DragGesture(minimumDistance: 0) 的单击路径）
+            .pointerInput(Unit) {
+                detectTapGestures { pos ->
+                    currentOnChanged(
+                        (pos.x / size.width.toDouble()).coerceIn(0.0, 1.0),
+                        1.0 - (pos.y / size.height.toDouble()).coerceIn(0.0, 1.0),
+                    )
+                    currentOnFinished()
+                }
+            }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = { currentOnFinished() },
+                    onDragCancel = { currentOnFinished() },
+                ) { change, _ ->
+                    change.consume()
+                    currentOnChanged(
+                        (change.position.x / size.width.toDouble()).coerceIn(0.0, 1.0),
+                        1.0 - (change.position.y / size.height.toDouble()).coerceIn(0.0, 1.0),
+                    )
+                }
+            },
+    ) {
+        // 亮度层单独叠放：白→透明→黑与底层的水平渐变叠加
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(listOf(Color.White, Color.Transparent, Color.Black)),
+                ),
         )
-        Slider(
-            value = value.coerceIn(range.start, range.endInclusive),
-            onValueChange = onValueChange,
-            onValueChangeFinished = onFinished,
-            valueRange = range,
-            modifier = Modifier.weight(1f),
+        CursorCircle(
+            xFraction = saturation.toFloat(),
+            yFraction = (1.0 - lightness).toFloat(),
         )
-        Text(
-            display(value),
-            style = PlanetFonts.MonoCaption,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp),
+    }
+}
+
+/** 色相条：彩虹轨道（高 10dp 胶囊）+ 可拖圆钮。 */
+@Composable
+private fun HueBar(
+    hue: Double,
+    onChanged: (Double) -> Unit,
+    onFinished: () -> Unit,
+) {
+    // 同 SatLightField：Unit key + 最新回调，避免闭包捕获首帧 lambda 致 s/l 陈旧
+    val currentOnChanged by rememberUpdatedState(onChanged)
+    val currentOnFinished by rememberUpdatedState(onFinished)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { pos ->
+                    currentOnChanged((pos.x / size.width.toDouble()).coerceIn(0.0, 1.0) * 360.0)
+                    currentOnFinished()
+                }
+            }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = { currentOnFinished() },
+                    onDragCancel = { currentOnFinished() },
+                ) { change, _ ->
+                    change.consume()
+                    currentOnChanged(
+                        (change.position.x / size.width.toDouble()).coerceIn(0.0, 1.0) * 360.0,
+                    )
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.horizontalGradient(
+                        // 七段彩虹：段序号 ×60° 折算度数（Hsl.h 语义是 0..<360，
+                        // 传比例会恒落 h<60° 红区）
+                        (0..6).map { ThemeManager.hslToColor(ThemeManager.Hsl(it * 60.0, 1.0, 0.5)) },
+                    ),
+                ),
+        )
+        CursorCircle(xFraction = (hue / 360.0).toFloat(), yFraction = 0.5f)
+    }
+}
+
+/** 取色板/色相条上的游标：22dp 白心 + 黑 25% 描边圆，中心锚定比例坐标。 */
+@Composable
+private fun BoxScope.CursorCircle(xFraction: Float, yFraction: Float) {
+    BoxWithConstraints(Modifier.matchParentSize()) {
+        Box(
+            Modifier
+                .offset(
+                    x = maxWidth * xFraction - 11.dp,
+                    y = maxHeight * yFraction - 11.dp,
+                )
+                .size(22.dp)
+                .shadow(1.dp, CircleShape)
+                .background(Color.White, CircleShape)
+                .border(1.5.dp, Color.Black.copy(alpha = 0.25f), CircleShape),
         )
     }
 }
