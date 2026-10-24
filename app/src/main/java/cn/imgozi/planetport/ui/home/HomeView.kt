@@ -215,7 +215,12 @@ fun HomeView(activity: MainActivity) {
                         pending = pending,
                         planet = planet,
                         isActivePage = state.selectedPlanetId == state.activePlanetId,
-                        onOpenPlanetSettings = { navigator.navTo(Page.PlanetSettings(planet.id)) },
+                        // 整卡点击先 selectPlanet 再入设置（iOS HomeView.swift:372-375 同序；
+                        // Moon 页归属与 moon 文件落盘目录都取 selectedPlanetId，此序是一致性前提）
+                        onOpenPlanetSettings = {
+                            vm.selectPlanet(planet.id)
+                            navigator.navTo(Page.PlanetSettings(planet.id))
+                        },
                         onJoin = { showJoin = true },
                         onOpenNetwork = { nwid -> navigator.navTo(Page.NetworkDetail(nwid)) },
                         onToggle = { entry, active ->

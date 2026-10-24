@@ -52,7 +52,6 @@ internal fun JoinNetworkSheet(
     var dnsMode by remember { mutableStateOf(DnsMode.none) }
     var dnsServers by remember { mutableStateOf(listOf<String>()) }
     var duplicateAlert by remember { mutableStateOf(false) }
-    var limitAlert by remember { mutableStateOf(false) }
 
     val idValid = networkId.length == 16 && networkId.all { c ->
         c.isDigit() || c in 'a'..'f' || c in 'A'..'F'
@@ -75,14 +74,11 @@ internal fun JoinNetworkSheet(
                 TextButton(
                     enabled = idValid && dnsValid,
                     onClick = {
-                        // 软上限：达上限时阻断加入并提示（控制方裁决 #5，判定在保存前）
-                        val existing = state.planetNetworks[state.selectedPlanetId].orEmpty()
-                        if (existing.size >= state.maxNetworks) {
-                            limitAlert = true
-                            return@TextButton
-                        }
+                        // 加入=仅保存不连接，无数量上限（iOS join() 同构）——maxNetworks
+                        // 软上限只作用于激活路径（HomeView 开关处，可强制开启）
                         val newId = networkId.lowercase()
                         // 网络 ID 查重：已存在视为同一网络，禁止重复添加（iOS join()）
+                        val existing = state.planetNetworks[state.selectedPlanetId].orEmpty()
                         if (existing.any { it.networkId == newId }) {
                             duplicateAlert = true
                             return@TextButton
@@ -176,21 +172,6 @@ internal fun JoinNetworkSheet(
             text = { Text("网络 ${networkId.lowercase()} 已在列表中，不能重复添加。") },
             confirmButton = {
                 TextButton(onClick = { duplicateAlert = false }) { Text("好") }
-            },
-        )
-    }
-
-    if (limitAlert) {
-        AlertDialog(
-            onDismissRequest = { limitAlert = false },
-            title = { Text("已达网络数量上限") },
-            text = {
-                Text(
-                    "每个行星最多加入 ${state.maxNetworks} 个网络，如需添加请先移除已有网络。"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { limitAlert = false }) { Text("好") }
             },
         )
     }
