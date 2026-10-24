@@ -2,7 +2,6 @@ package cn.imgozi.planetport.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,7 +13,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
-import cn.imgozi.planetport.ui.theme.HomeMetrics
 
 /**
  * 官方行星磁贴图标（iOS 资产 OfficialPlanetIcon：线稿带环行星 · 石绿底，浅深自适应）。
@@ -25,7 +23,9 @@ import cn.imgozi.planetport.ui.theme.HomeMetrics
 @Composable
 fun OfficialPlanetIcon(modifier: Modifier = Modifier) {
     val bg = if (isSystemInDarkTheme()) Color(0xFF4FC0BF) else Color(0xFF2FA8A7)
-    Canvas(modifier.clip(RoundedCornerShape((HomeMetrics.iconTileSize * 0.24f)))) {
+    // 圆角按百分比随实际渲染尺寸等比缩放（内部 s*0.24f 同比例）——绝对 dp 在
+    // 24dp 小尺寸调用点会被 Skia 压到正圆，丢失 iOS 资产的圆角方贴形态
+    Canvas(modifier.clip(RoundedCornerShape(percent = 24))) {
         val s = size.minDimension
         val center = Offset(size.width / 2f, size.height / 2f)
         drawRoundRect(color = bg, cornerRadius = CornerRadius(s * 0.24f))
