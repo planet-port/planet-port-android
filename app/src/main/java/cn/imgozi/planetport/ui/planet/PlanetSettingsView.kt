@@ -58,6 +58,7 @@ import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.theme.ThemeManager
 import java.text.DateFormat
+import androidx.appcompat.app.AppCompatDelegate
 import java.util.Date
 import java.util.Locale
 
@@ -430,6 +431,10 @@ private fun fileSizeText(bytes: Int): String {
 /** 修订时间（ZeroTier World 时间戳为毫秒；0 = 未知）。 */
 private fun revisionText(ts: ULong): String {
     if (ts == 0uL) return "—"
-    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+    // 数字短格式（iOS 81cdb07 date .numeric）：简中 2026/10/24 13:31；
+    // 格式化器显式取应用 locale（空 = 跟随系统），与页面文案语言一致
+    val appLocales = AppCompatDelegate.getApplicationLocales()
+    val locale = if (appLocales.isEmpty) Locale.getDefault() else appLocales[0]
+    return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale)
         .format(Date(ts.toLong()))
 }
