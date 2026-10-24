@@ -80,9 +80,10 @@ class PlanetImporter(private val store: AppConfigStore) {
     /**
      * 仅下载文件内容，不校验、不落库（供“先就绪、后添加”交互使用，P4）。
      *
-     * 下载加固：Content-Length 缺失或超过 [MAX_PLANET_BYTES] 直接拒绝；并做有界
-     * 流复制（读至上限即断）——官方 planet 仅数 KB，上限防误指大文件与恶意超大
-     * 响应，有界复制防服务器谎报声明长度。
+     * 下载加固：声明 Content-Length 超过 [MAX_PLANET_BYTES] 提前拒绝；流复制始终
+     * 有界（读至上限即断）——官方 planet 仅数 KB，上限防误指大文件与恶意超大
+     * 响应，有界复制防服务器谎报或缺失声明长度（chunked 传输无 Content-Length，
+     * 属正常形态不拒绝）。
      */
     suspend fun downloadPlanetFile(urlString: String): ByteArray = withContext(Dispatchers.IO) {
         val url = try {
@@ -97,9 +98,11 @@ class PlanetImporter(private val store: AppConfigStore) {
             try {
                 if (conn.responseCode != 200) throw ImportError.DownloadFailed()
                 val declared = conn.contentLengthLong
-                if (declared < 0 || declared > MAX_PLANET_BYTES) throw ImportError.TooLarge()
+                if (declared > MAX_PLANET_BYTES) throw ImportError.TooLarge()
                 conn.inputStream.use { input ->
-                    val out = java.io.ByteArrayOutputStream(declared.toInt())
+                    val out = java.io.ByteArrayOutputStream(
+                        if (declared > 0) declared.toInt() else 64 * 1024
+                    )
                     val buf = ByteArray(64 * 1024)
                     var total = 0
                     while (true) {
