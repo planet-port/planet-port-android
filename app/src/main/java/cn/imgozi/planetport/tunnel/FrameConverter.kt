@@ -228,13 +228,21 @@ internal class FrameConverter(private val runtime: NodeRuntime) {
         val p = NdpTable.parse(icmp6) ?: return
         when (p.type) {
             135 -> if (ctx.ipv6Addresses.contains(p.target)) {
-                val na = NdpTable.neighborAdvertisement(p.target, ctx.mac)
-                // NA 源地址 = 被解析的本机地址（请求方问"谁持有 target"，我方持有）；
-                // 校验和伪头用真实 src/dst，恒 0 会被真实节点内核丢弃
-                NdpTable.icmpv6Checksum(p.target, srcIPv6, na)
+                // DAD 探测（NS 源为未指定地址 ::）：请求方在自查该地址是否已被
+                // 占用，按 RFC 4861 §7.2.4 回全节点组播 NA——目的 ff02::1、
+                // Solicited 清零仅 Override（0x20），DAD 方收到「已被持有」的
+                // 宣告即放弃自配。普通 NS 维持单播 Solicited+Override（0x60）。
+                // 两种形态 NA 源地址均 = 被解析的本机地址，校验和伪头用真实
+                // src/dst，恒 0 会被真实节点内核丢弃
+                val dad = srcIPv6.bytes.all { it == 0.toByte() }
+                val na = NdpTable.neighborAdvertisement(p.target, ctx.mac, solicited = !dad)
+                val dst = if (dad) NdpTable.allNodesMulticast else srcIPv6
+                NdpTable.icmpv6Checksum(p.target, dst, na)
                 runtime.processVirtualNetworkFrame(
-                    ctx.nwid, ctx.mac, senderMac, Ethernet.TYPE_IPV6, 0,
-                    ipv6Packet(na, p.target, srcIPv6),
+                    ctx.nwid, ctx.mac,
+                    if (dad) NdpTable.multicastMAC(dst) else senderMac,
+                    Ethernet.TYPE_IPV6, 0,
+                    ipv6Packet(na, p.target, dst),
                 )
             }
             136 -> {

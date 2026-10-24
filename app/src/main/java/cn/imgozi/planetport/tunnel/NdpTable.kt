@@ -7,7 +7,12 @@ internal class Ipv6Address(val bytes: ByteArray) {
     override fun hashCode(): Int = bytes.contentHashCode()
 }
 
-/** IPv6 邻居发现表（NS/NA 软件处理，对齐 iOS NDPTable） */
+/**
+ * IPv6 邻居发现表（NS/NA 软件处理）——Android 领先版，较 iOS NDPTable 多出：
+ * ICMPv6 伪头校验和（真实内核会校验恒 0 报文）、出站 NS 用本机真实源地址
+ * （iOS 恒用 ::，仅 DAD 场景合法）、DAD 探测按 RFC 4861 §7.2.4 以全节点组播
+ * 回 NA（Solicited 清零）。iOS 侧同步修复记其 P5。
+ */
 internal class NdpTable {
     private val map = HashMap<Ipv6Address, Long>()
 
@@ -24,10 +29,20 @@ internal class NdpTable {
     companion object {
         /** NS/NA 的 ICMPv6 载荷（头4+flags/保留4+target16+源MAC选项8 共 32 字节，RFC 4861） */
         fun neighborSolicitation(target: Ipv6Address, senderMac: Long): ByteArray =
-            icmpv6(135, target, senderMac, flagSolicited = false)
+            icmpv6(135, target, senderMac, flags = 0)
 
-        fun neighborAdvertisement(target: Ipv6Address, senderMac: Long): ByteArray =
-            icmpv6(136, target, senderMac, flagSolicited = true)
+        /**
+         * NA 报文。[solicited] = true 时 Solicited+Override 置位（0x60，应答已知
+         * 请求方的单播形态）；false 时仅 Override（0x20，DAD 探测的全节点组播
+         * 形态，RFC 4861 §7.2.4——组播受众不做 Solicited 置位）。
+         */
+        fun neighborAdvertisement(target: Ipv6Address, senderMac: Long, solicited: Boolean = true): ByteArray =
+            icmpv6(136, target, senderMac, flags = if (solicited) 0x60 else 0x20)
+
+        /** 全节点组播地址 ff02::1（DAD 应答的目的地址，RFC 4861 §7.2.4） */
+        val allNodesMulticast = Ipv6Address(
+            ByteArray(16).also { it[1] = 0x02; it[15] = 0x01 }
+        )
 
         /**
          * ICMPv6 伪头校验和（RFC 4443 §8.1）：src(16B)+dst(16B)+payload 长度(32bit)+
@@ -79,10 +94,10 @@ internal class NdpTable {
         }
 
         /** RFC 4861 布局：ICMPv6 头(4) + flags/保留(4) + target(16) + 源 MAC 选项(8)，与 parse 对齐 */
-        private fun icmpv6(type: Int, target: Ipv6Address, mac: Long, flagSolicited: Boolean): ByteArray {
+        private fun icmpv6(type: Int, target: Ipv6Address, mac: Long, flags: Int): ByteArray {
             val p = ByteArray(8 + 16 + 8)
             p[0] = type.toByte(); p[1] = 0
-            p[4] = if (flagSolicited) 0x60 else 0  // NA flags: Solicited+Override（NS 此处保留 0）
+            p[4] = flags.toByte()  // NS 恒 0；NA 见 neighborAdvertisement 的 Solicited/Override 语义
             target.bytes.copyInto(p, 8)
             p[24] = 1; p[25] = 1  // 源链路层地址选项
             for (shift in 40 downTo 0 step 8) {

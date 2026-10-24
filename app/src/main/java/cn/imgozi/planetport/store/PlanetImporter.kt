@@ -13,6 +13,9 @@ class PlanetImporter(private val store: AppConfigStore) {
         class BadHeader : ImportError("planet 文件头无效（首字节应为 0x01）")
         class EmptyName : ImportError("名称不能为空")
         class DownloadFailed(cause: Throwable? = null) : ImportError("planet 下载失败", cause)
+
+        /** 下载体超过大小上限（Content-Length 超限或流读越界），供 UI 单独提示 */
+        class TooLarge : ImportError("planet 文件超过大小上限（8 MiB）")
     }
 
     /** 校验并落盘一份 planet 文件，注册为新的自定义 Planet。 */
@@ -45,7 +48,13 @@ class PlanetImporter(private val store: AppConfigStore) {
     suspend fun importPlanetFromURL(urlString: String, name: String): PlanetProfile =
         importPlanetData(downloadPlanetFile(urlString), name)
 
-    /** 仅下载文件内容，不校验、不落库（供“先就绪、后添加”交互使用，P4）。 */
+    /**
+     * 仅下载文件内容，不校验、不落库（供“先就绪、后添加”交互使用，P4）。
+     *
+     * 下载加固：Content-Length 缺失或超过 [MAX_PLANET_BYTES] 直接拒绝；并做有界
+     * 流复制（读至上限即断）——官方 planet 仅数 KB，上限防误指大文件与恶意超大
+     * 响应，有界复制防服务器谎报声明长度。
+     */
     suspend fun downloadPlanetFile(urlString: String): ByteArray = withContext(Dispatchers.IO) {
         val url = try {
             URL(urlString)
@@ -58,7 +67,21 @@ class PlanetImporter(private val store: AppConfigStore) {
             conn.readTimeout = 10_000
             try {
                 if (conn.responseCode != 200) throw ImportError.DownloadFailed()
-                conn.inputStream.use { it.readBytes() }
+                val declared = conn.contentLengthLong
+                if (declared < 0 || declared > MAX_PLANET_BYTES) throw ImportError.TooLarge()
+                conn.inputStream.use { input ->
+                    val out = java.io.ByteArrayOutputStream(declared.toInt())
+                    val buf = ByteArray(64 * 1024)
+                    var total = 0
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        total += n
+                        if (total > MAX_PLANET_BYTES) throw ImportError.TooLarge()
+                        out.write(buf, 0, n)
+                    }
+                    out.toByteArray()
+                }
             } finally {
                 conn.disconnect()
             }
@@ -121,6 +144,9 @@ class PlanetImporter(private val store: AppConfigStore) {
     companion object {
         /** planet 文件类型标记（ZT world 二进制头 byte0）。 */
         const val PLANET_TYPE_BYTE: Byte = 0x01
+
+        /** 下载体大小上限（8 MiB）：官方 planet 数 KB 量级，裕量充足。 */
+        const val MAX_PLANET_BYTES: Int = 8 * 1024 * 1024
 
         /** ZT_WORLD_ID_EARTH：官方 Planet 的内置 World ID。 */
         const val ZT_WORLD_ID_EARTH: ULong = 149604618u
