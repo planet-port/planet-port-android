@@ -4,8 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.imgozi.planetport.ui.detail.NetworkDetailView
 import cn.imgozi.planetport.ui.diag.ApplyTraceView
 import cn.imgozi.planetport.ui.home.HomeView
@@ -40,21 +41,28 @@ val LocalNavigator = staticCompositionLocalOf<Navigator> {
 }
 
 /**
+ * 页面栈宿主：ViewModel 层持栈——Activity recreate（旋转/深色模式切换/应用内
+ * 切语言 setApplicationLocales）不丢导航位置（P4 终审 I-1；iOS NavigationStack
+ * path 由系统持有等价）。进程被杀回收不保，与 iOS 冷恢复同等可接受。
+ */
+private class NavStackViewModel : ViewModel() {
+    val stack = mutableStateListOf<Page>(Page.Home)
+}
+
+/**
  * 单例根 Composable：页面栈式渲染（栈顶全屏）。栈内返回键 pop，回到 Home 后
  * 不再拦截（再按一次 = 系统默认退出）；不引 Navigation 库（设计既定）。
  */
 @Composable
 fun AppRoot(activity: MainActivity) {
-    val stack = remember { mutableStateListOf<Page>(Page.Home) }
-    val navigator = remember(stack) {
-        object : Navigator {
-            override fun navTo(page: Page) {
-                stack.add(page)
-            }
+    val stack = viewModel<NavStackViewModel>().stack
+    val navigator = object : Navigator {
+        override fun navTo(page: Page) {
+            stack.add(page)
+        }
 
-            override fun pop() {
-                if (stack.size > 1) stack.removeAt(stack.lastIndex)
-            }
+        override fun pop() {
+            if (stack.size > 1) stack.removeAt(stack.lastIndex)
         }
     }
     BackHandler(enabled = stack.size > 1) { navigator.pop() }

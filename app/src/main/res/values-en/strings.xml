@@ -141,7 +141,7 @@
     <string name="peers_relay">Relayed</string>
     <string name="peers_tunnelDown">Tunnel Not Running</string>
     <string name="peers_tunnelDownHint">Turn on a network to see live connections</string>
-    <string name="planet_add_title">Add Planet</string>
+    <string name="planet_add_title">Add Planet Server</string>
     <string name="planet_delete">Delete This Planet</string>
     <string name="planet_delete_confirmAction">Delete Planet, Networks &amp; Moons</string>
     <string name="planet_delete_confirmTitle">Delete this planet?</string>

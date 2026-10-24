@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.MoonEntry
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetProfile
@@ -406,7 +407,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             appContext.getString(R.string.error_planet_writeFailed)
         null -> when (e) {
             is DuplicateWorld ->
-                appContext.getString(R.string.addplanet_duplicate, e.worldId.toString())
+                // 16 位 hex 与全 App 及 iOS %016llx 一致（P4 终审 M-1）
+                appContext.getString(R.string.addplanet_duplicate, MoonEntry.formatWorldId(e.worldId))
             else -> {
                 Log.w(TAG, "导入链未识别异常", e)
                 appContext.getString(R.string.addplanet_importFailed)

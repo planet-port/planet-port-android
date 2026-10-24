@@ -141,7 +141,7 @@
     <string name="peers_relay">中转 relay</string>
     <string name="peers_tunnelDown">隧道未运行</string>
     <string name="peers_tunnelDownHint">开启网络后可查看实时连接</string>
-    <string name="planet_add_title">添加行星</string>
+    <string name="planet_add_title">添加行星服务器</string>
     <string name="planet_delete">删除此行星</string>
     <string name="planet_delete_confirmAction">删除行星、网络和卫星</string>
     <string name="planet_delete_confirmTitle">删除这颗行星？</string>
