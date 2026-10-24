@@ -21,7 +21,8 @@ import cn.imgozi.planetport.ui.prefs.PrefsView
  */
 sealed interface Page {
     data object Home : Page
-    data class NetworkDetail(val nwid: String) : Page
+    /** planetId 必带：不同行星可加入同 ID 网络，仅凭 nwid 定位条目会命中错误行星。 */
+    data class NetworkDetail(val planetId: String, val nwid: String) : Page
     data object Prefs : Page
     data class PlanetSettings(val planetId: String) : Page
     data object Peers : Page
@@ -72,7 +73,7 @@ fun AppRoot(activity: MainActivity) {
     CompositionLocalProvider(LocalNavigator provides navigator) {
         when (val page = stack.last()) {
             Page.Home -> HomeView(activity)
-            is Page.NetworkDetail -> NetworkDetailView(page.nwid, onBack = navigator::pop)
+            is Page.NetworkDetail -> NetworkDetailView(page.planetId, page.nwid, onBack = navigator::pop)
             Page.Prefs -> PrefsView(activity, onBack = navigator::pop)
             is Page.PlanetSettings -> PlanetSettingsView(
                 planetId = page.planetId,

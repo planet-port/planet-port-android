@@ -59,6 +59,8 @@ data class NetworkDetailUiState(
  * 配置写入侧维持「写 store → configChanges → 隧道热重配」同构语义。
  */
 class NetworkDetailViewModel(
+    /** 条目归属行星：不同行星可加入同 ID 网络，条目定位一律按 (planetId, nwid) 双键。 */
+    private val planetId: String,
     private val nwid: String,
     application: Application,
 ) : AndroidViewModel(application) {
@@ -97,25 +99,18 @@ class NetworkDetailViewModel(
 
     private suspend fun reloadStoreState() {
         val store = StoreRepo.store
-        val byPlanet = store.readNetworksByPlanet()
-        var hitPlanetId: String? = null
-        var hitEntry: NetworkEntry? = null
-        var others = false
-        for ((planetId, list) in byPlanet) {
-            val index = list.indexOfFirst { it.networkId == nwid }
-            if (index < 0) continue
-            hitPlanetId = planetId
-            hitEntry = list[index]
-            others = list.any { it.networkId != nwid && it.lastActivated }
-            break
-        }
+        // 双键直取归属行星列表（跨行星同 ID 网络只命中本行星条目，iOS 卡片直传 entry 同构）
+        val list = store.readNetworks(planetId)
+        val index = list.indexOfFirst { it.networkId == nwid }
+        val hit = index.takeIf { it >= 0 }?.let { list[it] }
+        val others = list.any { it.networkId != nwid && it.lastActivated }
         // 挂起读先算完再赋值：不把挂起调用放进 StateFlow.update 的 CAS 重试循环
         val active = store.activePlanetId()
         _ui.update {
             val next = it.copy(
-                entry = hitEntry,
+                entry = hit,
                 loaded = true,
-                entryPlanetId = hitPlanetId,
+                entryPlanetId = if (hit != null) planetId else null,
                 activePlanetId = active,
                 otherActivatedExists = others,
             )
@@ -138,7 +133,6 @@ class NetworkDetailViewModel(
     /** 删除网络条目（隧道经 configChanges 自动 leave）。[onDeleted] 供视图退栈。 */
     fun delete(onDeleted: () -> Unit) {
         viewModelScope.launch {
-            val planetId = _ui.value.entry?.planetId
             StoreRepo.store.deleteNetwork(networkId = nwid, planetId = planetId)
             // 空跑收敛（iOS 19f7681 stopVPNIfNoActiveNetworks）：删的可能是
             // 活跃行星最后一个启用网络，隧道不得无网络空跑。stop 幂等，未跑直过
@@ -151,15 +145,12 @@ class NetworkDetailViewModel(
 
     /** 读-改-写整组替换（writeNetworks 按 planet 整组盖写，必须传全量列表）。 */
     private suspend fun mutateEntry(transform: (NetworkEntry) -> NetworkEntry) {
-        val byPlanet = StoreRepo.store.readNetworksByPlanet()
-        for ((planetId, list) in byPlanet) {
-            val index = list.indexOfFirst { it.networkId == nwid }
-            if (index < 0) continue
-            val updated = list.toMutableList()
-            updated[index] = transform(updated[index])
-            StoreRepo.store.writeNetworks(updated, planetId)
-            return
-        }
+        val list = StoreRepo.store.readNetworks(planetId)
+        val index = list.indexOfFirst { it.networkId == nwid }
+        if (index < 0) return
+        val updated = list.toMutableList()
+        updated[index] = transform(updated[index])
+        StoreRepo.store.writeNetworks(updated, planetId)
     }
 }
 

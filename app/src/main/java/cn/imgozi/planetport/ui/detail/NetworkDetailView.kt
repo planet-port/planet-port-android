@@ -74,18 +74,21 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
  *
  * 快照走 TunnelStateBus.networkConfigs 推模式（iOS 为 ProviderMessage 拉模式，见 VM 注释）。
  *
+ * @param planetId 条目归属行星（自 Page.NetworkDetail 取；同 ID 网络跨行星时
+ *   仅凭 nwid 会定位到错误条目，iOS 由卡片直传 entry 天然带归属）
  * @param nwid 16 位十六进制网络 ID（自 Page.NetworkDetail 取）
  * @param onBack 页面退栈回调（删除成功后也经此退出，对齐 iOS dismiss）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NetworkDetailView(
+    planetId: String,
     nwid: String,
     onBack: () -> Unit,
 ) {
     val app = LocalContext.current.applicationContext as android.app.Application
-    val vm: NetworkDetailViewModel = viewModel(key = "network-detail-$nwid") {
-        NetworkDetailViewModel(nwid, app)
+    val vm: NetworkDetailViewModel = viewModel(key = "network-detail-$planetId-$nwid") {
+        NetworkDetailViewModel(planetId, nwid, app)
     }
     val ui by vm.ui.collectAsState()
     val entry = ui.entry
@@ -412,6 +415,7 @@ private fun qrImage(content: String, size: Int = 420): ImageBitmap? {
         }
         Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888).asImageBitmap()
     } catch (e: Exception) {
+        android.util.Log.e("PlanetPort", "qrImage failed", e)
         null
     }
 }

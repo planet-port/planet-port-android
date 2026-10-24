@@ -189,7 +189,7 @@ fun HomeView(activity: MainActivity) {
                             navigator.navTo(Page.PlanetSettings(planet.id))
                         },
                         onJoin = { showJoin = true },
-                        onOpenNetwork = { nwid -> navigator.navTo(Page.NetworkDetail(nwid)) },
+                        onOpenNetwork = { nwid -> navigator.navTo(Page.NetworkDetail(planet.id, nwid)) },
                         onToggle = { entry, active ->
                             vm.setNetworkActive(planet.id, entry, active) { force ->
                                 limitTarget = entry to force
