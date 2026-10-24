@@ -42,6 +42,7 @@ import cn.imgozi.planetport.ui.components.Badge
 import cn.imgozi.planetport.ui.components.EmptyStateCard
 import cn.imgozi.planetport.ui.components.SectionCard
 import cn.imgozi.planetport.ui.components.StatusDot
+import cn.imgozi.planetport.ui.theme.HomeMetrics
 import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.theme.tertiaryTextColor
@@ -53,8 +54,9 @@ import cn.imgozi.planetport.ui.theme.tertiaryTextColor
  * 下拉刷新手势省略——流本身已周期自刷新，刷新语义即「展示当前流值」。
  * 状态三分：查询中（转圈）/ 隧道未运行 / 运行但列表空，均复用空态卡形态。
  * Peer 卡：地址 10 位 hex 等宽 + 角色徽标（PLANET/MOON/LEAF，主色 0.12 底）
- * + 次行版本 + 延迟（6dp 点 + N ms，<30 绿 <100 橙 ≥100 红；0/未知显示「-」）
- * + 第三行：无路径 → 橙色「中转 relay」徽标；有路径 → 等宽路径明细。
+ * + 次行版本 + 延迟（6dp 点 + N ms，<30 绿 <100 橙 ≥100 红；未知显示「-」）
+ * + 第三行：无路径 → 橙色「中转 relay」徽标；有路径 → 第一条优选物理路径
+ * （对齐 iOS ZTBridge.peers 的单路径选择：取到第一条有效路径即 break）。
  *
  * @param onBack 返回回调（AppRoot 手写页面栈接线；默认空便于独立预览）
  */
@@ -132,7 +134,7 @@ private fun StatusCard(content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(horizontal = HomeMetrics.pageHMargin, vertical = 8.dp),
     ) {
         Column { content() }
     }
@@ -142,8 +144,8 @@ private fun StatusCard(content: @Composable () -> Unit) {
 private fun PeerList(peers: List<PeerInfo>) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = HomeMetrics.pageHMargin, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(HomeMetrics.cardSpacing),
     ) {
         items(peers, key = { it.address }) { peer ->
             PeerCard(peer)
@@ -152,7 +154,7 @@ private fun PeerList(peers: List<PeerInfo>) {
 }
 
 /**
- * Peer 卡（对齐 iOS peerCard）：地址 + 角色徽标 / 版本 + 延迟 / 路径或中转徽标。
+ * Peer 卡（对齐 iOS peerCard）：地址 + 角色徽标 / 版本 + 延迟 / 优选路径或中转徽标。
  */
 @Composable
 private fun PeerCard(peer: PeerInfo) {
@@ -194,22 +196,23 @@ private fun PeerCard(peer: PeerInfo) {
                     icon = Icons.AutoMirrored.Filled.AltRoute,
                 )
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    peer.paths.forEach { path ->
-                        Text(
-                            text = path,
-                            style = PlanetFonts.MonoCaption,
-                            color = tertiary,
-                            maxLines = 1,
-                        )
-                    }
-                }
+                // 优选物理路径：对齐 iOS ZTBridge.peers，取第一条有效路径展示
+                Text(
+                    text = peer.paths.first(),
+                    style = PlanetFonts.MonoCaption,
+                    color = tertiary,
+                    maxLines = 1,
+                )
             }
         }
     }
 }
 
-/** 延迟展示：>0 语义色 + 6dp 点；0/未知显示「-」（SDK latency 未测得时为 0）。 */
+/**
+ * 延迟展示：>0 语义色 + 6dp 点；≤0 显示「-」。
+ * 核心对未知延迟写 -1（Node.cpp：p->latency >= 0xffff → -1），SDK 未测得为 0，
+ * `<=0` 守卫同时覆盖两者（Peer.java「zero if unknown」注释已过时）。
+ */
 @Composable
 private fun LatencyText(latency: Int) {
     if (latency <= 0) {

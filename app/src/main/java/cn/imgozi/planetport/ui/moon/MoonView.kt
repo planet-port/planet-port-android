@@ -12,10 +12,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -101,7 +99,6 @@ fun MoonView(
             scope.launch {
                 when (val result = vm.importFromFile(uri)) {
                     AddMoonResult.Added -> Unit
-                    AddMoonResult.Duplicate -> notice = "该卫星已入轨"
                     is AddMoonResult.Failed -> notice = result.message
                 }
             }
@@ -163,15 +160,21 @@ fun MoonView(
                         row = row,
                         onDelete = {
                             scope.launch {
-                                vm.deleteOrbit(row.entry)
-                                snackbar.showSnackbar("已删除入轨，重启隧道以应用变更")
+                                runCatching { vm.deleteOrbit(row.entry) }
+                                    .onSuccess {
+                                        snackbar.showSnackbar("已删除入轨，重启隧道以应用变更")
+                                    }
+                                    .onFailure { snackbar.showSnackbar("操作失败") }
                             }
                         },
                         onCopy = {
                             clipboard.setText(AnnotatedString(row.entry.id))
                         },
                         onDeleteCache = {
-                            scope.launch { vm.deleteCacheFile(row.entry) }
+                            scope.launch {
+                                runCatching { vm.deleteCacheFile(row.entry) }
+                                    .onFailure { snackbar.showSnackbar("操作失败") }
+                            }
                         },
                     )
                 }
@@ -181,14 +184,16 @@ fun MoonView(
 
     if (showAdd) {
         AddMoonSheet(
-            existingWorldIds = moons.map { it.entry.worldId }.toSet(),
             onDismiss = { showAdd = false },
             onFileImport = {
                 showAdd = false
                 filePicker.launch(arrayOf("*/*"))
             },
             onManualOrbit = { worldId, seed ->
-                scope.launch { vm.addManual(worldId, seed) }
+                scope.launch {
+                    vm.addManual(worldId, seed)
+                        .also { if (it is AddMoonResult.Failed) notice = it.message }
+                }
                 showAdd = false
             },
         )

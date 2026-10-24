@@ -37,13 +37,12 @@ import cn.imgozi.planetport.ui.theme.PlanetFonts
  * 添加卫星弹层（对齐 iOS AddMoonSheet：文件导入 / 手动入轨二选一）。
  *
  * 手动入轨：World ID + Seed 两个 16 位 hex 输入，均合法才可「入轨」；
- * 与既有条目同 worldId 时行内提示不重复写（对齐任务简报查重要求）。
+ * 同 worldId 条目为替换语义（对齐 iOS addMoon removeAll + append），不做查重提示。
  * 文件导入回调交由页面打开系统文件选择器（sheet 先关闭，对齐 iOS 0.3s 延迟语义）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddMoonSheet(
-    existingWorldIds: Set<ULong>,
     onDismiss: () -> Unit,
     onFileImport: () -> Unit,
     onManualOrbit: (worldId: ULong, seed: ULong) -> Unit,
@@ -53,7 +52,6 @@ fun AddMoonSheet(
 
     val valid = isHex16(worldIdText) && isHex16(seedText)
     val worldId = if (valid) worldIdText.toULongOrNull(16) else null
-    val duplicate = worldId != null && worldId in existingWorldIds
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -124,20 +122,13 @@ fun AddMoonSheet(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (duplicate) {
-                Text(
-                    "该卫星已入轨",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
             Button(
                 onClick = {
                     val id = worldId ?: return@Button
                     val seed = seedText.toULongOrNull(16) ?: return@Button
                     onManualOrbit(id, seed)
                 },
-                enabled = valid && !duplicate,
+                enabled = valid,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("入轨")

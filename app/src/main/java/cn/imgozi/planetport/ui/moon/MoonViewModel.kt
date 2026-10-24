@@ -3,7 +3,6 @@ package cn.imgozi.planetport.ui.moon
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -19,15 +18,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 /** Moon 行展示模型：条目 + moons.d 缓存文件在位状态（缓存徽标「已缓存/未缓存」）。 */
 data class MoonRow(val entry: MoonEntry, val cached: Boolean)
 
-/** 添加卫星结果（手动入轨与文件导入共用；[Duplicate] = 已有同 worldId 条目，不重复写）。 */
+/** 添加卫星结果（手动入轨与文件导入共用）。同 worldId 为替换语义，不区分重复。 */
 sealed interface AddMoonResult {
     data object Added : AddMoonResult
-    data object Duplicate : AddMoonResult
     data class Failed(val message: String) : AddMoonResult
 }
 
@@ -54,10 +53,14 @@ class MoonViewModel(application: Application, private val planetId: String) : An
 
     init {
         viewModelScope.launch {
+            // 先建立订阅再刷新：configChanges 是无 replay 的 SharedFlow，
+            // 若刷新先行，刷新期间到达的变更事件会丢失
+            launch {
+                // level-triggered 契约：任何配置变更（含本页写入触发的）全量重读，
+                // 缓存文件在位状态随之刷新
+                StoreRepo.configChanges.collect { refresh() }
+            }
             refresh()
-            // level-triggered 契约：任何配置变更（含本页写入触发的）全量重读，
-            // 缓存文件在位状态随之刷新
-            StoreRepo.configChanges.collect { refresh() }
         }
     }
 
@@ -66,43 +69,56 @@ class MoonViewModel(application: Application, private val planetId: String) : An
         File(File(store.paths.planetStateDir(entry.planetId ?: planetId), "moons.d"), entry.id + ".moon")
 
     /**
-     * 手动入轨：按 worldId 查重，已有同 id 条目时不重复写（返回 [AddMoonResult.Duplicate]）。
-     * 成功写入经 configChanges → 隧道侧增量 orbit（运行中即时生效）。
+     * 手动入轨：对齐 iOS addMoon（removeAll + append），同 worldId 直接替换不查重——
+     * 后续导入可升级既有条目。成功写入经 configChanges → 隧道侧增量 orbit（运行中即时生效）。
      */
-    suspend fun addManual(worldId: ULong, seed: ULong): AddMoonResult {
+    suspend fun addManual(worldId: ULong, seed: ULong): AddMoonResult = runCatching {
         val existing = store.readMoons(planetId)
-        if (existing.any { it.worldId == worldId }) return AddMoonResult.Duplicate
         store.writeMoons(
-            existing + MoonEntry(worldId = worldId, seed = seed, fromFile = false),
+            existing.filterNot { it.worldId == worldId } +
+                MoonEntry(worldId = worldId, seed = seed, fromFile = false),
             planetId,
         )
-        return AddMoonResult.Added
+        AddMoonResult.Added
+    }.getOrElse { AddMoonResult.Failed("操作失败，请重试") }
+
+    /**
+     * 文件导入：限量读 Uri（超 [MoonImporter.MAX_MOON_BYTES] 抛 [MoonImporter.ImportError.TooLarge]，
+     * 避免全量 readBytes 撑爆内存）→ MoonImporter 校验落盘（缓存文件幂等写入，重复导入
+     * 顺手修复缓存）→ 写记录。对齐 iOS addMoon，同 worldId 直接替换不查重。
+     */
+    suspend fun importFromFile(uri: Uri): AddMoonResult = runCatching {
+        val bytes = withContext(Dispatchers.IO) { readMoonBytes(uri) }
+            ?: return@runCatching AddMoonResult.Failed(MoonImporter.ImportError.READ_FAILED_MESSAGE)
+        val entry = StoreRepo.moonImporter.importMoonData(bytes)
+        val existing = store.readMoons(planetId)
+        store.writeMoons(existing.filterNot { it.worldId == entry.worldId } + entry, planetId)
+        AddMoonResult.Added
+    }.getOrElse { e ->
+        AddMoonResult.Failed((e as? MoonImporter.ImportError)?.message ?: "moon 文件导入失败")
     }
 
     /**
-     * 文件导入：读 Uri → MoonImporter 校验落盘（缓存文件幂等写入，重复导入无害）
-     * → 查重 → 写记录。缓存文件先于查重落盘是有意的：即便条目已存在，
-     * 重新校验过的文件也顺手修复了缓存。
+     * 流式限量读取：每次 64KiB，累计超过 [MoonImporter.MAX_MOON_BYTES] 即抛
+     * [MoonImporter.ImportError.TooLarge] 终止。读取失败（无法打开流等）返回 null。
      */
-    suspend fun importFromFile(uri: Uri): AddMoonResult {
-        val bytes = withContext(Dispatchers.IO) {
-            try {
-                getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            } catch (_: Exception) {
-                null
+    private fun readMoonBytes(uri: Uri): ByteArray? = try {
+        getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArrayOutputStream(MOON_READ_BUFFER_INIT)
+            val chunk = ByteArray(MOON_READ_CHUNK)
+            var read: Int
+            while (input.read(chunk).also { read = it } != -1) {
+                if (buffer.size() + read > MoonImporter.MAX_MOON_BYTES) {
+                    throw MoonImporter.ImportError.TooLarge()
+                }
+                buffer.write(chunk, 0, read)
             }
-        } ?: return AddMoonResult.Failed(MoonImporter.ImportError.ReadFailed().message ?: "文件读取失败")
-
-        val entry = try {
-            StoreRepo.moonImporter.importMoonData(bytes)
-        } catch (e: MoonImporter.ImportError) {
-            return AddMoonResult.Failed(e.message ?: "moon 文件导入失败")
+            buffer.toByteArray()
         }
-
-        val existing = store.readMoons(planetId)
-        if (existing.any { it.worldId == entry.worldId }) return AddMoonResult.Duplicate
-        store.writeMoons(existing + entry, planetId)
-        return AddMoonResult.Added
+    } catch (e: MoonImporter.ImportError) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 
     /**
@@ -132,6 +148,10 @@ class MoonViewModel(application: Application, private val planetId: String) : An
     }
 
     companion object {
+        /** 限量读取的初始缓冲 64KiB 与分块大小 64KiB（.moon 数 KB 量级，单块足够）。 */
+        private const val MOON_READ_BUFFER_INIT = 64 * 1024
+        private const val MOON_READ_CHUNK = 64 * 1024
+
         fun factory(planetId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]

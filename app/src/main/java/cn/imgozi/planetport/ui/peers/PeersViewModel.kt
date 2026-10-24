@@ -43,8 +43,10 @@ class PeersViewModel : ViewModel() {
             _loaded.value = true
         }
         viewModelScope.launch {
+            // 先建立订阅再刷新：configChanges 是无 replay 的 SharedFlow，
+            // 若刷新先行，刷新期间到达的变更事件会丢失
+            launch { StoreRepo.configChanges.collect { refreshPlanetName() } }
             refreshPlanetName()
-            StoreRepo.configChanges.collect { refreshPlanetName() }
         }
     }
 
