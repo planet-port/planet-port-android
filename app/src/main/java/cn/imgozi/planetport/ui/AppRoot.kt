@@ -45,7 +45,9 @@ val LocalNavigator = staticCompositionLocalOf<Navigator> {
  * 切语言 setApplicationLocales）不丢导航位置（P4 终审 I-1；iOS NavigationStack
  * path 由系统持有等价）。进程被杀回收不保，与 iOS 冷恢复同等可接受。
  */
-private class NavStackViewModel : ViewModel() {
+// 可见性不能收成 private：viewModel() 工厂链反射实例化非 public 类会抛
+// IllegalAccessException（真机首启崩溃实测；编译期无法暴露）
+internal class NavStackViewModel : ViewModel() {
     val stack = mutableStateListOf<Page>(Page.Home)
 }
 
