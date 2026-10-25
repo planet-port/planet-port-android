@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -449,6 +451,7 @@ private fun AddPlanetForm(
                     value = url,
                     onValueChange = { url = it },
                     placeholder = stringResource(R.string.addplanet_urlPlaceholder),
+                    leadingIcon = Icons.Outlined.Link,
                     keyboardType = KeyboardType.Uri,
                     outlined = true,
                     modifier = Modifier.weight(1f),
@@ -541,6 +544,7 @@ private fun FormField(
     keyboardType: KeyboardType = KeyboardType.Text,
     textAlign: TextAlign = TextAlign.Start,
     outlined: Boolean = false,
+    leadingIcon: ImageVector? = null,
 ) {
     BasicTextField(
         value = value,
@@ -566,20 +570,34 @@ private fun FormField(
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .padding(horizontal = 12.dp, vertical = 11.dp)
             }
-            Box(
+            Row(
                 modifier = boxModifier,
-                // 线框态垂直居中+水平起始（CenterStart）；预览名沿用整体居中
-                //（iOS multilineTextAlignment(.center)）
-                contentAlignment = if (outlined) Alignment.CenterStart else Alignment.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (value.isEmpty()) {
-                    Text(
-                        placeholder,
-                        style = TextStyle(fontSize = 15.sp, textAlign = textAlign),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (leadingIcon != null) {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp),
                     )
+                    Spacer(Modifier.size(8.dp))
                 }
-                inner()
+                Box(
+                    modifier = Modifier.weight(1f),
+                    // 线框态垂直居中+水平起始（CenterStart）；预览名沿用整体居中
+                    //（iOS multilineTextAlignment(.center)）
+                    contentAlignment = if (outlined) Alignment.CenterStart else Alignment.Center,
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            placeholder,
+                            style = TextStyle(fontSize = 15.sp, textAlign = textAlign),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    inner()
+                }
             }
         },
         modifier = modifier,
