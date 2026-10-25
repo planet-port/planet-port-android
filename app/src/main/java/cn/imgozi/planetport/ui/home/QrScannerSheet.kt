@@ -64,8 +64,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 扫码加入弹层（iOS QRScannerView 等价）：CameraX PreviewView 预览 +
- * ImageAnalysis 逐帧 zxing 解码，命中 16 位 hex 网络 ID 即回调关闭。
+ * 扫码弹层（iOS QRScannerView 等价）：CameraX PreviewView 预览 +
+ * ImageAnalysis 逐帧 zxing 解码，[extract] 提取成功即回调关闭
+ * （默认 16 位 hex 网络 ID，URL 导入场景传 [QrHttpUrl.extract]）。
  * 相机权限被拒 → photo_camera 图标 + 引导文案 +「前往设置」。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +74,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 fun QrScannerSheet(
     onScanned: (String) -> Unit,
     onDismiss: () -> Unit,
+    extract: (String) -> String? = QrNetworkId::extract,
 ) {
     val context = LocalContext.current
     var granted by remember {
@@ -123,6 +125,7 @@ fun QrScannerSheet(
                 if (granted) {
                     ScannerContent(
                         onScanned = onScanned,
+                        extract = extract,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(360.dp),
@@ -183,6 +186,7 @@ private fun DeniedGuide(modifier: Modifier = Modifier) {
 @Composable
 private fun ScannerContent(
     onScanned: (String) -> Unit,
+    extract: (String) -> String?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -225,7 +229,7 @@ private fun ScannerContent(
                     proxy.close()
                     return@setAnalyzer
                 }
-                val text = decodeQr(reader, proxy)?.let { QrNetworkId.extract(it) }
+                val text = decodeQr(reader, proxy)?.let { extract(it) }
                 proxy.close()
                 if (text != null && stopped.compareAndSet(false, true)) {
                     mainHandler.post { onScanned(text) }
@@ -288,6 +292,20 @@ internal object QrNetworkId {
         val lowered = value.lowercase()
         if (lowered.length == 16 && lowered.all { it.isDigit() || it in 'a'..'f' }) return lowered
         return HEX16.find(lowered)?.value
+    }
+}
+
+/**
+ * URL 模式提取（iOS QRScannerView.extractHttpUrl 同构）：内容必须是 http(s)
+ * 链接，去空白后原样返回；其余内容继续扫。
+ */
+internal object QrHttpUrl {
+    fun extract(value: String): String? {
+        val trimmed = value.trim()
+        val uri = Uri.parse(trimmed)
+        val scheme = uri.scheme?.lowercase()
+        if (scheme != "http" && scheme != "https") return null
+        return trimmed
     }
 }
 

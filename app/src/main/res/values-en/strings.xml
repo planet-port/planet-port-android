@@ -14,7 +14,8 @@
     <string name="addplanet_namePlaceholder">Planet name</string>
     <string name="addplanet_randomIcon">Randomize icon</string>
     <string name="addplanet_ready">Ready · %1$s</string>
-    <string name="addplanet_subtitle">Import a planet file, or enter a download URL</string>
+    <string name="addplanet_scanUrl">Or scan a URL QR code</string>
+    <string name="addplanet_subtitle">Import a planet file via file, URL, or QR code</string>
     <string name="addplanet_urlPlaceholder">Or enter a planet file URL</string>
     <!-- 动物图标名（iOS animal.* 同步） -->
     <string name="animal_ant">Ant</string>

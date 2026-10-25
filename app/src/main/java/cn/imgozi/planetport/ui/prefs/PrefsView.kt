@@ -223,8 +223,8 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                         modifier = Modifier.padding(start = 4.dp).size(20.dp),
                     )
                 }
-                // 背景图行：点击开选取弹层；已设置显示 44dp 缩略图（store 内存位图，
-                // 与首页视差层同源，换图/清除后即时刷新）
+                // 背景图行：点击开选取弹层；已设置显示 28dp 缩略图（iOS 764b1b8
+                // 从 44pt 缩小，不撑开选项行高；store 内存位图，与首页视差层同源）
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -244,8 +244,8 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(8.dp)),
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp)),
                         )
                     } else {
                         Text(

@@ -110,6 +110,9 @@ internal fun AddPlanetPage(
 
     LaunchedEffect(isCurrentPage) {
         if (isCurrentPage) {
+            // 每次进入都重掷身份（iOS 764b1b8）：未添加就离开视为放弃，
+            // 下次进来重新随机，不再保留上次离开时的名称/图形/底色
+            rollIdentity()
             // 落位后再入场（iOS 延迟 0.15s 防快甩时动画跑一半）
             delay(150)
             formShown.animateTo(
@@ -119,9 +122,6 @@ internal fun AddPlanetPage(
         } else {
             formShown.snapTo(0f)
         }
-    }
-    LaunchedEffect(Unit) {
-        if (previewName.isEmpty()) rollIdentity()
     }
 
     Column(
@@ -315,6 +315,7 @@ private fun AddPlanetForm(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var url by remember { mutableStateOf("") }
+    var showScanner by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
     var pendingData by remember { mutableStateOf<ByteArray?>(null) }
     var alert by remember { mutableStateOf<String?>(null) }
@@ -322,6 +323,21 @@ private fun AddPlanetForm(
     val fileUnreadable = stringResource(R.string.addplanet_fileUnreadable)
     val badHeader = stringResource(R.string.addplanet_badHeader)
     val tooLarge = stringResource(R.string.error_planet_tooLarge)
+
+    /** URL 下载导入（iOS importFromURL）：「导入」按钮与扫码回填共用路径。 */
+    fun importFromUrl() {
+        if (url.isEmpty() || downloading) return
+        downloading = true
+        vm.downloadPlanet(url) { data, error ->
+            downloading = false
+            when {
+                error != null -> alert = error
+                data != null && (data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE) ->
+                    alert = badHeader
+                data != null -> pendingData = data
+            }
+        }
+    }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -397,6 +413,22 @@ private fun AddPlanetForm(
                 }
             }
 
+            // 扫码导入（iOS 764b1b8）：与「导入」同款视觉（描边按钮；本主题
+            // surfaceContainer 全系=卡片底，容器色填充不可见），扫到 http(s)
+            // 链接回填并直接下载；下载中禁用
+            OutlinedButton(
+                onClick = { showScanner = true },
+                enabled = !downloading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp),
+            ) {
+                Text(
+                    stringResource(R.string.addplanet_scanUrl),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                )
+            }
+
             // URL 输入（OutlinedTextField，与加入网络弹窗输入框同形态）+ 导入按钮
             // （OutlinedButton，与输入框同高；下载中转圈）
             Row(
@@ -413,18 +445,7 @@ private fun AddPlanetForm(
                     modifier = Modifier.weight(1f),
                 )
                 OutlinedButton(
-                    onClick = {
-                        downloading = true
-                        vm.downloadPlanet(url) { data, error ->
-                            downloading = false
-                            when {
-                                error != null -> alert = error
-                                data != null && (data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE) ->
-                                    alert = badHeader
-                                data != null -> pendingData = data
-                            }
-                        }
-                    },
+                    onClick = { importFromUrl() },
                     enabled = url.isNotEmpty() && !downloading,
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     modifier = Modifier.fillMaxHeight(),
@@ -481,6 +502,19 @@ private fun AddPlanetForm(
             confirmButton = {
                 TextButton(onClick = { alert = null }) { Text(stringResource(R.string.common_ok)) }
             },
+        )
+    }
+
+    if (showScanner) {
+        // 关扫码层 → 回填 URL → 直接下载导入（iOS importFromURL 同流程）
+        QrScannerSheet(
+            onScanned = { scanned ->
+                showScanner = false
+                url = scanned
+                importFromUrl()
+            },
+            onDismiss = { showScanner = false },
+            extract = QrHttpUrl::extract,
         )
     }
 }
