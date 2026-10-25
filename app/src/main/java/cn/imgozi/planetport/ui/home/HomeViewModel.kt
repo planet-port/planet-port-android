@@ -28,7 +28,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.max
 
@@ -461,7 +463,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val store = StoreRepo.store
         val networks = store.readNetworks(planetId)
         val index = networks.indexOfFirst { it.networkId == entry.networkId }
-        if (index < 0) return
+        if (index < 0) {
+            // 条目不在目标行星列表（并发删网络/绕过路径兜底）：记日志跳过，调用方
+            // 照常走后续起停——无启用网络时隧道按空载收敛
+            Log.w(TAG, "writeActivatedConfig: 网络 ${entry.networkId} 不在行星 $planetId 列表，跳过写盘")
+            return
+        }
         val updated = networks.toMutableList()
         // 重新手动开启视为用户已知冲突，清除上次的冲突断开记录
         updated[index] = updated[index].copy(lastActivated = true, lastConflict = null)
@@ -489,12 +496,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * 确认跨行星切换，交接时序（用户裁定，五步）：
      * 1-2. 弹窗确认（本函数入口）；
-     * 3. 落配置 + 切指针 + 交接收敛 → **先停当前 VPN**，弹窗保持打开显示断开状态；
-     * 4. 停机终态确认后关闭弹窗；
-     * 5. 停→起之间留 [HANDOVER_DELAY_MS] 收口窗口再起新行星（核心按新指针装载）。
+     * 3. **先停当前 VPN**（弹窗保持打开显示断开状态）——落配置/切指针必须等
+     *     停机之后：writeNetworks/activatePlanet 发的 configChanges 会驱动仍在
+     *     跑的旧核心 applyConfig，此时指针已指新行星，旧核心会去 join 新行星
+     *     网络（经旧根服务器取不到 netconf，正是本交互要消除的病理）；
+     * 4. 停机终态确认后落配置 + 切指针 + 交接收敛，关闭弹窗；
+     * 5. 留 [HANDOVER_DELAY_MS] 收口窗口再起新行星（核心按新指针装载）。
      *
      * 显式「先停后起」替代热重启编排：交接各阶段对用户可见、可判定，旧核心
-     * 在新核心启动前必然已收口，不存在两套启停交错。
+     * 在新核心启动前必然已收口，不存在两套启停交错。确认后的停→落盘段包
+     * [NonCancellable]：用户退出页面取消协程时，交接已不可逆（弹窗已进断开
+     * 阶段），至少把磁盘态收敛到自洽（新行星配置+指针），隧道启动段留在可
+     * 取消区。
      */
     fun confirmSwitchPlanet() {
         val dlg = _state.value.switchDialog ?: return
@@ -513,23 +526,28 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 return@launch
             }
-            writeActivatedConfig(dlg.planetId, entry)
-            switchPlanetPointer(dlg.planetId)
-            // 先断开当前 VPN；弹窗不关，断开进度由 disconnecting 态呈现
-            if (TunnelController.isRunning) {
-                TunnelController.stop(appContext)
-                val settled = withTimeoutOrNull(STOP_SETTLE_TIMEOUT_MS) {
-                    TunnelStateBus.tunnelState.first {
-                        it !is TunnelState.Running && it !is TunnelState.Starting &&
-                            it !is TunnelState.Reconnecting
+            withContext(NonCancellable) {
+                // 先断开当前 VPN；弹窗不关，断开进度由 disconnecting 态呈现
+                if (TunnelController.isRunning) {
+                    TunnelController.stop(appContext)
+                    val settled = withTimeoutOrNull(STOP_SETTLE_TIMEOUT_MS) {
+                        TunnelStateBus.tunnelState.first {
+                            it !is TunnelState.Running && it !is TunnelState.Starting &&
+                                it !is TunnelState.Reconnecting
+                        }
                     }
+                    if (settled == null) TunnelStateBus.log("切换行星：等待停机终态超时")
                 }
-                if (settled == null) TunnelStateBus.log("切换行星：等待停机终态超时")
+                // 停机收口后再落配置 + 切指针：旧核心 collector 已随服务 scope
+                // 取消，configChanges 不会再驱动旧核心；新核心 startTunnel 起核
+                // 时自读新盘
+                writeActivatedConfig(dlg.planetId, entry)
+                switchPlanetPointer(dlg.planetId)
+                // 停机确认后关闭弹窗
+                _state.update { it.copy(switchDialog = null) }
+                // 停→起收口窗口（用户裁定 50~150ms 取中值）
+                delay(HANDOVER_DELAY_MS)
             }
-            // 停机确认后关闭弹窗
-            _state.update { it.copy(switchDialog = null) }
-            // 停→起收口窗口（用户裁定 50~150ms 取中值）
-            delay(HANDOVER_DELAY_MS)
             if (TunnelController.isRunning) {
                 // 停机超时兜底：仍在跑则走热重启（排队补发已内建），确保核心按新指针重建
                 TunnelController.restartIfRunning(appContext)
