@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -375,6 +376,7 @@ private fun AddPlanetForm(
             OutlinedButton(
                 onClick = { filePicker.launch(arrayOf("*/*")) },
                 contentPadding = PaddingValues(horizontal = 12.dp),
+                shape = RoundedCornerShape(HomeMetrics.radiusSmall),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(42.dp),
@@ -414,6 +416,7 @@ private fun AddPlanetForm(
             OutlinedButton(
                 onClick = { showScanner = true },
                 enabled = !downloading,
+                shape = RoundedCornerShape(HomeMetrics.radiusSmall),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(42.dp),
@@ -432,20 +435,19 @@ private fun AddPlanetForm(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
+                FormField(
                     value = url,
                     onValueChange = { url = it },
-                    placeholder = { Text(stringResource(R.string.addplanet_urlPlaceholder)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(42.dp),
+                    placeholder = stringResource(R.string.addplanet_urlPlaceholder),
+                    keyboardType = KeyboardType.Uri,
+                    outlined = true,
+                    modifier = Modifier.weight(1f),
                 )
                 OutlinedButton(
                     onClick = { importFromUrl() },
                     enabled = url.isNotEmpty() && !downloading,
                     contentPadding = PaddingValues(horizontal = 12.dp),
+                    shape = RoundedCornerShape(HomeMetrics.radiusSmall),
                     modifier = Modifier.height(42.dp),
                 ) {
                     if (downloading) {
@@ -517,7 +519,9 @@ private fun AddPlanetForm(
     }
 }
 
-/** 表单输入（iOS field()：quaternary 底圆角 10，无自动大写/纠错）。 */
+/** 表单输入（iOS field()：quaternary 底圆角 10，无自动大写/纠错）。
+ *  [outlined] 线框形态（卡内用）：hairline 描边替代容器色填充（本主题容器色
+ *  在白卡内不可见），定高 42dp 与操作按钮等高，文字垂直居中。 */
 @Composable
 private fun FormField(
     value: String,
@@ -526,6 +530,7 @@ private fun FormField(
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
     textAlign: TextAlign = TextAlign.Start,
+    outlined: Boolean = false,
 ) {
     BasicTextField(
         value = value,
@@ -539,11 +544,23 @@ private fun FormField(
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
         decorationBox = { inner ->
-            Box(
-                modifier = Modifier
+            val boxModifier = if (outlined) {
+                Modifier
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(HomeMetrics.radiusSmall))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(HomeMetrics.radiusSmall))
+                    .padding(horizontal = 12.dp)
+            } else {
+                Modifier
                     .clip(RoundedCornerShape(HomeMetrics.radiusSmall))
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                    .padding(horizontal = 12.dp, vertical = 11.dp)
+            }
+            Box(
+                modifier = boxModifier,
+                // 线框态垂直居中+水平起始（CenterStart）；预览名沿用整体居中
+                //（iOS multilineTextAlignment(.center)）
+                contentAlignment = if (outlined) Alignment.CenterStart else Alignment.Center,
             ) {
                 if (value.isEmpty()) {
                     Text(
