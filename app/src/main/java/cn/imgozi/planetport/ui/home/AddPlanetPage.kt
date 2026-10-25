@@ -375,7 +375,9 @@ private fun AddPlanetForm(
             OutlinedButton(
                 onClick = { filePicker.launch(arrayOf("*/*")) },
                 contentPadding = PaddingValues(horizontal = 12.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Description,
@@ -423,9 +425,10 @@ private fun AddPlanetForm(
             }
 
             // URL 输入（OutlinedTextField，与加入网络弹窗输入框同形态）+ 导入按钮
-            // （OutlinedButton，与输入框同高；下载中转圈）
+            // （OutlinedButton，与输入框同高；下载中转圈）。整行与上方两个按钮
+            // 统一 42dp 高（OutlinedTextField 默认 56dp、按钮最小交互尺寸 48dp
+            // 都会破坏等高，需显式定高）
             Row(
-                modifier = Modifier.height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -435,13 +438,15 @@ private fun AddPlanetForm(
                     placeholder = { Text(stringResource(R.string.addplanet_urlPlaceholder)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp),
                 )
                 OutlinedButton(
                     onClick = { importFromUrl() },
                     enabled = url.isNotEmpty() && !downloading,
                     contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.fillMaxHeight(),
+                    modifier = Modifier.height(42.dp),
                 ) {
                     if (downloading) {
                         CircularProgressIndicator(Modifier.size(18.dp))
