@@ -75,7 +75,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -302,7 +306,23 @@ fun HomeView(activity: MainActivity) {
                         Text(stringResource(R.string.home_switch_disconnecting))
                     }
                 } else {
-                    Text(stringResource(R.string.home_alert_switchPlanetMessage))
+                    // 目标网络名 + 当前活跃行星名（iOS 同参：displayName(target) +
+                    // currentPlanetName，官方行星走本地化名）；文案内 **加粗** 标记
+                    // 由 markdownBold 渲染
+                    val targetName =
+                        dlg.entry.networkName.ifEmpty { dlg.entry.networkId }
+                    val currentPlanet = state.planets
+                        .firstOrNull { it.id == state.activePlanetId }
+                    Text(
+                        markdownBold(
+                            stringResource(
+                                R.string.home_alert_switchPlanetMessage,
+                                targetName,
+                                currentPlanet?.displayNameRes()
+                                    ?: stringResource(R.string.planet_official_name),
+                            ),
+                        ),
+                    )
                 }
             },
             dismissButton = {
@@ -324,6 +344,22 @@ fun HomeView(activity: MainActivity) {
             },
         )
     }
+}
+
+/** 文案内 `**加粗**` 标记 → 粗体区间（iOS SwiftUI 对 LocalizedStringKey 的内联 markdown 同构）。 */
+private fun markdownBold(text: String): AnnotatedString = buildAnnotatedString {
+    var rest = text
+    while (true) {
+        val start = rest.indexOf("**")
+        if (start < 0) break
+        val end = rest.indexOf("**", start + 2)
+        if (end < 0) break
+        append(rest.substring(0, start))
+        val boldPart = rest.substring(start + 2, end)
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(boldPart) }
+        rest = rest.substring(end + 2)
+    }
+    append(rest)
 }
 
 /**
