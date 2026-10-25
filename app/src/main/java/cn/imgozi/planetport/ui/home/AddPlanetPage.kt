@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -416,15 +417,24 @@ private fun AddPlanetForm(
             OutlinedButton(
                 onClick = { showScanner = true },
                 enabled = !downloading,
+                contentPadding = PaddingValues(horizontal = 12.dp),
                 shape = RoundedCornerShape(HomeMetrics.radiusSmall),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(42.dp),
             ) {
+                Icon(
+                    imageVector = Icons.Outlined.QrCodeScanner,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(8.dp))
                 Text(
                     stringResource(R.string.addplanet_scanUrl),
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                 )
+                Spacer(Modifier.weight(1f))
             }
 
             // URL 输入（OutlinedTextField，与加入网络弹窗输入框同形态）+ 导入按钮
