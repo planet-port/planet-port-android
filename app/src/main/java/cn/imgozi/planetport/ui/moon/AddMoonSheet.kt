@@ -96,6 +96,7 @@ fun AddMoonSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(onClickLabel = moonChooseFile) { onFileImport() },
+                    outlined = true,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(

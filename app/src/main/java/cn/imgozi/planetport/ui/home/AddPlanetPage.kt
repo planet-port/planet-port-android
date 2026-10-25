@@ -371,18 +371,11 @@ private fun AddPlanetForm(
                 .padding(HomeMetrics.formCardPadding),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // 选择行星文件：整块按钮（含背景）都是热区
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(HomeMetrics.radiusSmall))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { filePicker.launch(arrayOf("*/*")) }
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // 选择行星文件：与扫码/导入同款描边按钮（卡内可交互块统一线框语言）
+            OutlinedButton(
+                onClick = { filePicker.launch(arrayOf("*/*")) },
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Description,
@@ -393,7 +386,7 @@ private fun AddPlanetForm(
                 Spacer(Modifier.size(8.dp))
                 Text(
                     stringResource(R.string.addplanet_chooseFile),
-                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.weight(1f))
                 val ready = pendingData

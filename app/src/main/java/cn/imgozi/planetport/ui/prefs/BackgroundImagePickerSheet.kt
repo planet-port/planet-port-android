@@ -194,6 +194,7 @@ fun BackgroundImagePickerSheet(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
                         },
+                    outlined = true,
                 ) {
                     PickerRow(
                         icon = {
@@ -232,6 +233,7 @@ fun BackgroundImagePickerSheet(
                             onClickLabel = downloadLabel,
                             enabled = urlText.isNotBlank() && !downloading,
                         ) { download() },
+                    outlined = true,
                 ) {
                     PickerRow(
                         icon = {
@@ -271,6 +273,7 @@ fun BackgroundImagePickerSheet(
                                 vm.clearBackgroundImage()
                                 onApplied()
                             },
+                        outlined = true,
                     ) {
                         Text(
                             clearLabel,

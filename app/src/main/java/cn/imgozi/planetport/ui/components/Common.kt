@@ -1,6 +1,7 @@
 package cn.imgozi.planetport.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -97,12 +98,23 @@ fun SectionCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(HomeMetrics.radiusCard),
     contentPadding: PaddingValues = PaddingValues(HomeMetrics.cardPadding),
+    /** 可交互卡加描边：本主题 surfaceContainer 全系=卡片底，白底叠白底
+     *（sheet 内）无边界看不出可点；线框与 OutlinedTextField/OutlinedButton
+     * 同色（hairline outline）保持全 App 线框语言统一。 */
+    outlined: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier = modifier
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
+            .then(
+                if (outlined) {
+                    Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape)
+                } else {
+                    Modifier
+                },
+            )
             .padding(contentPadding),
         content = content,
     )
