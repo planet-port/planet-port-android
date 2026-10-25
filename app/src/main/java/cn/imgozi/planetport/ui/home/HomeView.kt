@@ -65,10 +65,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -562,26 +560,13 @@ private fun HeaderZone(
     currentPage: Int,
     onSelectPage: (Int) -> Unit,
 ) {
-    val bg = MaterialTheme.colorScheme.background
     // chip 转场位移 10dp → px（slideIn/Out 的 lambda 无 Density 作用域，组合期换算）
     val chipShiftPx = with(LocalDensity.current) { 10.dp.roundToPx() }
     Column(
         Modifier
             .fillMaxWidth()
-            .drawBehind {
-                // 三段渐隐对齐 iOS mask stops（白 0→0.85、clear 1.0）；iOS 实底为
-                // .ultraThinMaterial 毛玻璃，Android 以背景色 8% 半透明近似
-                // （走查：不用近实底纯白）
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0f to bg.copy(alpha = 0.08f),
-                            0.85f to bg.copy(alpha = 0.08f),
-                            1f to bg.copy(alpha = 0f),
-                        ),
-                    ),
-                )
-            }
+            // 原为背景色 8% 半透明渐变盖过状态栏（近似 iOS ultraThinMaterial），
+            // 已按要求改为全透明（不再绘制）
             .statusBarsPadding()
             .padding(start = 20.dp, end = 12.dp, top = 6.dp, bottom = 12.dp),
     ) {
