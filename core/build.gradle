@@ -6,6 +6,15 @@ plugins {
     id 'com.android.library'
 }
 
+// ZeroTier 核心源码不入库，由 scripts/bootstrap.sh 按官方 tag 拉取；
+// 缺失时给出可执行的补救指引，避免用户面对 CMake/GLOB 报错。
+def coreStamp = file('../externals/core/.fetched-tag')
+if (!coreStamp.exists()) {
+    throw new GradleException(
+        '缺少 ZeroTier 核心源码（externals/core/）。' +
+        '请先在仓库根目录执行 ./scripts/bootstrap.sh 拉取，再重新构建。')
+}
+
 android {
     namespace 'com.zerotier.sdk'
     compileSdk 36

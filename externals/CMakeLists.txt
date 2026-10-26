@@ -1,7 +1,8 @@
-# Android JNI 构建脚本（树外维护，不改动 externals/core 子模块）
+# Android JNI 构建脚本（树外维护，不改动 externals/core 内容）
 #
+# externals/core 由 scripts/bootstrap.sh 按官方 tag 拉取（不入库）。
 # 官方 java/CMakeLists.txt 是陈旧的显式源码清单（引用 1.14 起已删除的
-# node/C25519.cpp、node/Defaults.cpp 等），不可直接使用，故在子模块外
+# node/C25519.cpp、node/Defaults.cpp 等），不可直接使用，故在拉取目录外
 # 自行维护本文件。核心源码用 GLOB 纳入，未来小幅升级无需改这里。
 #
 # JNI 绑定层（../core/jni/）来自官方 1.16.2 java/jni：五个文件原样，
@@ -22,7 +23,7 @@ set(JNI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../core/jni)
 
 # 1.14+ 删除了 ext/lz4、ext/json-parser，新增 node/ECC.cpp、
 # node/PacketMultiplexer.cpp 等，GLOB 自动覆盖。
-# CONFIGURE_DEPENDS：子模块更新增删 node/*.cpp 时自动重新 configure
+# CONFIGURE_DEPENDS：bootstrap 拉取目录增删 node/*.cpp 时自动重新 configure
 file(GLOB core_src_glob CONFIGURE_DEPENDS ${CORE_DIR}/node/*.cpp)
 
 set(src_files
