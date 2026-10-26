@@ -43,18 +43,37 @@ internal class Dataplane(private val onTunPacket: (ByteArray) -> Unit) {
         // 等 JNI 返回落地（终审 Minor：换代窗口残窗）
         readThread?.join(500)
         currentFd = fd
+        // 部分 OEM TUN fd 出厂即 O_NONBLOCK，read 空读返回 0 令「n<=0 退出」
+        // 的阻塞语义失效（MIUI/Android 9 实测）。恢复阻塞模式；失败则读循环
+        // 退避轮询兜底，不让 0 返回杀死读线程。
+        val blockResult = try {
+            TunFdUtils.setBlocking(fd.fd)
+        } catch (e: Throwable) {
+            TunnelStateBus.log("tun fd setBlocking 异常: ${e.javaClass.simpleName}")
+            -1
+        }
+        if (blockResult < 0) {
+            TunnelStateBus.log("tun fd 恢复阻塞失败 errno=$blockResult，读循环将以退避轮询兜底")
+        }
         outputStream = FileOutputStream(fd.fileDescriptor)
         writeExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "zt-tun-write-$gen") }
         val input = FileInputStream(fd.fileDescriptor)
         readThread = Thread({
+            var polled = false
             val buf = ByteArray(65536)
             while (generation == gen) {
                 val n = try {
                     input.read(buf)
-                } catch (e: IOException) {
+                } catch (_: IOException) {
                     break // fd 关闭
                 }
-                if (n <= 0) break
+                if (n == 0) {
+                    // 非阻塞 fd 空读（setBlocking 失败的兜底路径）：退避后重试
+                    if (!polled) { polled = true; TunnelStateBus.log("tun fd 仍非阻塞，退避轮询 gen=$gen") }
+                    Thread.sleep(1)
+                    continue
+                }
+                if (n < 0) break
                 onTunPacket(buf.copyOf(n))
             }
             try { input.close() } catch (_: IOException) {}

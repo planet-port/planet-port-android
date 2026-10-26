@@ -30,7 +30,8 @@ set(src_files
     ${CORE_DIR}/osdep/OSUtils.cpp
     ${JNI_DIR}/com_zerotierone_sdk_Node.cpp
     ${JNI_DIR}/ZT_jniutils.cpp
-    ${JNI_DIR}/ZT_jnicache.cpp)
+    ${JNI_DIR}/ZT_jnicache.cpp
+    ${JNI_DIR}/ZT_tunfd.cpp)
 
 # 注意：Metrics.cpp 必须参与编译（已在 GLOB 内）——它定义的计数器单例
 # 被 Bond/Network/Node/Switch/Peer 等无守卫地引用；ZT_NO_PEER_METRICS
