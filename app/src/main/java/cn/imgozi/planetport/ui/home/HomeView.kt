@@ -126,33 +126,6 @@ fun HomeView(activity: MainActivity) {
     fun planetAtIndex(i: Int): PlanetProfile? = state.planets.getOrNull(i)
     fun indexOfPlanet(id: String): Int = state.planets.indexOfFirst { it.id == id }
 
-    val pagerState = rememberPagerState(pageCount = { pageCount })
-
-    // 首次加载定位到已选行星（无动画，避免首帧从官方行星甩过去）
-    var initialAligned by remember { mutableStateOf(false) }
-    LaunchedEffect(state.loaded) {
-        if (state.loaded && !initialAligned) {
-            initialAligned = true
-            val idx = indexOfPlanet(state.selectedPlanetId)
-            if (idx >= 0 && pagerState.settledPage != idx) pagerState.scrollToPage(idx)
-        }
-    }
-
-    // 滑动落位 → 浏览上下文切换（只读，不触碰隧道；iOS onChange(currentTab)）
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.settledPage }.collectLatest { idx ->
-            planetAtIndex(idx)?.let { if (it.id != state.selectedPlanetId) vm.selectPlanet(it.id) }
-        }
-    }
-    // 外部选中变化（添加行星落库后选中新行星）→ 定位分页（无动画）
-    LaunchedEffect(state.selectedPlanetId, state.loaded) {
-        if (!state.loaded) return@LaunchedEffect
-        val idx = indexOfPlanet(state.selectedPlanetId)
-        if (idx >= 0 && pagerState.settledPage != idx && pagerState.currentPage != idx) {
-            pagerState.scrollToPage(idx)
-        }
-    }
-
     DisposableEffect(vm) {
         vm.attachPermissionRequester(activity::requestVpnPermission)
         onDispose { }
@@ -174,13 +147,37 @@ fun HomeView(activity: MainActivity) {
             parallaxEnabled = background.parallax,
         )
 
-        // 主容器整页（iOS TabView 全屏 + headerZone overlay：内容从头区下方滚过）
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-            // 保持全部分页组合存活：各页网络列表/开关状态不因滑走而丢失（iOS TabView(.page)）
-            beyondViewportPageCount = pageCount,
-        ) { idx ->
+        // 数据就绪后才组合分页：以已选行星为 initialPage，首帧即正确页面。
+        // 空表先组合会让第 0 页按「无行星」渲染成添加页，冷启动先闪新增页
+        // 再跳回已选行星；无选中记录时 selectedPlanetId 回退官方行星（永在
+        // 且最前）= 默认第 1 页
+        if (state.loaded) {
+            val pagerState = rememberPagerState(
+                pageCount = { pageCount },
+                initialPage = indexOfPlanet(state.selectedPlanetId).coerceAtLeast(0),
+            )
+
+            // 滑动落位 → 浏览上下文切换（只读，不触碰隧道；iOS onChange(currentTab)）
+            LaunchedEffect(pagerState) {
+                snapshotFlow { pagerState.settledPage }.collectLatest { idx ->
+                    planetAtIndex(idx)?.let { if (it.id != state.selectedPlanetId) vm.selectPlanet(it.id) }
+                }
+            }
+            // 外部选中变化（添加行星落库后选中新行星）→ 定位分页（无动画）
+            LaunchedEffect(state.selectedPlanetId) {
+                val idx = indexOfPlanet(state.selectedPlanetId)
+                if (idx >= 0 && pagerState.settledPage != idx && pagerState.currentPage != idx) {
+                    pagerState.scrollToPage(idx)
+                }
+            }
+
+            // 主容器整页（iOS TabView 全屏 + headerZone overlay：内容从头区下方滚过）
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                // 保持全部分页组合存活：各页网络列表/开关状态不因滑走而丢失（iOS TabView(.page)）
+                beyondViewportPageCount = pageCount,
+            ) { idx ->
                 val planet = planetAtIndex(idx)
                 if (planet == null) {
                     AddPlanetPage(
@@ -215,25 +212,26 @@ fun HomeView(activity: MainActivity) {
                 }
             }
 
-        // 顶部 overlay 头区（iOS .overlay(alignment: .top) headerZone）：标题 +
-        // chip + 设置 + 圆点指示器，分页内容从其下方滚过
-        HeaderZone(
-            state = state,
-            browsingActive = planetAtIndex(pagerState.settledPage)?.id == state.activePlanetId,
-            onOpenActive = {
-                val idx = indexOfPlanet(state.activePlanetId)
-                if (idx >= 0) scope.launch { pagerState.animateScrollToPage(idx) }
-            },
-            onOpenPrefs = { navigator.navTo(Page.Prefs) },
-            pageCount = pageCount,
-            currentPage = pagerState.settledPage,
-            onSelectPage = { idx -> scope.launch { pagerState.animateScrollToPage(idx) } },
-        )
+            // 顶部 overlay 头区（iOS .overlay(alignment: .top) headerZone）：标题 +
+            // chip + 设置 + 圆点指示器，分页内容从其下方滚过
+            HeaderZone(
+                state = state,
+                browsingActive = planetAtIndex(pagerState.settledPage)?.id == state.activePlanetId,
+                onOpenActive = {
+                    val idx = indexOfPlanet(state.activePlanetId)
+                    if (idx >= 0) scope.launch { pagerState.animateScrollToPage(idx) }
+                },
+                onOpenPrefs = { navigator.navTo(Page.Prefs) },
+                pageCount = pageCount,
+                currentPage = pagerState.settledPage,
+                onSelectPage = { idx -> scope.launch { pagerState.animateScrollToPage(idx) } },
+            )
 
-        // FAB：非添加页显示（iOS FabButton：可拖动 + 左右吸附 + 位置记忆）
-        val onAddPage = planetAtIndex(pagerState.settledPage) == null
-        if (!onAddPage) {
-            FabLayer(onClick = { showJoin = true })
+            // FAB：非添加页显示（iOS FabButton：可拖动 + 左右吸附 + 位置记忆）
+            val onAddPage = planetAtIndex(pagerState.settledPage) == null
+            if (!onAddPage) {
+                FabLayer(onClick = { showJoin = true })
+            }
         }
     }
 

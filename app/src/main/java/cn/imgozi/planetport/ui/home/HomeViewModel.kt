@@ -49,7 +49,7 @@ data class SwitchPlanetDialog(
 
 /** 首页聚合状态（store 全量 + TunnelStateBus 五流的 level-triggered 快照）。 */
 data class HomeUiState(
-    /** 首次 reload 完成（分页指示器据此初始化，避免首帧闪回官方行星）。 */
+    /** 首次 reload 完成（HomeView 据此门控分页组合，首帧直接渲染已选行星）。 */
     val loaded: Boolean = false,
     val planets: List<PlanetProfile> = emptyList(),
     val selectedPlanetId: String = PlanetProfile.OFFICIAL_ID,
