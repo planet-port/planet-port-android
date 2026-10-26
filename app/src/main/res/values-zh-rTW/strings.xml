@@ -169,8 +169,6 @@
     <string name="home_alert_switchPlanetMessage">切換到 **%1$s** 網路將自動中斷已連線的 **%2$s** 網路。</string>
     <string name="home_switch_disconnecting">正在中斷目前行星連線…</string>
     <string name="home_error_multiNetworkMessage">已自動關閉「經 ZeroTier 路由（預設路由）」：多網路同時連線時不可用</string>
-    <string name="home_error_cellularTitle">行動數據未開啟</string>
-    <string name="home_error_cellularMessage">目前使用行動數據，未在設定中允許行動數據</string>
     <string name="home_error_multiNetworkTitle">多網路連線</string>
     <string name="home_error_vpnStartTitle">無法啟動 VPN</string>
     <string name="home_network_connected">已連線 %1$d</string>
@@ -268,7 +266,6 @@
     <string name="prefs_appearance_sectionHeader">外觀</string>
     <string name="prefs_language_sectionHeader">語言</string>
     <string name="prefs_language_system">跟隨系統</string>
-    <string name="prefs_network_allowCellular">允許行動數據</string>
     <string name="prefs_network_disableIPv6">停用 IPv6</string>
     <string name="prefs_network_footer">同時連線多個網路會增加耗電；超出上限時會提示確認，仍可強制開啟。</string>
     <string name="prefs_network_multiConnectLimit">同時連線上限：%1$d</string>

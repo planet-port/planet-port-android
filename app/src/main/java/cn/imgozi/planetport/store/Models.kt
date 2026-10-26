@@ -100,9 +100,6 @@ data class AppPrefs(
     val parallax: Boolean = true,
     /** 同时连接网络软上限（对齐 iOS maxNetworks，2..6；默认 2）。 */
     val maxNetworks: Int = 2,
-    /** 允许移动数据（对齐 iOS prefAllowCellular；默认 true=允许，关闭后移动数据
-     *  下开启网络会被拦截并弹错）。 */
-    val allowCellular: Boolean = true,
     /** 按需连接（对齐 iOS prefConnectOnDemand/NEOnDemandRuleConnect；默认 false）。
      *  iOS 语义=系统维持隧道持久在线；Android 无系统级钩子，落地为 app 启动时
      *  隧道未跑且有已连接标记则自动拉起（HomeViewModel.init 消费），开启时不做
