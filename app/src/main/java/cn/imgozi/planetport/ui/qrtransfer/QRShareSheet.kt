@@ -213,7 +213,7 @@ internal fun QRShareSheet(
                                             onClick = { speed = s },
                                             shape = SegmentedButtonDefaults.itemShape(i, speeds.size),
                                         ) {
-                                            Text("%.1fs".format(s))
+                                            Text("%.1fs".format(java.util.Locale.ROOT, s))
                                         }
                                     }
                                 }

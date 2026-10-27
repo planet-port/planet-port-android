@@ -1,5 +1,7 @@
 package cn.imgozi.planetport.qrtransfer
 
+import java.util.Locale
+
 /** 传输编解码入口。数据 → 压缩容器 → Base45 → 均匀分片（末帧补 '0' 对齐）→ 帧字符串数组。 */
 internal object QRTransfer {
     const val magic = "ZTQR1"
@@ -29,8 +31,12 @@ internal object QRTransfer {
             var chunk = encoded.substring(start, end)
             if (chunk.length < chunkSize) chunk += "0".repeat(chunkSize - chunk.length)
             frames.add(
-                "$magic|${"%02d".format(frameCount)}|${"%02d".format(i)}|" +
-                    "${"%08x".format(crc.toInt())}|${"%05d".format(encoded.length)}|$chunk",
+                "$magic|" +
+                    "%02d".format(Locale.ROOT, frameCount) + "|" +
+                    "%02d".format(Locale.ROOT, i) + "|" +
+                    "%08x".format(Locale.ROOT, crc.toInt()) + "|" +
+                    "%05d".format(Locale.ROOT, encoded.length) + "|" +
+                    chunk,
             )
             start = end
         }
