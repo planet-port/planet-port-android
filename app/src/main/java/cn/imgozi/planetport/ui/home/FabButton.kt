@@ -134,18 +134,24 @@ internal fun FabLayer(onClick: () -> Unit) {
                 .pointerInput(boxW, boxH) {
                     detectDragGestures(
                         onDragStart = {
-                            dragStartX = renderX
-                            dragStartY = renderY
+                            // 注意：pointerInput 块不随重组刷新，闭包里捕获的组合期
+                            // 局部 val（如 renderX/px）会冻结在首次组合的值上；这里必须
+                            // 读实时状态，否则松手换位后再次拖动会瞬间传回冻结位置
+                            dragStartX = if (animating.value) animX.value
+                            else centerX ?: (boxW - sideMargin - radius)
+                            dragStartY = centerY ?: (boxH - bottomMargin - radius)
                             animating.value = false
                             dragging = true
                         },
                         onDrag = { change, amount ->
                             change.consume()
-                            // amount 是单帧增量，必须累加（iOS DragGesture.translation 累计口径）
-                            dragStartX += amount.x / density
-                            dragStartY += amount.y / density
-                            centerX = clampX(dragStartX, boxW)
-                            centerY = clampY(dragStartY, boxH)
+                            // amount 是纯手指位移：每次派发 Compose 都以节点当前坐标
+                            // 换算 previous/position，节点自身位移在增量中已抵消，
+                            // 逐帧累加即等价 iOS DragGesture.translation 累计口径
+                            dragStartX = clampX(dragStartX + amount.x / density, boxW)
+                            dragStartY = clampY(dragStartY + amount.y / density, boxH)
+                            centerX = dragStartX
+                            centerY = dragStartY
                         },
                         onDragEnd = {
                             dragging = false
