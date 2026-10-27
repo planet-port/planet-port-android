@@ -27,6 +27,9 @@ jobs:
       # - name: Preinstall Android SDK components
       #   run: "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;25.2.9519653" "cmake;3.22.1" "platforms;android-36"
 
+      - name: 拉取 ZeroTier 核心源码
+        run: ./scripts/bootstrap.sh
+
       - name: Build
         run: ./gradlew assembleDebug --no-daemon --console=plain
 
@@ -51,6 +54,9 @@ jobs:
 
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: 拉取 ZeroTier 核心源码
+        run: ./scripts/bootstrap.sh
 
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon --console=plain
