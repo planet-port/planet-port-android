@@ -141,8 +141,11 @@ internal fun FabLayer(onClick: () -> Unit) {
                         },
                         onDrag = { change, amount ->
                             change.consume()
-                            centerX = clampX(dragStartX + amount.x / density, boxW)
-                            centerY = clampY(dragStartY + amount.y / density, boxH)
+                            // amount 是单帧增量，必须累加（iOS DragGesture.translation 累计口径）
+                            dragStartX += amount.x / density
+                            dragStartY += amount.y / density
+                            centerX = clampX(dragStartX, boxW)
+                            centerY = clampY(dragStartY, boxH)
                         },
                         onDragEnd = {
                             dragging = false
