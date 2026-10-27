@@ -8,3 +8,6 @@
 build/
 .externalNativeBuild/
 .cxx/
+
+# ZeroTier 核心源码：由 scripts/bootstrap.sh 按官方 tag 拉取，不入库
+/externals/core/

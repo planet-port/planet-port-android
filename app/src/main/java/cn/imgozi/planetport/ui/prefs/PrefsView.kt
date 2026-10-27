@@ -90,7 +90,7 @@ import cn.imgozi.planetport.ui.theme.ThemeManager
  * 外观（主题色入口首位——弹窗收编预设色板与 HSL 色盘（iOS fe0db0a）；背景图入口壳——
  * 选取器归 T7；视差无图禁用）、关于（Core 版本 / App 版本 +
  * MPL-2.0 归属声明 footer）。
- * iOS 的「允许移动数据」无 Android 等价，不移植；捐赠 Section 以 if(false) 隐藏对齐。
+ * iOS 的「允许移动数据」不移植（能上网即可连，不区分 WiFi/数据）；捐赠 Section 以 if(false) 隐藏对齐。
  *
  * @param activity 授权请求宿主（on-demand 自动拉起的 VPN 授权弹窗，HomeView 同范式）
  * @param onBack 页面退栈回调
@@ -149,13 +149,6 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                 header = stringResource(R.string.prefs_network_sectionHeader),
                 footer = stringResource(R.string.prefs_network_footer),
             ) {
-                // 网络组首项（iOS PrefsView.swift:19 同位）：默认允许；关闭后移动
-                // 数据下开网络会被拦截（HomeViewModel.activate 门控）
-                FormToggleRow(
-                    title = stringResource(R.string.prefs_network_allowCellular),
-                    checked = prefs.allowCellular,
-                    onCheckedChange = vm::setAllowCellular,
-                )
                 FormToggleRow(
                     title = stringResource(R.string.prefs_network_disableIPv6),
                     checked = prefs.disableIpv6,

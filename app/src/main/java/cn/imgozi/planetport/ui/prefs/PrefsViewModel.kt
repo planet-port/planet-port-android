@@ -38,11 +38,6 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 允许移动数据（对齐 iOS prefAllowCellular；默认允许，纯偏好不触碰隧道）。 */
-    fun setAllowCellular(on: Boolean) {
-        write({ it.copy(allowCellular = on) })
-    }
-
     /** 禁用 IPv6：落盘完成后隧道在跑才热重启（对齐 iOS VPNManager.restartIfRunning）。 */
     fun setDisableIpv6(on: Boolean) {
         write({ it.copy(disableIpv6 = on) }, onPersisted = {

@@ -432,9 +432,10 @@ private fun AddPlanetForm(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.size(8.dp))
+                // 与「选择行星文件」同款字体（默认 labelLarge）与 onSurface 色
                 Text(
                     stringResource(R.string.addplanet_scanUrl),
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.weight(1f))
             }

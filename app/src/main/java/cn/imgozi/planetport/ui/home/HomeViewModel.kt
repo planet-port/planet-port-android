@@ -1,7 +1,6 @@
 package cn.imgozi.planetport.ui.home
 
 import android.app.Application
-import android.net.ConnectivityManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -50,7 +49,7 @@ data class SwitchPlanetDialog(
 
 /** 首页聚合状态（store 全量 + TunnelStateBus 五流的 level-triggered 快照）。 */
 data class HomeUiState(
-    /** 首次 reload 完成（分页指示器据此初始化，避免首帧闪回官方行星）。 */
+    /** 首次 reload 完成（HomeView 据此门控分页组合，首帧直接渲染已选行星）。 */
     val loaded: Boolean = false,
     val planets: List<PlanetProfile> = emptyList(),
     val selectedPlanetId: String = PlanetProfile.OFFICIAL_ID,
@@ -424,16 +423,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈）；否则激活行星 + 起停隧道。
      */
     private suspend fun activate(planetId: String, entry: NetworkEntry) {
-        // 移动数据门控（iOS HomeView.swift:557 同位拦截）：设置禁止移动数据且当前
-        // 链路为计费蜂窝时拦截开启。iOS isCellular() 暂为占位恒 false（待接
-        // NWPathMonitor），Android 直接以 isActiveNetworkMetered 实测
-        if (!StoreRepo.store.readPrefs().allowCellular && isMeteredNetwork()) {
-            emitNotice(
-                appContext.getString(R.string.home_error_cellularTitle),
-                appContext.getString(R.string.home_error_cellularMessage),
-            )
-            return
-        }
         writeActivatedConfig(planetId, entry)
 
         // 应用目标全程锚定网络归属行星（iOS performNetworkActivate →
@@ -516,16 +505,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val entry = dlg.entry
             _state.update { it.copy(switchDialog = dlg.copy(disconnecting = true)) }
             _pending.value = _pending.value + entry.networkId
-            // 移动数据门控（与 activate 同口径）：拦截则收弹窗，不落任何配置
-            if (!StoreRepo.store.readPrefs().allowCellular && isMeteredNetwork()) {
-                _state.update { it.copy(switchDialog = null) }
-                clearPending(entry.networkId)
-                emitNotice(
-                    appContext.getString(R.string.home_error_cellularTitle),
-                    appContext.getString(R.string.home_error_cellularMessage),
-                )
-                return@launch
-            }
             withContext(NonCancellable) {
                 // 先断开当前 VPN；弹窗不关，断开进度由 disconnecting 态呈现
                 if (TunnelController.isRunning) {
@@ -866,12 +845,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 break
             }
         }
-    }
-
-    /** 当前链路是否计费蜂窝（VPN 未建立时调用；iOS isCellular 的真实实现形态）。 */
-    private fun isMeteredNetwork(): Boolean {
-        val cm = appContext.getSystemService(ConnectivityManager::class.java) ?: return false
-        return cm.isActiveNetworkMetered
     }
 
     private fun emitNotice(title: String, message: String) {
