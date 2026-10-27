@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/logo.webp" width="120" alt="Planet Port" />
+  <img src="docs/logo.webp" width="120" alt="Planet Port - Android" />
 </p>
 
-# Planet Port 🪐
+# Planet Port - Android 🪐
 
 [简体中文](README.md) | [繁體中文](README.zh-Hant.md) | English
 
-**Planet Port** is an open-source Android ZeroTier client built on the official ZeroTier 1.16 core. It makes mesh networking and virtual LAN management on your phone effortless: multiple Planets side by side (official + self-hosted private Planets), several networks connected at once, full control over default routing and DNS. Native Jetpack Compose, free and open source — an advanced alternative to the official ZeroTier One app.
+**Planet Port - Android** is an open-source Android ZeroTier client built on the official ZeroTier 1.16 core. It makes mesh networking and virtual LAN management on your phone effortless: multiple Planets side by side (official + self-hosted private Planets), several networks connected at once, full control over default routing and DNS. Native Jetpack Compose, free and open source — an advanced alternative to the official ZeroTier One app.
 
 > Unofficial client. Not affiliated with ZeroTier, Inc.
 
@@ -62,7 +62,7 @@ To upgrade the ZeroTier version: change `ZT_VERSION` and `ZT_SHA256` in `scripts
 
 ```mermaid
 flowchart LR
-    subgraph App["App (single process: Planet Port)"]
+    subgraph App["App (single process: Planet Port - Android)"]
         UI["Compose UI (Home / NetworkDetail / Peers / Moon / Prefs / importers)"]
         TC["TunnelController (suspend-function commands)"]
         VPN["ZeroTierVpnService (VpnService shell, supervisor coroutines)"]
@@ -94,7 +94,7 @@ flowchart LR
 
 ## Donate
 
-If Planet Port helps you, buy the author a coffee ☕
+If Planet Port - Android helps you, buy the author a coffee ☕
 
 **BTC** (Taproot)
 

@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/logo.webp" width="120" alt="Planet Port" />
+  <img src="docs/logo.webp" width="120" alt="Planet Port - Android" />
 </p>
 
-# Planet Port 🪐
+# Planet Port - Android 🪐
 
 简体中文 | [繁體中文](README.zh-Hant.md) | [English](README.en.md)
 
-**Planet Port** 是一款开源的 Android ZeroTier 客户端，基于 ZeroTier 1.16 官方核心打造。它让你在手机上轻松完成异地组网与虚拟局域网管理：多 Planet 并存（官方 + 自建私有 Planet），多网络同时连接，默认路由与 DNS 全自由掌控。原生 Jetpack Compose 实现，免费开源，是官方 ZeroTier One App 之外的进阶之选。
+**Planet Port - Android** 是一款开源的 Android ZeroTier 客户端，基于 ZeroTier 1.16 官方核心打造。它让你在手机上轻松完成异地组网与虚拟局域网管理：多 Planet 并存（官方 + 自建私有 Planet），多网络同时连接，默认路由与 DNS 全自由掌控。原生 Jetpack Compose 实现，免费开源，是官方 ZeroTier One App 之外的进阶之选。
 
 > 非官方客户端，与 ZeroTier, Inc. 无隶属关系。
 
@@ -63,7 +63,7 @@ cp ZeroTierOne-1.16.2.tar.gz ~/Library/Caches/PlanetPort/
 
 ```mermaid
 flowchart LR
-    subgraph App["App（单进程：Planet Port）"]
+    subgraph App["App（单进程：Planet Port - Android）"]
         UI["Compose UI（Home / NetworkDetail / Peers / Moon / Prefs / 导入器）"]
         TC["TunnelController（挂起函数命令）"]
         VPN["ZeroTierVpnService（VpnService 壳，Supervisor 协程编排）"]
@@ -95,7 +95,7 @@ flowchart LR
 
 ## 捐赠
 
-如果 Planet Port 帮到了你，欢迎请作者喝杯咖啡 ☕
+如果 Planet Port - Android 帮到了你，欢迎请作者喝杯咖啡 ☕
 
 **BTC**（Taproot）
 
