@@ -25,10 +25,10 @@
 
 <p align="center">
   <img src="docs/screenshots/01.webp" width="220" alt="首页" />
-  <img src="docs/screenshots/02.webp" width="220" alt="行星切换" />
   <img src="docs/screenshots/03.webp" width="220" alt="添加行星" />
   <img src="docs/screenshots/04.webp" width="220" alt="设置" />
 </p>
+
 
 ## 快速开始
 
@@ -83,16 +83,10 @@ flowchart LR
 
 ### 目录
 
-- `externals/core/` — ZeroTier 1.16.2 核心源码（构建前由 `scripts/bootstrap.sh` 按官方 tag 拉取，不入库；MPL-2.0，见 `docs/licenses/ZeroTierOne-MPL-2.0.txt`）
+- `externals/core/` — ZeroTier 1.16.2 核心源码（构建前由 `scripts/bootstrap.sh` 按官方 tag 拉取，不入库）
 - `externals/CMakeLists.txt` — NDK 构建脚本（树外维护的 GLOB 构建胶水）
 - `core/jni/` — JNI 绑定层（C API ↔ Kotlin）
 - `app/` — 主 App（`ui/` Compose 界面、`tunnel/` 隧道与数据面、`store/` 配置存储）
-
-## 协议
-
-- 本项目自有代码以 [MIT](LICENSE) 发布：免费使用，借用或引用请署名，再无其它限制
-- `externals/core/` 内 ZeroTier 核心源码（构建时按官方 tag 拉取）为第三方代码，保持其原始 [MPL-2.0](docs/licenses/ZeroTierOne-MPL-2.0.txt) 协议，版权归 ZeroTier, Inc. 所有
-- 随源码引入的 ext 头文件库（nlohmann/json、prometheus-cpp-lite）以 MIT 发布，见 `docs/licenses/` 对应文件
 
 ## 致谢
 

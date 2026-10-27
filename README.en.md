@@ -25,7 +25,6 @@
 
 <p align="center">
   <img src="docs/screenshots/01.webp" width="220" alt="Home" />
-  <img src="docs/screenshots/02.webp" width="220" alt="Switching Planets" />
   <img src="docs/screenshots/03.webp" width="220" alt="Add a Planet" />
   <img src="docs/screenshots/04.webp" width="220" alt="Settings" />
 </p>
@@ -83,16 +82,10 @@ flowchart LR
 
 ### Project layout
 
-- `externals/core/` — ZeroTier 1.16.2 core sources (fetched by `scripts/bootstrap.sh` from the official tag at build time, never committed; MPL-2.0, see `docs/licenses/ZeroTierOne-MPL-2.0.txt`)
+- `externals/core/` — ZeroTier 1.16.2 core sources (fetched by `scripts/bootstrap.sh` from the official tag at build time, never committed)
 - `externals/CMakeLists.txt` — NDK build script (out-of-tree GLOB build glue)
 - `core/jni/` — JNI binding layer (C API ↔ Kotlin)
 - `app/` — the app itself (`ui/` Compose UI, `tunnel/` tunnel & dataplane, `store/` config storage)
-
-## License
-
-- This project's own code is released under [MIT](LICENSE): free to use, just give credit when borrowing or referencing
-- The ZeroTier core sources under `externals/core/` (fetched from the official tag at build time) are third-party code kept under their original [MPL-2.0](docs/licenses/ZeroTierOne-MPL-2.0.txt) license, copyright ZeroTier, Inc.
-- Bundled ext header libraries (nlohmann/json, prometheus-cpp-lite) are MIT-licensed; see the corresponding files under `docs/licenses/`
 
 ## Acknowledgements
 
