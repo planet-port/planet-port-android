@@ -254,6 +254,9 @@
     <string name="planet_info_officialOnly">The official planet uses the built-in Core configuration and cannot be modified.</string>
     <string name="planet_info_revision">Revision Time</string>
     <string name="planet_official_name">ZeroTier Official</string>
+    <string name="planet_share_file">File</string>
+    <string name="planet_share_qr">QR Code</string>
+    <string name="planet_share_qr_title">QR Code Sharing</string>
     <string name="planet_title">Planet</string>
     <string name="planetcard_inUse">In Use</string>
     <string name="planetcard_lastUsed">Last Used</string>

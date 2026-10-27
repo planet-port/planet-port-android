@@ -1,7 +1,6 @@
 package cn.imgozi.planetport.ui.planet
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -21,11 +21,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Nightlight
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +66,7 @@ import cn.imgozi.planetport.ui.components.CopyableRow
 import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
+import cn.imgozi.planetport.ui.qrtransfer.QRShareSheet
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.theme.ThemeManager
 import java.io.File
@@ -101,6 +104,16 @@ fun PlanetSettingsView(
     var showIconPicker by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var alertText by remember { mutableStateOf<String?>(null) }
+    var showQRShare by remember { mutableStateOf(false) }
+    var qrShareData by remember { mutableStateOf<ByteArray?>(null) }
+    var showFileShare by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    // planet 文件（iOS planetFileURL）：非 null 即代表文件存在（并发删除后回退 null）；
+    // exists() 轻量 stat，按行星缓存一次避免每次重组都查盘，fileInfo 作 key：
+    // 页面停留期间文件被删/重导入会重读出新的 fileInfo，此时重查 exists()
+    val planetFile = remember(planet?.fileName, ui.fileInfo) {
+        planet?.fileName?.let { File(File(context.filesDir, "planets"), it) }?.takeIf { it.exists() }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -184,11 +197,25 @@ fun PlanetSettingsView(
                     valueStyle = MaterialTheme.typography.bodyLarge,
                 )
                 ui.fileInfo?.let { info ->
-                    FileSizeRow(info, planet.fileName)
+                    FileSizeRow(info)
                     FormRow(
                         stringResource(R.string.planet_info_revision),
                         revisionText(info.timestamp),
                     )
+                    if (!isOfficial && planetFile != null) {
+                        ShareRow(
+                            onFile = { showFileShare = true },
+                            onQr = {
+                                // 读取 planet 文件进入二维码分享；读取失败(并发删除)不弹页
+                                planetFile?.let { file ->
+                                    runCatching { file.readBytes() }.getOrNull()?.let { bytes ->
+                                        qrShareData = bytes
+                                        showQRShare = true
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
 
@@ -243,6 +270,26 @@ fun PlanetSettingsView(
                 vm.updateIcon(animal, color) { alertText = it }
             },
             onDismiss = { showIconPicker = false },
+        )
+    }
+
+    // 分享行「文件」选项：经 FileProvider 拉起系统分享面板（副作用移出组合，
+    // 用 LaunchedEffect 保证单次触发）
+    LaunchedEffect(showFileShare) {
+        if (showFileShare) {
+            planetFile?.let { sharePlanetFile(context, it) }
+            showFileShare = false
+        }
+    }
+
+    if (showQRShare && qrShareData != null) {
+        QRShareSheet(
+            title = stringResource(R.string.planet_share_qr_title),
+            data = qrShareData!!,
+            onDismiss = {
+                showQRShare = false
+                qrShareData = null
+            },
         )
     }
 
@@ -429,21 +476,9 @@ private fun NavRow(
     }
 }
 
-/**
- * 文件大小行：值后附分享按钮（系统分享面板，iOS ShareLink 等价）。
- * 文件不存在（并发删除）时不显示按钮。
- */
+/** 文件大小行。分享入口已独立成「分享」行（文件/二维码两个选项）。 */
 @Composable
-private fun FileSizeRow(info: PlanetImporter.PlanetFileInfo, fileName: String?) {
-    val context = LocalContext.current
-    val shareLabel = stringResource(R.string.common_share)
-    // exists() 轻量 stat，按行星缓存一次避免每次重组都查盘；fileInfo 一并作 key：
-    // 页面停留期间文件被删/重导入会经 configChanges 重读出新的 fileInfo，此时重查
-    // exists()，分享按钮显隐不滞留旧状态
-    val shareable = remember(fileName, info) {
-        fileName?.let { File(File(context.filesDir, "planets"), it) }?.takeIf { it.exists() }
-    }
-
+private fun FileSizeRow(info: PlanetImporter.PlanetFileInfo) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -459,21 +494,47 @@ private fun FileSizeRow(info: PlanetImporter.PlanetFileInfo, fileName: String?) 
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
-        if (shareable != null) {
-            Icon(
-                Icons.Filled.Share,
-                contentDescription = shareLabel,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .size(15.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClickLabel = shareLabel,
-                    ) { sharePlanetFile(context, shareable) },
-            )
-        }
+    }
+}
+
+/** 分享行（iOS e4139a9 后）：「分享」标签 + 文件/二维码双选项（iOS shareLabel，
+ *  图标 14dp、间距 4dp、颜色跟随正文）。 */
+@Composable
+private fun ShareRow(onFile: () -> Unit, onQr: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.common_share), style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.weight(1f).padding(start = 12.dp))
+        ShareOption(Icons.Outlined.Description, stringResource(R.string.planet_share_file), onFile)
+        Box(
+            Modifier
+                .padding(horizontal = 10.dp)
+                .width(1.dp)
+                .height(14.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant),
+        )
+        ShareOption(Icons.Outlined.QrCode2, stringResource(R.string.planet_share_qr), onQr)
+    }
+}
+
+/** 分享选项：图标 + 标签，点击整块可点，颜色跟随正文标签。 */
+@Composable
+private fun ShareOption(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

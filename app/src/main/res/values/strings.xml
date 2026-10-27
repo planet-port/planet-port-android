@@ -254,6 +254,9 @@
     <string name="planet_info_officialOnly">官方行星使用 Core 内置配置，不支持修改。</string>
     <string name="planet_info_revision">修订时间</string>
     <string name="planet_official_name">ZeroTier 官方</string>
+    <string name="planet_share_file">文件</string>
+    <string name="planet_share_qr">二维码</string>
+    <string name="planet_share_qr_title">二维码分享</string>
     <string name="planet_title">行星</string>
     <string name="planetcard_inUse">使用中</string>
     <string name="planetcard_lastUsed">上次使用</string>
