@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -76,6 +77,7 @@ import cn.imgozi.planetport.store.readBounded
 import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.planet.IconPickerSheet
 import cn.imgozi.planetport.ui.planet.PlanetIcon
+import cn.imgozi.planetport.ui.qrtransfer.QRReceiveSheet
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -174,6 +176,7 @@ internal fun AddPlanetPage(
             },
             animal = animal,
             colorHex = colorHex,
+            isCurrentPage = isCurrentPage,
             onImported = {
                 // 添加成功：重掷身份，避免与刚添加的行星同名/同图
                 rollIdentity()
@@ -313,6 +316,7 @@ private fun AddPlanetForm(
     onNameChange: (String) -> Unit,
     animal: String,
     colorHex: String,
+    isCurrentPage: Boolean,
     onImported: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -320,8 +324,12 @@ private fun AddPlanetForm(
     val scope = rememberCoroutineScope()
     var url by remember { mutableStateOf("") }
     var showScanner by remember { mutableStateOf(false) }
+    var showPlanetReceiver by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
     var pendingData by remember { mutableStateOf<ByteArray?>(null) }
+    // 离开新增页的时间；离开超过 5 分钟后回来视为放弃，清空表单
+    var leftAt by remember { mutableStateOf<Long?>(null) }
+    val keepFormInterval = 5 * 60 * 1000L
     var alert by remember { mutableStateOf<String?>(null) }
     // 回调非 Composable 上下文：文案先在组合期解析
     val fileUnreadable = stringResource(R.string.addplanet_fileUnreadable)
@@ -364,6 +372,21 @@ private fun AddPlanetForm(
 
     val trimmedName = name.trim()
     val canAdd = pendingData != null && trimmedName.isNotEmpty()
+
+    LaunchedEffect(isCurrentPage) {
+        if (isCurrentPage) {
+            // 回来时才判断：离开超过 5 分钟清空 URL 与已就绪文件
+            // （时间戳判墙钟，App 挂起期间同样计时）
+            val left = leftAt
+            if (left != null && System.currentTimeMillis() - left > keepFormInterval) {
+                url = ""
+                pendingData = null
+            }
+            leftAt = null
+        } else {
+            leftAt = System.currentTimeMillis()
+        }
+    }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // 信息录入卡（圆角 20 + 内边距 18）；名称编辑在身份区行内（iOS b7bba22）
@@ -411,6 +434,31 @@ private fun AddPlanetForm(
                         modifier = Modifier.size(12.dp),
                     )
                 }
+            }
+
+            // 动态二维码导入（模块 QRTransfer）：连续扫分片，收齐即回填 pendingData，
+            // 复用与文件/URL 相同的「命名 + 添加 + 查重」后续流程
+            OutlinedButton(
+                onClick = { showPlanetReceiver = true },
+                enabled = !downloading,
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                shape = RoundedCornerShape(HomeMetrics.radiusSmall),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.QrCode2,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    stringResource(R.string.addplanet_scanPlanetQr),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.weight(1f))
             }
 
             // 扫码导入（iOS 764b1b8）：与「导入」同款视觉（描边按钮；本主题
@@ -529,6 +577,19 @@ private fun AddPlanetForm(
             },
             onDismiss = { showScanner = false },
             extract = QrHttpUrl::extract,
+        )
+    }
+
+    if (showPlanetReceiver) {
+        QRReceiveSheet(
+            onComplete = { data ->
+                showPlanetReceiver = false
+                when {
+                    data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE -> alert = badHeader
+                    else -> pendingData = data
+                }
+            },
+            onDismiss = { showPlanetReceiver = false },
         )
     }
 }

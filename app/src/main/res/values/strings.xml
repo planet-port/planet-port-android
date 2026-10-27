@@ -15,6 +15,7 @@
     <string name="addplanet_randomIcon">换个随机图标</string>
     <string name="addplanet_ready">已就绪 · %1$s</string>
     <string name="addplanet_scanUrl">或扫描URL二维码导入</string>
+    <string name="addplanet_scanPlanetQr">或扫描动态二维码导入</string>
     <string name="addplanet_subtitle">可通过文件、URL 或二维码导入行星文件</string>
     <string name="addplanet_urlPlaceholder">或输入行星文件URL</string>
     <!-- 动物图标名（iOS animal.* 同步） -->
