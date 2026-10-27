@@ -339,4 +339,11 @@
     <string name="error_moon_writeFailed">moon 文件写入失败</string>
     <string name="error_planet_tooLarge">planet 文件超过大小上限（8 MiB）</string>
     <string name="error_planet_writeFailed">planet 文件写入失败</string>
+    <string name="qrtransfer_done">完成</string>
+    <string name="qrtransfer_generating">正在生成二维码…</string>
+    <string name="qrtransfer_generatingProgress">正在生成二维码… %1$d/%2$d</string>
+    <string name="qrtransfer_manual">手动模式</string>
+    <string name="qrtransfer_speed">切换速度</string>
+    <string name="qrtransfer_tooLarge">数据过大</string>
+    <string name="qrtransfer_tooLargeHint">超出二维码传输上限，请改用文件或 URL 分享</string>
 </resources>

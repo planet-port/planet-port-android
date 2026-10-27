@@ -339,4 +339,11 @@
     <string name="error_moon_writeFailed">moon 檔案寫入失敗</string>
     <string name="error_planet_tooLarge">planet 檔案超過大小上限（8 MiB）</string>
     <string name="error_planet_writeFailed">planet 檔案寫入失敗</string>
+    <string name="qrtransfer_done">完成</string>
+    <string name="qrtransfer_generating">正在產生二維碼…</string>
+    <string name="qrtransfer_generatingProgress">正在產生二維碼… %1$d/%2$d</string>
+    <string name="qrtransfer_manual">手動模式</string>
+    <string name="qrtransfer_speed">切換速度</string>
+    <string name="qrtransfer_tooLarge">資料過大</string>
+    <string name="qrtransfer_tooLargeHint">超出二維碼傳輸上限，請改用檔案或 URL 分享</string>
 </resources>
