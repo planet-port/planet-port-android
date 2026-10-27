@@ -2,10 +2,42 @@
 
 所有显著变更均记录于此。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## v1.3.0（2026-10-27）
+### CI
+
+- **release：**修正 Release 资产文件名带版本号
+### 修复
+
+- **build：**构建信息 git 命令失败时回退 unknown
+- **qrtransfer：**帧格式化显式 Locale.ROOT 防非 ASCII 数字
+- **ui：**手机端锁定竖屏
+- **ui：**首页 FAB 拖动增量未累加导致活动范围被锁死
+- **ui：**FAB 拖动起点闭包冻结导致换位后再拖回飘
+- **store：**行星表写入缺少 UI 级变更信号导致图标/改名不生效
+### 文档
+
+- **spec：**iOS 新增功能全量迁移设计
+- **plan：**iOS QRTransfer 等新增功能全量迁移实施计划
+- **readme：**多语言重写并对齐 iOS 结构，补全截图与捐赠信息
+### 新增
+
+- **qrtransfer：**新增编解码原语 Base45/CRC32/Deflate
+- **qrtransfer：**实现 ZTQR1 帧协议与自适应分片规划
+- **qrtransfer：**新增二维码分享弹层与分片方块阵列
+- **qrtransfer：**新增二维码接收弹层与连续扫码控制器
+- **planet：**行星设置页分享入口改为文件/二维码双选项
+- **planet：**新增页支持扫描动态二维码导入与超时清空表单
+- **build：**关于页展示构建时间与代码版本
+- **ui：**托管路由行支持点击切换网段与网关
+- **ui：**动物图标底色预设更新为现代 24 色板
+### 测试
+
+- **qrtransfer：**补 iOS 跨端金标向量测试
 ## v1.2.0（2026-10-27）
 ### CI
 
 - **release：**tag 推送自动构建 release APK 并发布 GitHub Release
+- **build：**构建前拉取 ZeroTier 核心源码
 ### 修复
 
 - **home：**冷启动首帧闪现添加页改为直接渲染已选行星
