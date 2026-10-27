@@ -52,6 +52,15 @@ class AppConfigStore(val paths: StorePaths) {
      *  事件必须跨实例互通，故流本体挂在 companion，实例属性转发。 */
     val configChanges: SharedFlow<Unit> get() = _configChanges
 
+    /**
+     * UI 级行星表变更信号。configChanges 会驱动隧道热重配（applyConfig），
+     * 行星表纯 UI 字段（图标/底色/名称/导入）不应触发隧道——iOS 侧 writePlanets
+     * 同样静默，由调用方显式 app.reloadConfig() 刷新 UI；Android 的等价承接是
+     * 本流：凡从 planets.json 派生展示数据的 VM 订阅刷新（首页卡片/设置页/
+     * Peers 行星名/Moon 标题）。与 configChanges 同挂 companion（跨实例互通）。
+     */
+    val planetsChanges: SharedFlow<Unit> get() = _planetsChanges
+
     private val planetList = ListSerializer(PlanetProfile.serializer())
     private val networkList = ListSerializer(NetworkEntry.serializer())
     private val moonList = ListSerializer(MoonEntry.serializer())
@@ -76,6 +85,9 @@ class AppConfigStore(val paths: StorePaths) {
         val official = profiles.firstOrNull { it.id == PlanetProfile.OFFICIAL_ID } ?: PlanetProfile.OFFICIAL
         val normalized = listOf(official) + profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
         files.write(paths.planetsFile, normalized, planetList)
+        // UI 级刷新信号（rename/updateIcon/import/delete 共用入口）；
+        // 首启 bootstrap 直写文件不经此处，无杂散发射
+        _planetsChanges.tryEmit(Unit)
     }
 
     suspend fun selectedPlanetId(): String {
@@ -262,5 +274,6 @@ class AppConfigStore(val paths: StorePaths) {
 
     private companion object {
         private val _configChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
+        private val _planetsChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
     }
 }

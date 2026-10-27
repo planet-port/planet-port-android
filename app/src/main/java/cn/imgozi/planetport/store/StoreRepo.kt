@@ -47,4 +47,7 @@ object StoreRepo {
 
     /** 配置变更信号（转发唯一实例；有损合并契约见类注释）。 */
     val configChanges: SharedFlow<Unit> get() = store.configChanges
+
+    /** UI 级行星表变更信号（转发唯一实例；语义见 AppConfigStore.planetsChanges）。 */
+    val planetsChanges: SharedFlow<Unit> get() = store.planetsChanges
 }

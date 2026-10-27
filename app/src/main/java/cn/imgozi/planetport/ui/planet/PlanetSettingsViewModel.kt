@@ -46,6 +46,11 @@ class PlanetSettingsViewModel(
             reload()
             StoreRepo.configChanges.collect { reload() }
         }
+        // 本页 rename/updateIcon 写行星表不发 configChanges（iOS 由显式
+        // app.reloadConfig() 承接，Android 等价为 UI 级 planetsChanges）
+        viewModelScope.launch {
+            StoreRepo.planetsChanges.collect { reload() }
+        }
     }
 
     /** 节点快照（激活行星的实时节点 ID 优先用它）。 */

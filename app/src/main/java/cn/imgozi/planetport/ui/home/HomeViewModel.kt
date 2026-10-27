@@ -146,6 +146,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             reload()
         }
         viewModelScope.launch { StoreRepo.configChanges.collect { reload() } }
+        // 行星表 UI 字段变更（图标/底色/名称/导入）不发 configChanges（避免隧道
+        // 无谓热重配），经 UI 级 planetsChanges 刷新卡片
+        viewModelScope.launch { StoreRepo.planetsChanges.collect { reload() } }
         viewModelScope.launch { TunnelStateBus.tunnelState.collect { onTunnelState(it) } }
         viewModelScope.launch {
             TunnelStateBus.nodeStatus.collect { info ->

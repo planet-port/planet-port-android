@@ -76,6 +76,8 @@ class MoonViewModel(application: Application, private val planetId: String) : An
                 // 缓存文件在位状态随之刷新
                 StoreRepo.configChanges.collect { refresh() }
             }
+            // 行星改名不发 configChanges，经 UI 级 planetsChanges 刷新标题
+            launch { StoreRepo.planetsChanges.collect { refresh() } }
             refresh()
         }
     }

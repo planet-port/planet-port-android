@@ -49,6 +49,8 @@ class PeersViewModel(app: Application) : AndroidViewModel(app) {
             // 先建立订阅再刷新：configChanges 是无 replay 的 SharedFlow，
             // 若刷新先行，刷新期间到达的变更事件会丢失
             launch { StoreRepo.configChanges.collect { refreshPlanetName() } }
+            // 行星改名不发 configChanges，经 UI 级 planetsChanges 刷新标题
+            launch { StoreRepo.planetsChanges.collect { refreshPlanetName() } }
             refreshPlanetName()
         }
     }
