@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -43,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -182,6 +185,8 @@ private fun NetworkDetailContent(
     var dnsServers by remember(entry.networkId) { mutableStateOf(entry.customDns) }
     var showDelete by remember { mutableStateOf(false) }
     var showQR by remember { mutableStateOf(false) }
+    // 已切到 via 网关视图的路由下标（点击值区域切换）
+    var viaExpandedRoutes by remember { mutableStateOf(setOf<Int>()) }
 
     val dnsDirty = dnsMode != entry.dnsMode || dnsServers != entry.customDns
 
@@ -239,11 +244,36 @@ private fun NetworkDetailContent(
         }
 
         FormSection(header = stringResource(R.string.network_managedRoutes)) {
-            MonoListOrEmpty(
-                snapshot?.routes.orEmpty(),
-                labelRes = R.string.network_routeLabel,
-                emptyLabelRes = R.string.network_route,
-            )
+            val routes = snapshot?.routes.orEmpty()
+            if (routes.isEmpty()) {
+                // 空表仍渲染标签行 +「—」（与 MonoListOrEmpty 空态同构）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp)
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.network_route), style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.weight(1f))
+                    Text("—", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                routes.forEachIndexed { index, route ->
+                    RouteRow(
+                        index = index,
+                        route = route,
+                        viaExpanded = index in viaExpandedRoutes,
+                        toggle = {
+                            viaExpandedRoutes = if (index in viaExpandedRoutes) {
+                                viaExpandedRoutes - index
+                            } else {
+                                viaExpandedRoutes + index
+                            }
+                        },
+                    )
+                }
+            }
         }
 
         FormSection(
@@ -370,6 +400,70 @@ private fun NetworkIdRow(networkId: String, onShowQR: () -> Unit) {
                     onClickLabel = stringResource(R.string.qrcode_title),
                 ) { onShowQR() },
         )
+    }
+}
+
+/**
+ * 路由行（iOS RouteRow）：路由串较长（`目标 via 网关`），默认只显示目标网段，
+ * 点击值区域切换为 via 网关；直连路由（无 via）不可切换、不显示图标。
+ * 展开状态由调用方按下标追踪（路由字符串可能重复，不能用内容当 key）。
+ */
+@Composable
+private fun RouteRow(
+    index: Int,
+    route: String,
+    viaExpanded: Boolean,
+    toggle: () -> Unit,
+) {
+    // "192.168.8.0/24 via 152.124.13.2" → 目标 / via 网关
+    val parts = route.split(" via ", limit = 2)
+    val target = parts[0]
+    val via = parts.getOrNull(1)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.network_routeLabel, index + 1), style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.weight(1f).padding(start = 12.dp))
+        if (via != null) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(onClick = toggle),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    if (viaExpanded) "via $via" else target,
+                    style = PlanetFonts.MonoBody,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    textAlign = TextAlign.End,
+                )
+                Icon(
+                    // swap_horiz 左右对称，material-icons 1.7.8 无 AutoMirrored 变体，
+                    // 直接用 Outlined 版（对应 iOS arrow.left.arrow.right）
+                    Icons.Outlined.SwapHoriz,
+                    contentDescription = stringResource(R.string.network_managedRoutes),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        } else {
+            Text(
+                target,
+                style = PlanetFonts.MonoBody,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis,
+                textAlign = TextAlign.End,
+            )
+        }
     }
 }
 
