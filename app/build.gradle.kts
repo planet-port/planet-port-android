@@ -76,13 +76,16 @@ val generateBuildInfo by tasks.registering {
     val genDir = file("src/main/java/cn/imgozi/planetport/Generated")
     doLast {
         genDir.mkdirs()
-        // tag 优先（git describe），无 tag 回退短 hash；dirty 标记未提交改动
+        // tag 优先（git describe），无 tag 回退短 hash；dirty 标记未提交改动。
+        // git 非零退出不抛异常，必须按退出码判定，否则错误文本会被当成 revision
         val rev = runCatching {
-            ProcessBuilder("git", "describe", "--tags", "--always", "--dirty=+dirty")
+            val p = ProcessBuilder("git", "describe", "--tags", "--always", "--dirty=+dirty")
                 .directory(rootDir)
-                .redirectErrorStream(true)
-                .start().inputStream.bufferedReader().readText().trim()
-        }.getOrNull().takeUnless { it.isNullOrEmpty() } ?: "unknown"
+                .start()
+            val out = p.inputStream.bufferedReader().readText().trim()
+            p.waitFor()
+            if (p.exitValue() == 0 && out.isNotEmpty()) out else "unknown"
+        }.getOrNull() ?: "unknown"
         val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())
         File(genDir, "BuildInfo.kt").writeText(
             "// 构建脚本自动生成，勿手改（app/build.gradle.kts generateBuildInfo）。\n" +
