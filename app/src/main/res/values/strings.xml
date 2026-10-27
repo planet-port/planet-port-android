@@ -264,6 +264,7 @@
     <string name="planetcard_moonCount">卫星 x %1$d</string>
     <string name="prefs_about_sectionHeader">关于</string>
     <string name="prefs_about_version">版本</string>
+    <string name="prefs_about_build">构建</string>
     <string name="prefs_appearance_background">背景图</string>
     <string name="prefs_appearance_footer">背景图可从相册选择或通过 URL 下载；视差动画仅在设置了背景图时生效。</string>
     <string name="prefs_appearance_parallax">视差动画</string>

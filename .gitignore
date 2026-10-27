@@ -11,3 +11,6 @@ build/
 
 # ZeroTier 核心源码：由 scripts/bootstrap.sh 按官方 tag 拉取，不入库
 /externals/core/
+
+# 构建时生成的构建信息（app/build.gradle.kts generateBuildInfo）
+app/src/main/java/cn/imgozi/planetport/Generated/

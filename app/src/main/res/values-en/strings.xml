@@ -264,6 +264,7 @@
     <string name="planetcard_moonCount">Moons × %1$d</string>
     <string name="prefs_about_sectionHeader">About</string>
     <string name="prefs_about_version">Version</string>
+    <string name="prefs_about_build">Build</string>
     <string name="prefs_appearance_background">Background Image</string>
     <string name="prefs_appearance_footer">The background image can be picked from Photos or downloaded via URL; parallax only works when a background image is set.</string>
     <string name="prefs_appearance_parallax">Parallax Animation</string>

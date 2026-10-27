@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.imgozi.planetport.BuildInfo
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
@@ -81,6 +82,7 @@ import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
 import cn.imgozi.planetport.ui.planet.PlanetIcon
+import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.theme.ThemeManager
 
 /**
@@ -289,6 +291,24 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                         title = stringResource(R.string.prefs_about_version),
                         value = vm.appVersion,
                     )
+                }
+                SelectionContainer {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        Text(
+                            stringResource(R.string.prefs_about_build),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Spacer(Modifier.weight(1f).padding(start = 12.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(BuildInfo.time, style = PlanetFonts.MonoBody)
+                            Text(BuildInfo.revision, style = PlanetFonts.MonoBody)
+                        }
+                    }
                 }
             }
 
