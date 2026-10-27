@@ -142,9 +142,12 @@ fun QrScannerSheet(
     }
 }
 
-/** 权限被拒引导态（iOS denied 分支：图标 40 + 标题 + 说明 + 前往设置）。 */
+/**
+ * 权限被拒引导态（iOS denied 分支：图标 40 + 标题 + 说明 + 前往设置）。
+ * internal：二维码接收弹层（QRReceiveSheet）权限被拒时复用同一引导态。
+ */
 @Composable
-private fun DeniedGuide(modifier: Modifier = Modifier) {
+internal fun DeniedGuide(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Column(
         modifier = modifier.padding(horizontal = 24.dp),
@@ -316,9 +319,11 @@ internal object QrHttpUrl {
  * 注意：[PlanarYUVLuminanceSource] 不支持旋转（isRotateSupported=false，
  * BinaryBitmap.rotateCounterClockwise 会抛 UnsupportedOperationException），
  * 必须自己旋转数据，不能用 BinaryBitmap 的旋转入口。
+ *
+ * internal：二维码接收弹层（QRReceiveSheet）的连续扫码控制器复用同一解码栈。
  */
 @androidx.annotation.OptIn(ExperimentalGetImage::class)
-private fun decodeQr(reader: MultiFormatReader, proxy: ImageProxy): String? {
+internal fun decodeQr(reader: MultiFormatReader, proxy: ImageProxy): String? {
     val plane = proxy.planes[0] ?: return null
     val buffer = plane.buffer ?: return null
     val rotation = proxy.imageInfo.rotationDegrees

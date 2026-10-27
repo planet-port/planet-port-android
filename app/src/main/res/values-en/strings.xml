@@ -339,11 +339,17 @@
     <string name="error_moon_writeFailed">Failed to write moon file</string>
     <string name="error_planet_tooLarge">Planet file exceeds the 8 MiB size limit</string>
     <string name="error_planet_writeFailed">Failed to write planet file</string>
+    <string name="qrtransfer_cameraDenied">Camera access denied</string>
+    <string name="qrtransfer_cameraDeniedHint">Allow camera access in Settings, then try again.</string>
+    <string name="qrtransfer_corrupt">Checksum failed, please rescan</string>
     <string name="qrtransfer_done">Done</string>
     <string name="qrtransfer_generating">Generating QR code…</string>
     <string name="qrtransfer_generatingProgress">Generating QR code… %1$d/%2$d</string>
     <string name="qrtransfer_manual">Manual</string>
+    <string name="qrtransfer_receiveTitle">QR Receive</string>
+    <string name="qrtransfer_receivedProgress">Received %1$d of %2$d</string>
     <string name="qrtransfer_speed">Speed</string>
     <string name="qrtransfer_tooLarge">Data too large</string>
     <string name="qrtransfer_tooLargeHint">Exceeds the QR transfer limit. Share via file or URL instead.</string>
+    <string name="qrtransfer_waiting">Point at the QR code</string>
 </resources>

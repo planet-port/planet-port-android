@@ -1,0 +1,309 @@
+package cn.imgozi.planetport.ui.qrtransfer
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import cn.imgozi.planetport.R
+import cn.imgozi.planetport.qrtransfer.QRFrame
+import cn.imgozi.planetport.qrtransfer.QRTransfer
+import cn.imgozi.planetport.qrtransfer.QRTransferException
+import cn.imgozi.planetport.ui.components.SheetScaffold
+import cn.imgozi.planetport.ui.home.DeniedGuide
+import cn.imgozi.planetport.ui.home.decodeQr
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
+/**
+ * 接收端（iOS QRReceiveView）：连续扫码聚合分片。不区分单帧/多帧——解码任意
+ * 帧 → 按 index 聚合 → 齐全后整体校验（Base45 → 解压 → CRC）→ 通过即回调一次。
+ * total/checksum 与已收集集不一致（扫到新会话）时自动清空重来；CRC 失败同样清空。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun QRReceiveSheet(
+    onComplete: (ByteArray) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    var granted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { ok -> granted = ok }
+
+    // 进入即请求（iOS .task checkPermission 同机）；曾拒绝 → 引导态
+    LaunchedEffect(Unit) {
+        if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    var total by remember { mutableStateOf<Int?>(null) }
+    var checksum by remember { mutableStateOf<UInt?>(null) }
+    var chunks by remember { mutableStateOf(mapOf<Int, String>()) }
+    var corrupt by remember { mutableStateOf(false) }
+    var finished by remember { mutableStateOf(false) }
+
+    fun handle(text: String) {
+        if (finished) return
+        val frame = QRTransfer.parse(text) ?: return
+        // 换了传输会话（total 或 CRC 不同）：丢弃旧集合
+        if (total != null && (total != frame.total || checksum != frame.checksum)) {
+            chunks = emptyMap()
+        }
+        total = frame.total
+        checksum = frame.checksum
+        chunks = chunks + (frame.index to frame.payload)
+        corrupt = false
+        if (chunks.size != frame.total) return
+        val all = (1..frame.total).mapNotNull { i ->
+            chunks[i]?.let { QRFrame(frame.total, i, frame.checksum, frame.length, it) }
+        }
+        try {
+            val data = QRTransfer.decode(all)
+            finished = true
+            onComplete(data)
+        } catch (_: QRTransferException) {
+            chunks = emptyMap()
+            corrupt = true
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+            ) {
+                // 头部：左「取消」+ 居中标题（对齐 iOS cancellationAction + navigationTitle）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.common_cancel))
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        stringResource(R.string.qrtransfer_receiveTitle),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.width(64.dp))
+                }
+
+                if (granted) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(420.dp),
+                    ) {
+                        ContinuousScanner(onFrame = ::handle, modifier = Modifier.fillMaxSize())
+                        // 底部聚合状态面板（iOS ultraThinMaterial 覆盖层）
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                                )
+                                .padding(vertical = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            val t = total
+                            if (t != null) {
+                                ShardGrid(
+                                    total = t,
+                                    received = chunks.keys,
+                                    modifier = Modifier.padding(horizontal = 20.dp),
+                                )
+                                Text(
+                                    stringResource(
+                                        R.string.qrtransfer_receivedProgress,
+                                        chunks.size,
+                                        t,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                if (corrupt) {
+                                    stringResource(R.string.qrtransfer_corrupt)
+                                } else {
+                                    stringResource(R.string.qrtransfer_waiting)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (corrupt) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+                } else {
+                    DeniedGuide(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(420.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 连续扫码（iOS ContinuousScannerView/Controller）：多帧聚合接收用，不一次即停。
+ * 同一内容 800ms 内只回调一次（对准静止的一帧不会刷屏，轮播自然交替放行）。
+ * 相机生命周期与 QrScannerSheet.ScannerContent 同构：离组解绑 + 回收线程。
+ */
+@androidx.annotation.OptIn(ExperimentalGetImage::class)
+@Composable
+private fun ContinuousScanner(
+    onFrame: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    // 800ms 同值去重（iOS lastValue/lastTime）；仅 analyzer 单线程访问
+    val lastValue = remember { arrayOfNulls<String>(1) }
+    val lastTime = remember { longArrayOf(0L) }
+    // 相机资源句柄（provider 异步就绪后写入）：弹层离组统一解绑 + 回收线程
+    val camera = remember { ReceiveCamera() }
+
+    DisposableEffect(Unit) {
+        onDispose { camera.release() }
+    }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            val previewView = PreviewView(ctx)
+            val executor = Executors.newSingleThreadExecutor()
+            camera.executor = executor
+            val reader = MultiFormatReader().apply {
+                setHints(
+                    mapOf(
+                        DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                        DecodeHintType.TRY_HARDER to true,
+                    ),
+                )
+            }
+            val preview = Preview.Builder().build()
+            preview.setSurfaceProvider(previewView.surfaceProvider)
+            val analysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+            analysis.setAnalyzer(executor) { proxy: ImageProxy ->
+                // decodeQr 内部已捕获 NotFoundException 返回 null，未命中即继续
+                val text = decodeQr(reader, proxy)
+                proxy.close()
+                if (text != null) {
+                    val now = SystemClock.elapsedRealtime()
+                    val dedupe = text == lastValue[0] && now - lastTime[0] < 800
+                    lastValue[0] = text
+                    lastTime[0] = now
+                    if (!dedupe && !camera.released) {
+                        mainHandler.post { onFrame(text) }
+                    }
+                }
+            }
+            ProcessCameraProvider.getInstance(ctx).addListener({
+                try {
+                    val provider = ProcessCameraProvider.getInstance(ctx).get()
+                    // 弹层先于 provider 就绪关闭：已释放则不再绑定（否则绑上后无人解绑，
+                    // 隐私指示灯常亮直到下次绑定）
+                    if (camera.released) return@addListener
+                    camera.provider = provider
+                    provider.unbindAll()
+                    provider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        analysis,
+                    )
+                } catch (_: Exception) {
+                    // 相机被占/不可用：保持黑底，用户可取消
+                }
+            }, ContextCompat.getMainExecutor(ctx))
+            previewView
+        },
+    )
+}
+
+/**
+ * 连续扫码相机资源句柄（QrScannerSheet.ScannerCamera 同构）：provider 经
+ * getInstance 异步回调持有（不在主线程阻塞 get），解码 executor 与组合同生命
+ * 周期——弹层离组 [release] 解绑相机并停线程。onDispose 与 getInstance 回调
+ * 均投递主线程执行，无需加锁。
+ */
+private class ReceiveCamera {
+    var released = false
+    var provider: ProcessCameraProvider? = null
+    var executor: ExecutorService? = null
+
+    fun release() {
+        released = true
+        provider?.unbindAll()
+        provider = null
+        executor?.shutdown()
+        executor = null
+    }
+}
