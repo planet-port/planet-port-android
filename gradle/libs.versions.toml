@@ -9,6 +9,7 @@ camerax = "1.4.2"
 zxing = "3.5.3"
 serialization = "1.9.0"
 coroutines = "1.10.2"
+junit = "4.13.2"
 
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
@@ -29,6 +30,8 @@ camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+# 协议层单元测试（QRTransfer 迁移）
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
