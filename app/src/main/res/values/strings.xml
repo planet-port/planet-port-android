@@ -344,8 +344,6 @@
     <string name="error_moon_writeFailed">moon 文件写入失败</string>
     <string name="error_planet_tooLarge">planet 文件超过大小上限（8 MiB）</string>
     <string name="error_planet_writeFailed">planet 文件写入失败</string>
-    <string name="qrtransfer_cameraDenied">相机权限被拒</string>
-    <string name="qrtransfer_cameraDeniedHint">请在系统设置中允许访问相机后重试。</string>
     <string name="qrtransfer_corrupt">数据校验失败，请重新扫描</string>
     <string name="qrtransfer_done">完成</string>
     <string name="qrtransfer_generating">正在生成二维码…</string>

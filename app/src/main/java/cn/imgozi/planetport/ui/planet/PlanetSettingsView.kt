@@ -498,7 +498,7 @@ private fun FileSizeRow(info: PlanetImporter.PlanetFileInfo) {
 }
 
 /** 分享行（iOS e4139a9 后）：「分享」标签 + 文件/二维码双选项（iOS shareLabel，
- *  图标 14dp、间距 4dp、颜色跟随正文）。 */
+ *  图标 12dp、间距 4dp、颜色跟随正文）。 */
 @Composable
 private fun ShareRow(onFile: () -> Unit, onQr: () -> Unit) {
     Row(
@@ -533,7 +533,7 @@ private fun ShareOption(icon: ImageVector, label: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+        Icon(icon, contentDescription = null, modifier = Modifier.size(12.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
