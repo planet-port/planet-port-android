@@ -495,6 +495,7 @@ private fun PlanetPage(
                                 state.networkStatuses.containsKey(entry.networkId),
                             nodeOnline = state.nodeOnline,
                             connectStartedAtMs = state.connectStartedAtMs,
+                            connectRetryCount = state.connectRetryCount,
                             nowMs = nowMs,
                         ),
                         isPending = entry.networkId in pending,

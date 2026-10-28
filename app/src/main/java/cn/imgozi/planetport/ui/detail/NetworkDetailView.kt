@@ -66,7 +66,7 @@ import cn.imgozi.planetport.ui.components.CopyableValue
 import cn.imgozi.planetport.ui.components.DnsConfigSection
 import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.components.isDnsConfigValid
-import cn.imgozi.planetport.ui.connectPhaseLabelRes
+import cn.imgozi.planetport.ui.connectPhaseLabel
 import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
@@ -152,6 +152,7 @@ fun NetworkDetailView(
             snapshot = ui.snapshot,
             nodeOnline = homeState.nodeOnline,
             connectStartedAtMs = homeState.connectStartedAtMs,
+            connectRetryCount = homeState.connectRetryCount,
             connectNowMs = connectNowMs,
             // 锁定判定锚定本网络归属行星（iOS 19f7681）：只有隧道行星下才存在
             // 「同时连接」的其他网络；全局选中页锚定在滑页竞态下会瞬时翻转
@@ -173,6 +174,7 @@ private fun NetworkDetailContent(
     snapshot: NetworkSnapshot?,
     nodeOnline: Boolean,
     connectStartedAtMs: Long?,
+    connectRetryCount: Int,
     connectNowMs: Long,
     routeViaLocked: Boolean,
     onApplyDns: (DnsMode, List<String>) -> Unit,
@@ -211,7 +213,10 @@ private fun NetworkDetailContent(
                     // REQUESTING_CONFIGURATION 与卡片一致按 online 分段
                     //（连接服务器/请求网络配置/连接超时，iOS 897245a）
                     if (it.statusCode == 0) {
-                        stringResource(connectPhaseLabelRes(nodeOnline, connectStartedAtMs, connectNowMs))
+                        val phase = connectPhaseLabel(nodeOnline, connectStartedAtMs, connectNowMs, connectRetryCount)
+                        phase.intArg
+                            ?.let { arg -> stringResource(phase.res, arg) }
+                            ?: stringResource(phase.res)
                     } else {
                         stringResource(ztStatusLabel(it.statusCode))
                     }

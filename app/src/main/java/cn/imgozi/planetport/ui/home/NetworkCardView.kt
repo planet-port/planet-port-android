@@ -69,9 +69,11 @@ fun NetworkCardView(
 ) {
     val tertiary = tertiaryTextColor(isSystemInDarkTheme())
     val statusColor = LocalPlanetStatusColors.current[status.color]
-    // 状态文案带占位实参时先解析实参再格式化（「%@,断开」）
+    // 状态文案带占位实参时先解析实参再格式化（「%@,断开」；重试计数为 Int 直传）
     val statusLabel = status.labelArgRes
         ?.let { argRes -> stringResource(status.label, stringResource(argRes)) }
+        ?: status.labelArgInt
+            ?.let { intArg -> stringResource(status.label, intArg) }
         ?: stringResource(status.label)
     val a11yToggle = stringResource(
         R.string.card_a11yToggle,

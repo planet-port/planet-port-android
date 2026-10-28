@@ -226,6 +226,7 @@
     <string name="network_status_accessDenied">Access Denied</string>
     <string name="network_status_authRequired">Authentication Required</string>
     <string name="network_status_clientTooOld">Client Too Old</string>
+    <string name="network_status_connectingRetry">Connecting to Server (Retry %1$d/5)</string>
     <string name="network_status_connectingServer">Connecting to Server</string>
     <string name="network_status_notFound">Network Not Found</string>
     <string name="network_status_ok">Online</string>

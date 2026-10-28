@@ -226,6 +226,7 @@
     <string name="network_status_accessDenied">拒绝访问</string>
     <string name="network_status_authRequired">需要认证</string>
     <string name="network_status_clientTooOld">客户端过旧</string>
+    <string name="network_status_connectingRetry">连接服务器（重试 %1$d/5）</string>
     <string name="network_status_connectingServer">连接服务器</string>
     <string name="network_status_notFound">网络不存在</string>
     <string name="network_status_ok">在线</string>

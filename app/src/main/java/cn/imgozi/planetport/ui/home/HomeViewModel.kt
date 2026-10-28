@@ -15,6 +15,8 @@ import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
 import cn.imgozi.planetport.ui.CONFLICT_TIMEOUT
+import cn.imgozi.planetport.ui.CONNECT_RETRY_DELAY_MS
+import cn.imgozi.planetport.ui.CONNECT_RETRY_LIMIT
 import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MS
 import cn.imgozi.planetport.ui.ztStatusLabel
 import kotlinx.coroutines.Job
@@ -74,6 +76,12 @@ data class HomeUiState(
      * 「连接服务器」分段展示与 [CONNECT_TIMEOUT_MS] 超时判定的共同起点。
      */
     val connectStartedAtMs: Long? = null,
+    /**
+     * 当前连接周期已重试次数（超时确认后重启核心计数，online 达成或周期结束
+     * 即清零，iOS AppState.connectRetryCount 同构）：驱动「连接服务器（重试 N/5）」
+     * 分段文案。
+     */
+    val connectRetryCount: Int = 0,
     /** nwid → ZT 原始状态码（隧道侧契约：文案在 UI 层生成）。 */
     val networkStatuses: Map<String, Int> = emptyMap(),
     /** nwid → 实时冲突原因码 "address"/"subnet"（隧道侧契约：文案在 UI 层生成；空表 = 无冲突）。 */
@@ -268,6 +276,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** 连接超时任务（App 侧计时；进程冻结期 delay 顺延，解冻后迟到即补触发）。 */
     private var connectTimeoutJob: Job? = null
 
+    /** 超时确认后的重试等待任务（CONNECT_RETRY_DELAY_MS 后重启核心）。 */
+    private var connectRetryJob: Job? = null
+
     /**
      * 连接计时的起止判定：tunnelRunning 且未 online 且活跃行星有启用网络时起算；
      * online 达成或隧道停止即取消。超时到点走 [disconnectOnConnectTimeout]——
@@ -276,6 +287,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun evaluateConnectTimer() {
         viewModelScope.launch {
+            // 重试等待期不起算新窗口：等 CONNECT_RETRY_DELAY_MS 重启核心后再由
+            // 隧道状态流（nodeOnline 变化）重新起算
+            if (connectRetryJob?.isActive == true) return@launch
             val s = _state.value
             val shouldRun = s.tunnelRunning && !s.nodeOnline &&
                 StoreRepo.store.readActiveNetworks().any { it.lastActivated }
@@ -291,9 +305,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     disconnectOnConnectTimeout()
                 }
             } else {
+                // online 达成 / 隧道停止 / 全部断开：周期结束，重试状态一并清零
                 connectTimeoutJob?.cancel()
                 connectTimeoutJob = null
-                _state.update { it.copy(connectStartedAtMs = null) }
+                connectRetryJob?.cancel()
+                connectRetryJob = null
+                _state.update { it.copy(connectStartedAtMs = null, connectRetryCount = 0) }
             }
         }
     }
@@ -327,7 +344,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun disconnectOnConnectTimeout() {
         val s = _state.value
         // nodeOnline 现场复核（终审 I-1 同族竞态）：_state 快照可能落后——核心恰在
-        // 6 分钟到点前达成 online 而 nodeStatus collector 尚未调度时，快照仍是
+        // 超时到点前达成 online 而 nodeStatus collector 尚未调度时，快照仍是
         // false，会把刚上线的节点误判超时并断开全部启用网络
         if (!s.tunnelRunning || s.nodeOnline) return
         if (TunnelStateBus.nodeStatus.value?.online == true) return
@@ -335,6 +352,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // 下一个挂起点（readNetworks）抛 CancellationException，静默吞掉后续写盘
         connectTimeoutJob = null
         _state.update { it.copy(connectStartedAtMs = null) }
+        // 重试未满则重启核心再战，累计满 CONNECT_RETRY_LIMIT 才判定物理网络故障
+        if (_state.value.connectRetryCount < CONNECT_RETRY_LIMIT) {
+            scheduleConnectRetry()
+            return
+        }
+        _state.update { it.copy(connectRetryCount = 0) }
         val store = StoreRepo.store
         val planetId = store.activePlanetId()
         val networks = store.readNetworks(planetId)
@@ -354,6 +377,23 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // 空跑收敛：无剩余启用网络则停隧道（stopVPNIfNoActiveNetworks 同构）
         if (store.readActiveNetworks().none { it.lastActivated }) {
             TunnelController.stop(appContext)
+        }
+    }
+
+    /**
+     * 超时确认后的核心重试：等 [CONNECT_RETRY_DELAY_MS] 重启核心（磁盘持久化
+     * 身份与配置，隧道侧恢复 join；新源端口重建 UDP 流，间歇性清洗可赶上放行
+     * 窗口）。等待期内 [evaluateConnectTimer] 不起算新窗口，重启后 nodeOnline
+     * 转 false 的状态流到达时重新起算（iOS scheduleConnectRetry 同构）。
+     */
+    private fun scheduleConnectRetry() {
+        _state.update { it.copy(connectRetryCount = it.connectRetryCount + 1) }
+        connectTimeoutJob?.cancel()
+        connectTimeoutJob = null
+        connectRetryJob = viewModelScope.launch {
+            delay(CONNECT_RETRY_DELAY_MS)
+            connectRetryJob = null
+            TunnelController.restartIfRunning(appContext)
         }
     }
 

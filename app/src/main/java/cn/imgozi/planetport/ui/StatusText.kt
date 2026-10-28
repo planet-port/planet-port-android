@@ -11,11 +11,20 @@ import kotlinx.coroutines.delay
 const val CONFLICT_TIMEOUT = "timeout"
 
 /**
- * 「连接服务器」阶段（核心连行星根服务器）的超时阈值：到点仍未 online 判定
- * 物理网络故障，全部启用网络自动断开（iOS AppState.connectTimeout 基础上
- * 放宽至 10 分钟，兼容慢速行星服务器/弱网环境）。
+ * 「连接服务器」阶段（核心连行星根服务器）的超时阈值：到点仍未 online 先复核，
+ * 复核失败进入重试（见 [CONNECT_RETRY_LIMIT]），不直接判定故障（与 iOS 统一
+ * 300 秒）。
  */
-const val CONNECT_TIMEOUT_MS = 600_000L
+const val CONNECT_TIMEOUT_MS = 300_000L
+
+/** 超时确认后到重启核心的重试间隔：给间歇性网络故障留恢复窗口（iOS 同构）。 */
+const val CONNECT_RETRY_DELAY_MS = 120_000L
+
+/**
+ * 最大重试次数：超时后等 [CONNECT_RETRY_DELAY_MS] 重启核心重建 UDP 流（新源
+ * 端口可能赶上清洗放行窗口），累计满本次数仍失败才判定物理网络故障彻底断开。
+ */
+const val CONNECT_RETRY_LIMIT = 5
 
 /** 网络状态语义色（M3 ColorScheme 无状态槽位，映射见 ui.theme.PlanetStatusColors）。 */
 enum class StatusColor { Good, Warn, Neutral, Danger }
@@ -30,6 +39,7 @@ data class NetworkCardStatus(
     @StringRes val label: Int,
     val color: StatusColor,
     @StringRes val labelArgRes: Int? = null,
+    val labelArgInt: Int? = null,
 )
 
 /**
@@ -85,6 +95,7 @@ fun deriveNetworkCardStatus(
     lastActivated: Boolean,
     lastConflict: String?,
     liveConflict: String?,
+    connectRetryCount: Int,
     statusCode: Int?,
     hasStatus: Boolean = statusCode != null,
     nodeOnline: Boolean = true,
@@ -117,11 +128,9 @@ fun deriveNetworkCardStatus(
         }
         if (statusCode == 0) {
             // REQUESTING_CONFIGURATION 按 online 拆段：未连根服务器=「连接服务器」
-            // （超过 CONNECT_TIMEOUT_MS 判超时），已连但未拿到配置=「请求网络配置」
-            return NetworkCardStatus(
-                connectPhaseLabelRes(nodeOnline, connectStartedAtMs, nowMs),
-                StatusColor.Warn,
-            )
+            // （超过 CONNECT_TIMEOUT_MS 判超时进重试），已连但未拿到配置=「请求网络配置」
+            val phase = connectPhaseLabel(nodeOnline, connectStartedAtMs, nowMs, connectRetryCount)
+            return NetworkCardStatus(phase.res, StatusColor.Warn, labelArgInt = phase.intArg)
         }
         return NetworkCardStatus(
             label = ztStatusLabel(statusCode),
@@ -131,17 +140,26 @@ fun deriveNetworkCardStatus(
     return NetworkCardStatus(R.string.status_waitingNode, StatusColor.Neutral)
 }
 
+/** 连接分段文案结果：资源 ID + 可选 Int 实参（重试计数，UI 层格式化）。 */
+data class ConnectPhaseLabel(@StringRes val res: Int, val intArg: Int? = null)
+
 /**
  * REQUESTING_CONFIGURATION 的分段文案（卡片与详情页共用，对齐 iOS
  * NetworkCardStatus.connectPhase）：online 为核心是否已连通行星根服务器。
  * 计时起点缺失（如 online 后再次掉线重连窗口）不判超时，仅显示进行中文案。
+ * 重试周期内（超时确认后等 [CONNECT_RETRY_DELAY_MS] 重启核心）带重试计数。
  */
-@StringRes
-fun connectPhaseLabelRes(nodeOnline: Boolean, startedAtMs: Long?, nowMs: Long): Int = when {
-    nodeOnline -> R.string.network_status_requestingConfig
+fun connectPhaseLabel(
+    nodeOnline: Boolean,
+    startedAtMs: Long?,
+    nowMs: Long,
+    retryCount: Int,
+): ConnectPhaseLabel = when {
+    nodeOnline -> ConnectPhaseLabel(R.string.network_status_requestingConfig)
     startedAtMs != null && nowMs - startedAtMs >= CONNECT_TIMEOUT_MS ->
-        R.string.card_timeout_offline
-    else -> R.string.network_status_connectingServer
+        ConnectPhaseLabel(R.string.card_timeout_offline)
+    retryCount > 0 -> ConnectPhaseLabel(R.string.network_status_connectingRetry, retryCount)
+    else -> ConnectPhaseLabel(R.string.network_status_connectingServer)
 }
 
 /**
