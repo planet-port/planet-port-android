@@ -326,6 +326,7 @@
     <string name="peers_autoRefreshHint">列表约每 5 秒自动刷新</string>
     <string name="addplanet_fileUnreadable">无法读取所选文件</string>
     <string name="addplanet_badHeader">planet 文件头无效（首字节应为 0x01）</string>
+    <string name="addplanet_qrInvalid">二维码数据无效</string>
     <string name="prefs_stepperDecrease">减小</string>
     <string name="prefs_stepperIncrease">增大</string>
     <string name="common_operationRetry">操作失败，请重试</string>

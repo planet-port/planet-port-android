@@ -326,6 +326,7 @@
     <string name="peers_autoRefreshHint">清單約每 5 秒自動重新整理</string>
     <string name="addplanet_fileUnreadable">無法讀取所選檔案</string>
     <string name="addplanet_badHeader">planet 檔案檔頭無效（首位元組應為 0x01）</string>
+    <string name="addplanet_qrInvalid">二維碼資料無效</string>
     <string name="prefs_stepperDecrease">減小</string>
     <string name="prefs_stepperIncrease">增大</string>
     <string name="common_operationRetry">操作失敗，請重試</string>

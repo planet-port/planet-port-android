@@ -326,6 +326,7 @@
     <string name="peers_autoRefreshHint">Refreshes automatically about every 5 seconds</string>
     <string name="addplanet_fileUnreadable">Unable to read the selected file</string>
     <string name="addplanet_badHeader">Invalid planet file (first byte must be 0x01)</string>
+    <string name="addplanet_qrInvalid">Invalid QR code data</string>
     <string name="prefs_stepperDecrease">Decrease</string>
     <string name="prefs_stepperIncrease">Increase</string>
     <string name="common_operationRetry">Operation failed; try again</string>
