@@ -285,6 +285,9 @@
     <string name="prefs_theme_footer">The accent color drives buttons, indicators and planet decorations, adapting to light and dark mode; status colors keep green/orange/red semantics by default — enable the switch to derive the success color from the accent.</string>
     <string name="prefs_theme_sectionHeader">Accent Color</string>
     <string name="prefs_theme_wheel">Color Picker</string>
+    <string name="qr_album">Photo Album</string>
+    <string name="qr_albumNoQr">No QR code found in the image</string>
+    <string name="qr_albumNoUrl">No URL found in the QR code</string>
     <string name="qr_deniedMessage">Please allow PlanetPort to use the camera in system Settings and try again</string>
     <string name="qr_deniedTitle">Camera Unavailable</string>
     <string name="qr_title">Scan to Join</string>
@@ -346,6 +349,10 @@
     <string name="error_moon_writeFailed">Failed to write moon file</string>
     <string name="error_planet_tooLarge">Planet file exceeds the 8 MiB size limit</string>
     <string name="error_planet_writeFailed">Failed to write planet file</string>
+    <string name="qrtransfer_album">Photo Album</string>
+    <string name="qrtransfer_albumIncomplete">Incomplete QR sequence</string>
+    <string name="qrtransfer_albumInvalid">Invalid data format</string>
+    <string name="qrtransfer_albumNoQr">No QR code found in the image</string>
     <string name="qrtransfer_corrupt">Checksum failed, please rescan</string>
     <string name="qrtransfer_done">Done</string>
     <string name="qrtransfer_generating">Generating QR code…</string>
