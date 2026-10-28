@@ -80,12 +80,19 @@ class PlanetImporter(private val store: AppConfigStore) {
     /**
      * 仅下载文件内容，不校验、不落库（供“先就绪、后添加”交互使用，P4）。
      *
+     * [onProgress] 边收边报进度：Content-Length 已知时为 0~1，未知（chunked）
+     * 回调 null（不确定进度，iOS delegate 会话同构）；回调在 IO 线程，消费方
+     * 写 Compose 快照状态可跨线程。
+     *
      * 下载加固：声明 Content-Length 超过 [MAX_PLANET_BYTES] 提前拒绝；流复制始终
      * 有界（读至上限即断）——官方 planet 仅数 KB，上限防误指大文件与恶意超大
      * 响应，有界复制防服务器谎报或缺失声明长度（chunked 传输无 Content-Length，
      * 属正常形态不拒绝）。
      */
-    suspend fun downloadPlanetFile(urlString: String): ByteArray = withContext(Dispatchers.IO) {
+    suspend fun downloadPlanetFile(
+        urlString: String,
+        onProgress: (Double?) -> Unit = { _ -> },
+    ): ByteArray = withContext(Dispatchers.IO) {
         val url = try {
             URL(urlString)
         } catch (e: Exception) {
@@ -111,6 +118,7 @@ class PlanetImporter(private val store: AppConfigStore) {
                         total += n
                         if (total > MAX_PLANET_BYTES) throw ImportError.TooLarge()
                         out.write(buf, 0, n)
+                        onProgress(if (declared > 0) minOf(1.0, total.toDouble() / declared) else null)
                     }
                     out.toByteArray()
                 }

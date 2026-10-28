@@ -9,6 +9,7 @@
     <string name="about_opensource">This app includes the ZeroTier core (MPL-2.0; source distributed with the app: github.com/zerotier/ZeroTierOne)</string>
     <string name="addplanet_action">Add Planet Server</string>
     <string name="addplanet_chooseFile">Choose planet file</string>
+    <string name="addplanet_downloading">Downloading planet file…</string>
     <string name="addplanet_duplicate">A planet with the same World ID (%1$s) already exists and cannot be added again.</string>
     <string name="addplanet_importFailed">Import Failed</string>
     <string name="addplanet_namePlaceholder">Planet name</string>

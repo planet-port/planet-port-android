@@ -9,6 +9,7 @@
     <string name="about_opensource">本應用內含 ZeroTier 核心（MPL-2.0，原始碼隨應用程式散布：github.com/zerotier/ZeroTierOne）</string>
     <string name="addplanet_action">新增行星伺服器</string>
     <string name="addplanet_chooseFile">選擇行星檔案</string>
+    <string name="addplanet_downloading">正在下載行星檔案…</string>
     <string name="addplanet_duplicate">已存在相同的 Planet（World ID %1$s），不能重複新增。</string>
     <string name="addplanet_importFailed">匯入失敗</string>
     <string name="addplanet_namePlaceholder">行星名稱</string>

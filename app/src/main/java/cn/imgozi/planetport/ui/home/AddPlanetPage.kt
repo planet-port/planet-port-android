@@ -1,5 +1,6 @@
 package cn.imgozi.planetport.ui.home
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
@@ -38,9 +39,11 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,8 +71,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.StreamTooLargeException
@@ -332,6 +338,8 @@ private fun AddPlanetForm(
     var showScanner by remember { mutableStateOf(false) }
     var showPlanetReceiver by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
+    // 下载进度 0~1；服务器未给 Content-Length 时为 null（不确定进度）
+    var downloadProgress by remember { mutableStateOf<Double?>(null) }
     var pendingData by remember { mutableStateOf<ByteArray?>(null) }
     // 离开新增页的时间；离开超过 5 分钟后回来视为放弃，清空表单
     var leftAt by remember { mutableStateOf<Long?>(null) }
@@ -343,16 +351,21 @@ private fun AddPlanetForm(
     val qrInvalid = stringResource(R.string.addplanet_qrInvalid)
     val tooLarge = stringResource(R.string.error_planet_tooLarge)
 
-    /** URL 下载导入（iOS importFromURL）：「导入」按钮与扫码回填共用路径。 */
+    /** URL 下载导入（iOS importFromURL）：「导入」按钮与扫码回填共用路径。
+     *  下载/验证失败改系统 toast 轻提示（iOS overlay toast 等价）：错误弹窗
+     *  会与下载进度窗的收起动画竞争被吞，toast 由系统窗口层展示天然规避；
+     *  文件导入失败仍走既有弹窗。进度回调在 IO 线程，直接写快照状态
+     *  （跨线程安全，见 PlanetImporter.downloadPlanetFile）。 */
     fun importFromUrl() {
         if (url.isEmpty() || downloading) return
         downloading = true
-        vm.downloadPlanet(url) { data, error ->
+        downloadProgress = null
+        vm.downloadPlanet(url, onProgress = { fraction -> downloadProgress = fraction }) { data, error ->
             downloading = false
             when {
-                error != null -> alert = error
+                error != null -> Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
                 data != null && (data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE) ->
-                    alert = badHeader
+                    Toast.makeText(context, badHeader, Toast.LENGTH_SHORT).show()
                 data != null -> pendingData = data
             }
         }
@@ -560,6 +573,54 @@ private fun AddPlanetForm(
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
                 color = Color.White,
             )
+        }
+    }
+
+    // 下载中模态锁定（iOS sheet + interactiveDismissDisabled 等价）：对话框
+    // 挡住底下全部交互（含首页滑页），禁点外关闭与返回键，防误操作提前退出
+    if (downloading) {
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = false,
+            ),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .widthIn(min = 232.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    // Content-Length 未知 → 不确定进度（转圈），已知 → 0~1 线性
+                    val fraction = downloadProgress
+                    if (fraction != null) {
+                        LinearProgressIndicator(
+                            progress = { fraction.toFloat() },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        CircularProgressIndicator()
+                    }
+                    Text(
+                        stringResource(R.string.addplanet_downloading),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        url,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
     }
 
