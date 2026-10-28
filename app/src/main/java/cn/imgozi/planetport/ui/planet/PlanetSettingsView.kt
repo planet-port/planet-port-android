@@ -206,10 +206,16 @@ fun PlanetSettingsView(
                         ShareRow(
                             onFile = { showFileShare = true },
                             onQr = {
-                                // 读取 planet 文件进入二维码分享；读取失败(并发删除)不弹页
+                                // 读取 planet 文件并连同名称/图标/底色组成 ZTP 容器进入
+                                // 二维码分享；读取失败(并发删除)不弹页
                                 planetFile?.let { file ->
                                     runCatching { file.readBytes() }.getOrNull()?.let { bytes ->
-                                        qrShareData = bytes
+                                        qrShareData = PlanetPayload.container(
+                                            planet = bytes,
+                                            name = planet.name,
+                                            icon = planet.icon,
+                                            iconColor = planet.iconColor,
+                                        )
                                         showQRShare = true
                                     }
                                 }

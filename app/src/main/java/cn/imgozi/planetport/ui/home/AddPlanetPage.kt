@@ -77,6 +77,7 @@ import cn.imgozi.planetport.store.readBounded
 import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.planet.IconPickerSheet
 import cn.imgozi.planetport.ui.planet.PlanetIcon
+import cn.imgozi.planetport.ui.planet.PlanetPayload
 import cn.imgozi.planetport.ui.qrtransfer.QRReceiveSheet
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import kotlinx.coroutines.delay
@@ -176,6 +177,8 @@ internal fun AddPlanetPage(
             },
             animal = animal,
             colorHex = colorHex,
+            onAnimalChange = { animal = it },
+            onColorHexChange = { colorHex = it },
             isCurrentPage = isCurrentPage,
             onImported = {
                 // 添加成功：重掷身份，避免与刚添加的行星同名/同图
@@ -316,6 +319,9 @@ private fun AddPlanetForm(
     onNameChange: (String) -> Unit,
     animal: String,
     colorHex: String,
+    // 身份与首页预览区共享（添加时随名称一并落库）；扫码导入 ZTP 容器可直接回填
+    onAnimalChange: (String) -> Unit = {},
+    onColorHexChange: (String) -> Unit = {},
     isCurrentPage: Boolean,
     onImported: () -> Unit,
     modifier: Modifier = Modifier,
@@ -334,6 +340,7 @@ private fun AddPlanetForm(
     // 回调非 Composable 上下文：文案先在组合期解析
     val fileUnreadable = stringResource(R.string.addplanet_fileUnreadable)
     val badHeader = stringResource(R.string.addplanet_badHeader)
+    val qrInvalid = stringResource(R.string.addplanet_qrInvalid)
     val tooLarge = stringResource(R.string.error_planet_tooLarge)
 
     /** URL 下载导入（iOS importFromURL）：「导入」按钮与扫码回填共用路径。 */
@@ -584,9 +591,20 @@ private fun AddPlanetForm(
         QRReceiveSheet(
             onComplete = { data ->
                 showPlanetReceiver = false
+                // 解析 ZTP 容器；非法容器（magic/边界不成立、缺 planet 字段）
+                // 或旧版裸 planet 载荷都走统一「二维码数据无效」提示
+                val payload = PlanetPayload.parse(data)
                 when {
-                    data.isEmpty() || data[0] != PlanetImporter.PLANET_TYPE_BYTE -> alert = badHeader
-                    else -> pendingData = data
+                    payload == null -> alert = qrInvalid
+                    payload.planet.isEmpty() ||
+                        payload.planet[0] != PlanetImporter.PLANET_TYPE_BYTE -> alert = badHeader
+                    else -> {
+                        pendingData = payload.planet
+                        // 元数据预填表单与首页预览区，用户可修改；无条目留默认
+                        payload.name?.takeIf { it.isNotEmpty() }?.let(onNameChange)
+                        payload.icon?.let(onAnimalChange)
+                        payload.iconColor?.let(onColorHexChange)
+                    }
                 }
             },
             onDismiss = { showPlanetReceiver = false },
