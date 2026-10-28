@@ -745,10 +745,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 仅下载 planet 文件内容（「先就绪、后添加」交互；校验与落库归 importPlanetFile）。 */
-    fun downloadPlanet(url: String, onDone: (ByteArray?, String?) -> Unit) {
+    /** 仅下载 planet 文件内容（「先就绪、后添加」交互；校验与落库归 importPlanetFile）。
+     *  [onProgress] 边收边报（IO 线程回调，见 PlanetImporter.downloadPlanetFile）。 */
+    fun downloadPlanet(
+        url: String,
+        onProgress: (Double?) -> Unit = { _ -> },
+        onDone: (ByteArray?, String?) -> Unit,
+    ) {
         viewModelScope.launch {
-            runCatching { StoreRepo.planetImporter.downloadPlanetFile(url) }.fold(
+            runCatching { StoreRepo.planetImporter.downloadPlanetFile(url, onProgress) }.fold(
                 onSuccess = { onDone(it, null) },
                 onFailure = { onDone(null, importErrorText(it)) },
             )

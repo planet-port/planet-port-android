@@ -8,7 +8,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -16,22 +18,27 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,12 +53,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.ui.components.SheetScaffold
+import cn.imgozi.planetport.ui.components.rememberAlbumQrPicker
+import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -67,7 +79,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 扫码弹层（iOS QRScannerView 等价）：CameraX PreviewView 预览 +
  * ImageAnalysis 逐帧 zxing 解码，[extract] 提取成功即回调关闭
  * （默认 16 位 hex 网络 ID，URL 导入场景传 [QrHttpUrl.extract]）。
- * 相机权限被拒 → photo_camera 图标 + 引导文案 +「前往设置」。
+ * 相机权限被拒 → photo_camera 图标 + 引导文案 +「前往设置」+「相册」
+ * （相册识别不依赖相机权限，无相机场景保留完整通路）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +107,43 @@ fun QrScannerSheet(
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    // 回前台重查权限：「前往设置」授权返回后弹层仍在组合，无此观察者会
+    // 一直停在引导态（iOS 场景回调同痛点，Android 侧补上）
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                granted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.CAMERA,
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // 相册识别失败原因：无码 / 有码但内容不符（下载失败走既有导入失败提示）
+    var albumError by remember { mutableStateOf<AlbumScanError?>(null) }
+    val albumPicker = rememberAlbumQrPicker { texts ->
+        // 单帧提取语义：取第一个能通过提取器的码，与相机路径同构。
+        // 区分无码 / 有码但内容不符，提示才有诊断价值
+        if (texts.isEmpty()) {
+            albumError = AlbumScanError.NO_QR
+            return@rememberAlbumQrPicker
+        }
+        val hit = texts.firstNotNullOfOrNull(extract)
+        if (hit == null) {
+            albumError = AlbumScanError.NO_URL
+        } else {
+            albumError = null
+            onScanned(hit)
+        }
+    }
+    val pickAlbum = {
+        albumError = null
+        albumPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         // 统一 large detent（屏高-16dp）：跳过半展开，直接全高
@@ -105,7 +155,8 @@ fun QrScannerSheet(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
             ) {
-                // 头部：左「取消」+ 居中标题（对齐 iOS navigationTitle + cancellationAction）
+                // 头部：左「取消」+ 居中标题 + 右「相册」
+                //（对齐 iOS navigationTitle + cancellationAction + confirmationAction）
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -119,35 +170,77 @@ fun QrScannerSheet(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Spacer(Modifier.weight(1f))
-                    Spacer(Modifier.width(64.dp))
+                    IconButton(onClick = pickAlbum) {
+                        Icon(
+                            imageVector = Icons.Outlined.PhotoLibrary,
+                            contentDescription = stringResource(R.string.qr_album),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 if (granted) {
-                    ScannerContent(
-                        onScanned = onScanned,
-                        extract = extract,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(360.dp),
-                    )
+                    ) {
+                        ScannerContent(
+                            onScanned = onScanned,
+                            extract = extract,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 } else {
                     DeniedGuide(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(360.dp),
+                        onAlbum = pickAlbum,
                     )
                 }
+
+                // 相册识别失败提示（iOS 底部橙色脚注）：授权/被拒两态统一展示
+                //（被拒态相册恰是主通路，反馈不能只挂在取景分支）
+                albumError?.let { AlbumErrorBar(it.res) }
             }
         }
     }
 }
 
 /**
- * 权限被拒引导态（iOS denied 分支：图标 40 + 标题 + 说明 + 前往设置）。
+ * 相册识别失败提示条（iOS ultraThinMaterial 覆盖层等价）：半透明容器底
+ * 保证深浅画面下可读，warn 色随主题深浅自适应。internal：二维码接收弹层
+ * 被拒态复用。
+ */
+@Composable
+internal fun AlbumErrorBar(res: Int, modifier: Modifier = Modifier) {
+    Text(
+        stringResource(res),
+        style = MaterialTheme.typography.bodySmall,
+        color = LocalPlanetStatusColors.current.warn,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f))
+            .padding(vertical = 10.dp),
+    )
+}
+
+/** 相册识别失败原因（iOS QRScannerView.AlbumScanError 同构）。 */
+private enum class AlbumScanError(@StringRes val res: Int) {
+    NO_QR(R.string.qr_albumNoQr),
+    NO_URL(R.string.qr_albumNoUrl),
+}
+
+/**
+ * 权限被拒引导态（iOS denied 分支：图标 40 + 标题 + 说明 + 前往设置 + 相册）。
+ * [onAlbum] 非空时附「相册」入口——相机被拒时相册识别仍可用，给无相机场景
+ * 留完整通路（iOS 同款）。
  * internal：二维码接收弹层（QRReceiveSheet）权限被拒时复用同一引导态。
  */
 @Composable
-internal fun DeniedGuide(modifier: Modifier = Modifier) {
+internal fun DeniedGuide(modifier: Modifier = Modifier, onAlbum: (() -> Unit)? = null) {
     val context = LocalContext.current
     Column(
         modifier = modifier.padding(horizontal = 24.dp),
@@ -181,6 +274,18 @@ internal fun DeniedGuide(modifier: Modifier = Modifier) {
                 runCatching { context.startActivity(intent) }
             },
         ) { Text(stringResource(R.string.common_goSettings)) }
+        if (onAlbum != null) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onAlbum) {
+                Icon(
+                    imageVector = Icons.Outlined.PhotoLibrary,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.qr_album))
+            }
+        }
     }
 }
 

@@ -6,7 +6,9 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -23,8 +25,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -44,14 +49,19 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.qrtransfer.QRFrame
 import cn.imgozi.planetport.qrtransfer.QRTransfer
 import cn.imgozi.planetport.qrtransfer.QRTransferException
 import cn.imgozi.planetport.ui.components.SheetScaffold
+import cn.imgozi.planetport.ui.components.rememberAlbumQrPicker
+import cn.imgozi.planetport.ui.home.AlbumErrorBar
 import cn.imgozi.planetport.ui.home.DeniedGuide
 import cn.imgozi.planetport.ui.home.decodeQr
+import cn.imgozi.planetport.ui.theme.LocalPlanetStatusColors
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
@@ -62,6 +72,7 @@ import java.util.concurrent.Executors
  * 接收端（iOS QRReceiveView）：连续扫码聚合分片。不区分单帧/多帧——解码任意
  * 帧 → 按 index 聚合 → 齐全后整体校验（Base45 → 解压 → CRC）→ 通过即回调一次。
  * total/checksum 与已收集集不一致（扫到新会话）时自动清空重来；CRC 失败同样清空。
+ * 相册多选识别的帧文本喂入同一聚合逻辑（相机被拒时相册通路保留）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,15 +96,35 @@ internal fun QRReceiveSheet(
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    // 回前台重查权限：「前往设置」授权返回后弹层仍在组合，无此观察者会
+    // 一直停在引导态（与 QrScannerSheet 同步补上）
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                granted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.CAMERA,
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     var total by remember { mutableStateOf<Int?>(null) }
     var checksum by remember { mutableStateOf<UInt?>(null) }
     var chunks by remember { mutableStateOf(mapOf<Int, String>()) }
     var corrupt by remember { mutableStateOf(false) }
     var finished by remember { mutableStateOf(false) }
+    // 相册识别失败原因：无码 / 序列不完整 / 数据格式不正确
+    var albumError by remember { mutableStateOf<AlbumScanError?>(null) }
 
-    fun handle(text: String) {
-        if (finished) return
-        val frame = QRTransfer.parse(text) ?: return
+    /** 聚合一帧；返回是否为有效协议帧（相册批次按此计数判定失败原因）。 */
+    fun handle(text: String): Boolean {
+        if (finished) return false
+        val frame = QRTransfer.parse(text) ?: return false
+        // 收到有效帧：清除相册失败提示（相机续扫时错误文案不该悬着）
+        albumError = null
         // 换了传输会话（total 或 CRC 不同）：丢弃旧集合
         if (total != null && (total != frame.total || checksum != frame.checksum)) {
             chunks = emptyMap()
@@ -102,7 +133,7 @@ internal fun QRReceiveSheet(
         checksum = frame.checksum
         chunks = chunks + (frame.index to frame.payload)
         corrupt = false
-        if (chunks.size != frame.total) return
+        if (chunks.size != frame.total) return true
         val all = (1..frame.total).mapNotNull { i ->
             chunks[i]?.let { QRFrame(frame.total, i, frame.checksum, frame.length, it) }
         }
@@ -114,6 +145,26 @@ internal fun QRReceiveSheet(
             chunks = emptyMap()
             corrupt = true
         }
+        return true
+    }
+
+    val albumPicker = rememberAlbumQrPicker { texts ->
+        // 逐帧喂现有聚合：分片/校验/会话切换逻辑与相机路径完全同构
+        if (texts.isEmpty()) {
+            albumError = AlbumScanError.NO_QR
+            return@rememberAlbumQrPicker
+        }
+        // 按本批帧计数判定失败原因，不受相机残留态（已收分片/校验失败）污染
+        var parsed = 0
+        for (text in texts) if (handle(text)) parsed++
+        if (finished) return@rememberAlbumQrPicker
+        // 解码失败（corrupt）→ 格式错误；一张协议帧都没有 → 有码但不是本协议
+        // 内容；有协议帧但没凑齐 → 序列不完整
+        albumError = if (corrupt || parsed == 0) AlbumScanError.INVALID else AlbumScanError.INCOMPLETE
+    }
+    val pickAlbum = {
+        albumError = null
+        albumPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
     ModalBottomSheet(
@@ -127,7 +178,8 @@ internal fun QRReceiveSheet(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
             ) {
-                // 头部：左「取消」+ 居中标题（对齐 iOS cancellationAction + navigationTitle）
+                // 头部：左「取消」+ 居中标题 + 右「相册」
+                //（对齐 iOS cancellationAction + navigationTitle + confirmationAction）
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -143,7 +195,13 @@ internal fun QRReceiveSheet(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Spacer(Modifier.weight(1f))
-                    Spacer(Modifier.width(64.dp))
+                    IconButton(onClick = pickAlbum) {
+                        Icon(
+                            imageVector = Icons.Outlined.PhotoLibrary,
+                            contentDescription = stringResource(R.string.qrtransfer_album),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 if (granted) {
@@ -181,19 +239,29 @@ internal fun QRReceiveSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Text(
-                                if (corrupt) {
-                                    stringResource(R.string.qrtransfer_corrupt)
-                                } else {
-                                    stringResource(R.string.qrtransfer_waiting)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (corrupt) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
+                            // 相册失败提示优先于 corrupt/waiting（iOS albumError 同优先级）
+                            val error = albumError
+                            if (error != null) {
+                                Text(
+                                    stringResource(error.res),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LocalPlanetStatusColors.current.warn,
+                                )
+                            } else {
+                                Text(
+                                    if (corrupt) {
+                                        stringResource(R.string.qrtransfer_corrupt)
+                                    } else {
+                                        stringResource(R.string.qrtransfer_waiting)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (corrupt) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
                         }
                     }
                 } else {
@@ -201,11 +269,21 @@ internal fun QRReceiveSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(420.dp),
+                        onAlbum = pickAlbum,
                     )
+                    // 被拒态相册恰是主通路，失败反馈不能只挂在取景分支
+                    albumError?.let { AlbumErrorBar(it.res) }
                 }
             }
         }
     }
+}
+
+/** 相册识别失败原因（iOS QRReceiveView.AlbumScanError 同构）。 */
+private enum class AlbumScanError(@StringRes val res: Int) {
+    NO_QR(R.string.qrtransfer_albumNoQr),
+    INCOMPLETE(R.string.qrtransfer_albumIncomplete),
+    INVALID(R.string.qrtransfer_albumInvalid),
 }
 
 /**
