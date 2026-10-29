@@ -154,6 +154,7 @@ fun NetworkDetailView(
             connectStartedAtMs = homeState.connectStartedAtMs,
             connectRetryCount = homeState.connectRetryCount,
             connectNowMs = connectNowMs,
+            connectTimeoutMs = homeState.connectTimeoutMs,
             // 锁定判定锚定本网络归属行星（iOS 19f7681）：只有隧道行星下才存在
             // 「同时连接」的其他网络；全局选中页锚定在滑页竞态下会瞬时翻转
             routeViaLocked = ui.entryPlanetId != null &&
@@ -176,6 +177,7 @@ private fun NetworkDetailContent(
     connectStartedAtMs: Long?,
     connectRetryCount: Int,
     connectNowMs: Long,
+    connectTimeoutMs: Long,
     routeViaLocked: Boolean,
     onApplyDns: (DnsMode, List<String>) -> Unit,
     onSetRouteVia: (Boolean) -> Unit,
@@ -213,7 +215,9 @@ private fun NetworkDetailContent(
                     // REQUESTING_CONFIGURATION 与卡片一致按 online 分段
                     //（连接服务器/请求网络配置/连接超时，iOS 897245a）
                     if (it.statusCode == 0) {
-                        val phase = connectPhaseLabel(nodeOnline, connectStartedAtMs, connectNowMs, connectRetryCount)
+                        val phase = connectPhaseLabel(
+                            nodeOnline, connectStartedAtMs, connectNowMs, connectRetryCount, connectTimeoutMs,
+                        )
                         phase.intArg
                             ?.let { arg -> stringResource(phase.res, arg) }
                             ?: stringResource(phase.res)

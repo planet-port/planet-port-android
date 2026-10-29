@@ -18,6 +18,7 @@ import cn.imgozi.planetport.ui.CONFLICT_TIMEOUT
 import cn.imgozi.planetport.ui.CONNECT_RETRY_DELAY_MS
 import cn.imgozi.planetport.ui.CONNECT_RETRY_LIMIT
 import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MS
+import cn.imgozi.planetport.ui.connectTimeoutMsOf
 import cn.imgozi.planetport.ui.ztStatusLabel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -66,6 +67,8 @@ data class HomeUiState(
     val planetNodeIds: Map<String, String> = emptyMap(),
     /** 同时连接软上限（2..6，取 max(2, 偏好值)，iOS HomeView 同构）。 */
     val maxNetworks: Int = 2,
+    /** 连接超时阈值（毫秒，全局设置 connectTimeoutSec 换算；超时判定与分段展示共用）。 */
+    val connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
     /** 隧道在跑（Running/Starting/Reconnecting，对齐 iOS vpnRunning 判定）。 */
     val tunnelRunning: Boolean = false,
     /** 核心是否已连通行星根服务器（VPN 级共享状态，iOS AppState.online 同构）。 */
@@ -73,7 +76,7 @@ data class HomeUiState(
     /**
      * 连接周期起点（毫秒 epoch）：vpnRunning 且未 online 且有启用网络时起算，
      * online 达成或隧道停止即清空（iOS AppState.connectStartedAt 同构）。
-     * 「连接服务器」分段展示与 [CONNECT_TIMEOUT_MS] 超时判定的共同起点。
+     * 「连接服务器」分段展示与超时判定（[connectTimeoutMs]）的共同起点。
      */
     val connectStartedAtMs: Long? = null,
     /**
@@ -228,6 +231,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 moonCounts = moonCounts,
                 planetNodeIds = planets.mapNotNull { p -> p.lastNodeId?.let { id -> p.id to id } }.toMap(),
                 maxNetworks = max(2, prefs.maxNetworks),
+                connectTimeoutMs = connectTimeoutMsOf(prefs.connectTimeoutSec),
             )
         }
     }
@@ -301,7 +305,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 clearStaleTimeoutRecords()
                 connectTimeoutJob?.cancel()
                 connectTimeoutJob = launch {
-                    delay(CONNECT_TIMEOUT_MS)
+                    // 阈值取设置页 connectTimeoutSec（每次开窗现读：改设置即时影响
+                    // 下一轮窗口，进行中窗口按起算时的值走完）
+                    delay(connectTimeoutMsOf(StoreRepo.store.readPrefs().connectTimeoutSec))
                     disconnectOnConnectTimeout()
                 }
             } else {
@@ -336,7 +342,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 连接超时自动断开：核心起跑超过 [CONNECT_TIMEOUT_MS] 仍未连通行星根服务器，
+     * 连接超时自动断开：核心起跑超过生效阈值（[connectTimeoutMsOf]，全局设置）
+     * 仍未连通行星根服务器，
      * 判定物理网络故障，当前行星全部启用网络关闭并记录原因 [CONFLICT_TIMEOUT]
      * （服务器连不上是共享故障，单关一个无意义），隧道随 configChanges 差分 leave；
      * 无剩余启用网络则停隧道。与冲突自动断开同构。

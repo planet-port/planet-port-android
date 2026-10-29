@@ -76,6 +76,8 @@ import cn.imgozi.planetport.BuildInfo
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
+import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MAX_SEC
+import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MIN_SEC
 import cn.imgozi.planetport.ui.MainActivity
 import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.form.FormRow
@@ -161,6 +163,15 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                     value = prefs.maxNetworks,
                     range = 2..6,
                     onChange = vm::setMaxNetworks,
+                )
+                // 连接超时（Android 独有）：步进 10 秒，10..600；改设置即时影响
+                // 下一轮超时窗口（进行中窗口按起算时的值走完）
+                StepperRow(
+                    title = stringResource(R.string.prefs_network_connectTimeout, prefs.connectTimeoutSec),
+                    value = prefs.connectTimeoutSec,
+                    range = CONNECT_TIMEOUT_MIN_SEC..CONNECT_TIMEOUT_MAX_SEC,
+                    step = 10,
+                    onChange = vm::setConnectTimeoutSec,
                 )
             }
 
@@ -459,6 +470,8 @@ private fun StepperRow(
     value: Int,
     range: IntRange,
     onChange: (Int) -> Unit,
+    /** 步进值（上限行 1；超时行 10——10..600 逐秒步进不可用）。 */
+    step: Int = 1,
 ) {
     Row(
         modifier = Modifier
@@ -467,13 +480,13 @@ private fun StepperRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        IconButton(onClick = { onChange(value - 1) }, enabled = value > range.first) {
+        IconButton(onClick = { onChange(value - step) }, enabled = value > range.first) {
             Icon(
                 Icons.Filled.Remove,
                 contentDescription = stringResource(R.string.prefs_stepperDecrease),
             )
         }
-        IconButton(onClick = { onChange(value + 1) }, enabled = value < range.last) {
+        IconButton(onClick = { onChange(value + step) }, enabled = value < range.last) {
             Icon(
                 Icons.Filled.Add,
                 contentDescription = stringResource(R.string.prefs_stepperIncrease),

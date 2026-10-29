@@ -11,11 +11,22 @@ import kotlinx.coroutines.delay
 const val CONFLICT_TIMEOUT = "timeout"
 
 /**
- * 「连接服务器」阶段（核心连行星根服务器）的超时阈值：到点仍未 online 先复核，
- * 复核失败进入重试（见 [CONNECT_RETRY_LIMIT]），不直接判定故障（与 iOS 统一
- * 300 秒）。
+ * 「连接服务器」阶段（核心连行星根服务器）的默认超时阈值：到点仍未 online 先
+ * 复核，复核失败进入重试（见 [CONNECT_RETRY_LIMIT]），不直接判定故障。
+ * 实际阈值取全局设置 connectTimeoutSec（[CONNECT_TIMEOUT_MIN_SEC]..
+ * [CONNECT_TIMEOUT_MAX_SEC] 秒），此处仅为缺省引用值。
  */
-const val CONNECT_TIMEOUT_MS = 300_000L
+const val CONNECT_TIMEOUT_MS = 30_000L
+
+/** 连接超时可配置下限（秒）。 */
+const val CONNECT_TIMEOUT_MIN_SEC = 10
+
+/** 连接超时可配置上限（秒）。 */
+const val CONNECT_TIMEOUT_MAX_SEC = 600
+
+/** 偏好秒值 → 生效毫秒阈值（越界钳回范围，防旧档/手改文件存非法值）。 */
+fun connectTimeoutMsOf(sec: Int): Long =
+    sec.coerceIn(CONNECT_TIMEOUT_MIN_SEC, CONNECT_TIMEOUT_MAX_SEC) * 1_000L
 
 /** 超时确认后到重启核心的重试间隔：给间歇性网络故障留恢复窗口（iOS 同构）。 */
 const val CONNECT_RETRY_DELAY_MS = 120_000L
@@ -88,6 +99,7 @@ fun ztStatusLabel(code: Int): Int = when (code) {
  * @param connectStartedAtMs 连接周期起点（vpnRunning 且未 online 时起算，毫秒 epoch）；
  *                     null = 无计时（不判超时，仅显示进行中文案，iOS connectStartedAt 同构）
  * @param nowMs        当前时刻（[rememberConnectNowMs] 供给，驱动超时分段重组）
+ * @param connectTimeoutMs 生效超时阈值（全局设置，缺省 [CONNECT_TIMEOUT_MS]）
  */
 fun deriveNetworkCardStatus(
     isActivePlanet: Boolean,
@@ -101,6 +113,7 @@ fun deriveNetworkCardStatus(
     nodeOnline: Boolean = true,
     connectStartedAtMs: Long? = null,
     nowMs: Long = 0L,
+    connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
 ): NetworkCardStatus {
     if (!isActivePlanet) {
         return NetworkCardStatus(R.string.status_disconnected, StatusColor.Neutral)
@@ -128,8 +141,8 @@ fun deriveNetworkCardStatus(
         }
         if (statusCode == 0) {
             // REQUESTING_CONFIGURATION 按 online 拆段：未连根服务器=「连接服务器」
-            // （超过 CONNECT_TIMEOUT_MS 判超时进重试），已连但未拿到配置=「请求网络配置」
-            val phase = connectPhaseLabel(nodeOnline, connectStartedAtMs, nowMs, connectRetryCount)
+            // （超过生效阈值判超时进重试），已连但未拿到配置=「请求网络配置」
+            val phase = connectPhaseLabel(nodeOnline, connectStartedAtMs, nowMs, connectRetryCount, connectTimeoutMs)
             return NetworkCardStatus(phase.res, StatusColor.Warn, labelArgInt = phase.intArg)
         }
         return NetworkCardStatus(
@@ -148,15 +161,17 @@ data class ConnectPhaseLabel(@StringRes val res: Int, val intArg: Int? = null)
  * NetworkCardStatus.connectPhase）：online 为核心是否已连通行星根服务器。
  * 计时起点缺失（如 online 后再次掉线重连窗口）不判超时，仅显示进行中文案。
  * 重试周期内（超时确认后等 [CONNECT_RETRY_DELAY_MS] 重启核心）带重试计数。
+ * [timeoutMs] 为生效超时阈值（全局设置，缺省 [CONNECT_TIMEOUT_MS]）。
  */
 fun connectPhaseLabel(
     nodeOnline: Boolean,
     startedAtMs: Long?,
     nowMs: Long,
     retryCount: Int,
+    timeoutMs: Long = CONNECT_TIMEOUT_MS,
 ): ConnectPhaseLabel = when {
     nodeOnline -> ConnectPhaseLabel(R.string.network_status_requestingConfig)
-    startedAtMs != null && nowMs - startedAtMs >= CONNECT_TIMEOUT_MS ->
+    startedAtMs != null && nowMs - startedAtMs >= timeoutMs ->
         ConnectPhaseLabel(R.string.card_timeout_offline)
     retryCount > 0 -> ConnectPhaseLabel(R.string.network_status_connectingRetry, retryCount)
     else -> ConnectPhaseLabel(R.string.network_status_connectingServer)

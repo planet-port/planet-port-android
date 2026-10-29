@@ -12,6 +12,8 @@ import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
+import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MAX_SEC
+import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MIN_SEC
 import cn.imgozi.planetport.ui.theme.ThemeManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +51,12 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
     fun setMaxNetworks(value: Int) {
         if (value !in 2..6) return
         write({ it.copy(maxNetworks = value) })
+    }
+
+    /** 连接超时（秒，10..600，Android 独有偏好）。改设置即时影响下一轮超时窗口。 */
+    fun setConnectTimeoutSec(value: Int) {
+        if (value !in CONNECT_TIMEOUT_MIN_SEC..CONNECT_TIMEOUT_MAX_SEC) return
+        write({ it.copy(connectTimeoutSec = value) })
     }
 
     /**

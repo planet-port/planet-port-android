@@ -276,6 +276,7 @@
     <string name="prefs_network_disableIPv6">停用 IPv6</string>
     <string name="prefs_network_footer">同時連線多個網路會增加耗電；超出上限時會提示確認，仍可強制開啟。</string>
     <string name="prefs_network_multiConnectLimit">同時連線上限：%1$d</string>
+    <string name="prefs_network_connectTimeout">連線逾時：%1$d 秒</string>
     <string name="prefs_network_sectionHeader">網路</string>
     <string name="prefs_ondemand">保持在線</string>
     <string name="prefs_ondemand_footer">開啟後 VPN 將保持持久在線，這將增加手機的耗電。不用時請及時關閉連線以節省能耗。</string>
