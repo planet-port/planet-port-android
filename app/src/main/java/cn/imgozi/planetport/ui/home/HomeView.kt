@@ -1,14 +1,8 @@
 package cn.imgozi.planetport.ui.home
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -54,6 +48,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,11 +58,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -78,8 +75,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -98,6 +94,7 @@ import cn.imgozi.planetport.ui.rememberConnectNowMs
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * 主页（对齐 iOS HomeView.swift）：头区（logo/标题/当前行星链接 chip/设置）+
@@ -216,7 +213,10 @@ fun HomeView(activity: MainActivity) {
             // chip + 设置 + 圆点指示器，分页内容从其下方滚过
             HeaderZone(
                 state = state,
-                browsingActive = planetAtIndex(pagerState.settledPage)?.id == state.activePlanetId,
+                // chip 可见性锚定 currentPage（页面越过中点确认切页即翻转，与页面滑动
+                // 同步起动画，对齐 iOS TabView selection 提交时机）；settledPage 要等
+                // 页面完全停稳才翻转，chip 动画会滞后半页产生拖延感
+                browsingActive = planetAtIndex(pagerState.currentPage)?.id == state.activePlanetId,
                 onOpenActive = {
                     val idx = indexOfPlanet(state.activePlanetId)
                     if (idx >= 0) scope.launch { pagerState.animateScrollToPage(idx) }
@@ -547,8 +547,46 @@ private const val ChipAnimMs = 280
 private val ChipEaseOut = CubicBezierEasing(0f, 0f, 0.58f, 1f)
 
 private val ChipAnimFloat = tween<Float>(ChipAnimMs, easing = ChipEaseOut)
-private val ChipAnimOffset = tween<IntOffset>(ChipAnimMs, easing = ChipEaseOut)
-private val ChipAnimSize = tween<IntSize>(ChipAnimMs, easing = ChipEaseOut)
+
+/**
+ * 活跃行星 chip 的出现转场（iOS .flyFromPlanetCard，HomeView.swift:692-706）：
+ * 仅纵向位移——整体自下方 10dp 淡入上移、隐藏反向下移淡出，横向位置恒定。
+ * 占位宽度按同一进度展开/收起且内容右对齐（占位变化只吃左侧 weight Spacer，
+ * chip 左缘不随展开左移——左对齐会呈现「从右下飘入」的斜向位移）；chip 按
+ * 自然宽度完整绘制不裁剪（expandHorizontally 的侧边揭幕是遮罩效果）。收尾
+ * （progress 归 0）移除内容，避免零宽占位下的越界命中。
+ */
+@Composable
+private fun FlyInChip(visible: Boolean, content: @Composable () -> Unit) {
+    val progress by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = ChipAnimFloat,
+        label = "activePlanetChip",
+    )
+    // 内容自然宽度（内层 Box 上读，读外层动画占位宽会反馈回环）
+    var naturalWidth by remember { mutableIntStateOf(0) }
+    Box(
+        Modifier
+            .layout { measurable, _ ->
+                val placeable = measurable.measure(Constraints())
+                val width = (naturalWidth * progress).roundToInt()
+                layout(width, placeable.height) {
+                    // x 为负时越界向左绘制（Compose 默认不裁剪）
+                    placeable.placeRelative(width - placeable.width, 0)
+                }
+            }
+            .graphicsLayer {
+                alpha = progress
+                translationY = (1f - progress) * 10.dp.toPx()
+            },
+    ) {
+        if (visible || progress > 0.001f) {
+            Box(Modifier.onGloballyPositioned { if (it.size.width > 0) naturalWidth = it.size.width }) {
+                content()
+            }
+        }
+    }
+}
 
 @Composable
 private fun HeaderZone(
@@ -560,8 +598,6 @@ private fun HeaderZone(
     currentPage: Int,
     onSelectPage: (Int) -> Unit,
 ) {
-    // chip 转场位移 10dp → px（slideIn/Out 的 lambda 无 Density 作用域，组合期换算）
-    val chipShiftPx = with(LocalDensity.current) { 10.dp.roundToPx() }
     Column(
         Modifier
             .fillMaxWidth()
@@ -591,21 +627,11 @@ private fun HeaderZone(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.weight(1f))
-                    // 活跃行星 chip（iOS HomeView.swift:202-228）：出现自下方 10dp 淡入
-                    // 上移、隐藏反向下移淡出（.flyFromPlanetCard :584-598），曲线 easeOut
-                    // 0.28s（.transaction :227）；横向占位同步展开/收起（iOS 布局随
-                    // .animation(:241) 平滑让位，gear 不跳位）。
-                    // 配色对齐 iOS :211/216/217：次级文字 + secondarySystemGroupedBackground
-                    // 胶囊底 + 0.5pt quaternary 描边——不随主题主色变化。
-                    AnimatedVisibility(
-                        visible = !browsingActive && state.tunnelRunning,
-                        enter = fadeIn(ChipAnimFloat) +
-                            slideInVertically(ChipAnimOffset) { chipShiftPx } +
-                            expandHorizontally(ChipAnimSize),
-                        exit = fadeOut(ChipAnimFloat) +
-                            slideOutVertically(ChipAnimOffset) { chipShiftPx } +
-                            shrinkHorizontally(ChipAnimSize),
-                    ) {
+                    // 活跃行星 chip（iOS HomeView.swift:202-228）：出现/隐藏转场见
+                    // [FlyInChip]。配色对齐 iOS :211/216/217：次级文字 +
+                    // secondarySystemGroupedBackground 胶囊底 + 0.5pt quaternary 描边
+                    // ——不随主题主色变化。
+                    FlyInChip(visible = !browsingActive && state.tunnelRunning) {
                         val activeName = state.planets.firstOrNull { it.id == state.activePlanetId }
                             ?.displayNameRes()
                             ?: stringResource(R.string.planet_official_name)
