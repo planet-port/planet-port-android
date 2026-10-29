@@ -433,8 +433,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 planetId,
             )
         }
-        // 空跑收敛：无剩余启用网络则停隧道（stopVPNIfNoActiveNetworks 同构）
+        // 空跑收敛：无剩余启用网络则停隧道（stopVPNIfNoActiveNetworks 同构）。
+        // 停机前先收敛 UI（同 deactivate：防 Stopped 边沿先于 reload 到达，
+        // 角标在旧表窗口误显「连接中」）
         if (store.readActiveNetworks().none { it.lastActivated }) {
+            reload()
             TunnelController.stop(appContext)
         }
     }
@@ -518,6 +521,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // 停隧道判定只锚 planetId==activePlanetId（iOS 19f7681：不再叠加
         // selectedPlanetId——滑页过半时选中态先行变化，叠加判定会漏停隧道）
         if (planetId == store.activePlanetId() && updated.none { it.lastActivated }) {
+            // 停机前先收敛 UI：planetNetworks 走 configChanges→reload 异步链，若
+            // Stopped 边沿先到，角标会在「未跑+旧表仍有启用网络」窗口误显「连接中」
+            //（iOS planetNetworks 主线程同步更新无此窗口，本显式 reload 即等价写序）
+            reload()
             TunnelController.stop(appContext)
         }
     }
@@ -903,8 +910,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         // 空跑收敛（iOS 19f7681 stopVPNIfNoActiveNetworks）：冲突断开可能清空
-        // 活跃行星的全部启用网络，隧道不得无网络空跑
+        // 活跃行星的全部启用网络，隧道不得无网络空跑。停机前先收敛 UI
+        //（同 deactivate：防 Stopped 边沿先于 reload 到达误显「连接中」角标）
         if (store.readActiveNetworks().none { it.lastActivated }) {
+            reload()
             TunnelController.stop(appContext)
         }
     }
