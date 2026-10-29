@@ -81,7 +81,11 @@ def main():
         install.kill()
         print("TIMEOUT: install 未在 300s 内完成")
         sys.exit(1)
-    print(install.communicate(timeout=60)[0].strip())
+    out = install.communicate(timeout=60)[0].strip()
+    print(out)
+    if install.returncode == 0:
+        # 装完自动启动 app（装机即验，省一步手动点开）
+        sh("shell", "am", "start", "-n", "cn.imgozi.a.planetport/cn.imgozi.planetport.ui.MainActivity")
     sys.exit(install.returncode)
 
 
