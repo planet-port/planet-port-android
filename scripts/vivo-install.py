@@ -3,8 +3,8 @@
 
 用法: vivo-install.py <serial> <apk路径>
 原理: adb install 在后台跑，轮询 uiautomator dump 当前弹窗，
-      依次点掉 vivo 安装链路的四层确认：
-      勾协议 CheckBox →「安装」→「继续安装」→「仍要安装」→「完成/打开」。
+      依次点掉 vivo 安装链路的确认层：
+      勾协议 CheckBox →「安装」→「继续安装」→「仍要安装」→「完成」。
       每轮只点一个目标（同一弹窗多目标连点易误触），直至 install 进程退出。
 """
 import re
@@ -14,7 +14,7 @@ import time
 
 SERIAL, APK = sys.argv[1], sys.argv[2]
 # 按链路顺序排列，同屏出现多个时点链路最靠前的
-BUTTONS = ["安装", "继续安装", "仍要安装", "完成", "打开"]
+BUTTONS = ["安装", "继续安装", "仍要安装", "完成"]
 DEV = ["adb", "-s", SERIAL]
 
 
@@ -24,8 +24,7 @@ def sh(*args, timeout=15):
 
 def dump():
     sh("shell", "uiautomator", "dump", "/sdcard/ui.xml", timeout=10)
-    r = sh("shell", "cat", "/sdcard/ui.xml", timeout=10)
-    return r.stdout
+    return sh("shell", "cat", "/sdcard/ui.xml", timeout=10).stdout
 
 
 def bounds_center(b):
@@ -38,33 +37,27 @@ def bounds_center(b):
     return (x1 + x2) // 2, (y1 + y2) // 2
 
 
-def parse(xml):
-    """返回 (未勾选CheckBox中心, 本屏应点的按钮中心)。"""
-    checkbox = None
+def node_attr(node, name):
+    m = re.search(rf'{name}="([^"]*)"', node)
+    return m.group(1) if m else None
+
+
+def find_target(xml):
+    """返回本屏应点的坐标：未勾选 CheckBox 优先（不勾选直接点安装无效），
+    否则按链路顺序找第一个在屏按钮。点文本/控件节点中心即可——按钮本体
+    未标 clickable 时父容器接管点击，同样生效。"""
     for node in re.findall(r"<node[^>]*/>", xml):
-        cls = re.search(r'class="([^"]*)"', node)
-        checked = re.search(r'checked="([^"]*)"', node)
-        b = re.search(r'bounds="([^"]*)"', node)
-        if cls and "CheckBox" in cls.group(1) and checked and checked.group(1) == "false":
-            c = bounds_center(b.group(1)) if b else None
+        if "CheckBox" in (node_attr(node, "class") or "") and node_attr(node, "checked") == "false":
+            c = bounds_center(node_attr(node, "bounds") or "")
             if c:
-                checkbox = c
-                break
-    button = None
+                return c
     for want in BUTTONS:
         for node in re.findall(r"<node[^>]*/>", xml):
-            t = re.search(r'text="([^"]*)"', node)
-            clickable = re.search(r'clickable="([^"]*)"', node)
-            b = re.search(r'bounds="([^"]*)"', node)
-            if t and t.group(1) == want and b:
-                # 按钮本体不可点时点其中心同样有效（父容器接管点击）
-                c = bounds_center(b.group(1))
-                if c and (not clickable or clickable.group(1) == "true" or want in ("安装", "继续安装")):
-                    button = c
-                    break
-        if button:
-            break
-    return checkbox, button
+            if node_attr(node, "text") == want:
+                c = bounds_center(node_attr(node, "bounds") or "")
+                if c:
+                    return c
+    return None
 
 
 def main():
@@ -79,19 +72,16 @@ def main():
         except Exception:
             time.sleep(1)
             continue
-        checkbox, button = parse(xml)
-        # 勾选框优先：不勾选直接点安装无效
-        target = checkbox or button
+        target = find_target(xml)
         if target and time.time() - last_action > 0.8:
             sh("shell", "input", "tap", str(target[0]), str(target[1]))
             last_action = time.time()
         time.sleep(1.2)
-    out = install.communicate(timeout=60)[0] if install.poll() is not None else ""
     if install.poll() is None:
         install.kill()
         print("TIMEOUT: install 未在 300s 内完成")
         sys.exit(1)
-    print(out.strip())
+    print(install.communicate(timeout=60)[0].strip())
     sys.exit(install.returncode)
 
 
