@@ -16,7 +16,7 @@ const val CONFLICT_TIMEOUT = "timeout"
  * 实际阈值取全局设置 connectTimeoutSec（[CONNECT_TIMEOUT_MIN_SEC]..
  * [CONNECT_TIMEOUT_MAX_SEC] 秒），此处仅为缺省引用值。
  */
-const val CONNECT_TIMEOUT_MS = 30_000L
+const val CONNECT_TIMEOUT_MS = 45_000L
 
 /** 连接超时可配置下限（秒）。 */
 const val CONNECT_TIMEOUT_MIN_SEC = 10
@@ -28,8 +28,8 @@ const val CONNECT_TIMEOUT_MAX_SEC = 600
 fun connectTimeoutMsOf(sec: Int): Long =
     sec.coerceIn(CONNECT_TIMEOUT_MIN_SEC, CONNECT_TIMEOUT_MAX_SEC) * 1_000L
 
-/** 超时确认后到重启核心的重试间隔：给间歇性网络故障留恢复窗口（iOS 同构）。 */
-const val CONNECT_RETRY_DELAY_MS = 120_000L
+/** 超时确认后到重启核心的重试间隔（10 秒快速重启，原 120s 等待窗口过长）。 */
+const val CONNECT_RETRY_DELAY_MS = 10_000L
 
 /**
  * 最大重试次数：超时后等 [CONNECT_RETRY_DELAY_MS] 重启核心重建 UDP 流（新源
