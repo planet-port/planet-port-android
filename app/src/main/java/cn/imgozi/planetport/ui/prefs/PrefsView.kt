@@ -109,6 +109,9 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
     val node by vm.nodeStatus.collectAsState()
     val coreVersion by vm.coreVersion.collectAsState()
 
+    // 构建信息行当前显示 hash（false 显示时间）
+    var buildInfoShowsHash by remember { mutableStateOf(false) }
+
     // 背景图在场判定（走查修复）：以 store 内存位图为单一事实源（对齐 iOS
     // app.backgroundImage != nil 的「图本体在场」语义），AppPrefs.backgroundImage
     // 布尔仅作进入首帧的回显兜底（store 尚未 refresh 时防视差行闪灰）。
@@ -292,34 +295,29 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
             ) {
                 SelectionContainer {
                     FormRow(
-                        title = "ZeroTier Core",
-                        value = coreVersion.takeIf { it.isNotBlank() }
-                            ?: stringResource(R.string.common_unknown),
-                    )
-                }
-                SelectionContainer {
-                    FormRow(
                         title = stringResource(R.string.prefs_about_version),
                         value = vm.appVersion,
                     )
                 }
                 SelectionContainer {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        Text(
-                            stringResource(R.string.prefs_about_build),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        Spacer(Modifier.weight(1f).padding(start = 12.dp))
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(BuildInfo.time, style = PlanetFonts.MonoBody)
-                            Text(BuildInfo.revision, style = PlanetFonts.MonoBody)
-                        }
-                    }
+                    // 构建信息行（iOS buildInfoRow 同构）：默认显构建时间，点击
+                    // 切换为 git hash（dirty 标记未提交改动）
+                    FormRow(
+                        title = stringResource(R.string.prefs_about_build),
+                        value = if (buildInfoShowsHash) {
+                            BuildInfo.hash + if (BuildInfo.dirty) " [dirty]" else ""
+                        } else {
+                            BuildInfo.time
+                        },
+                        modifier = Modifier.clickable { buildInfoShowsHash = !buildInfoShowsHash },
+                    )
+                }
+                SelectionContainer {
+                    FormRow(
+                        title = "ZeroTier Core",
+                        value = coreVersion.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.common_unknown),
+                    )
                 }
             }
 

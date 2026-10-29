@@ -69,31 +69,33 @@ dependencies {
 }
 
 // 构建信息（iOS project.yml preBuildScripts「生成构建信息」等价）：
-// 每次构建生成构建时间 + git describe，关于页展示，用于确认手机上安装的
-// 包对应哪次构建。生成文件不入库（.gitignore）。
+// 每次构建生成构建时间 + git 短 hash + dirty 标记，关于页展示（默认显时间、
+// 点击切换显 hash），用于确认手机上安装的包对应哪次构建。生成文件不入库
+//（.gitignore）。
 val generateBuildInfo by tasks.registering {
     outputs.upToDateWhen { false }
     val genDir = file("src/main/java/cn/imgozi/planetport/Generated")
     doLast {
         genDir.mkdirs()
-        // tag 优先（git describe），无 tag 回退短 hash；dirty 标记未提交改动。
-        // git 非零退出不抛异常，必须按退出码判定，否则错误文本会被当成 revision
-        val rev = runCatching {
-            val p = ProcessBuilder("git", "describe", "--tags", "--always", "--dirty=+dirty")
-                .directory(rootDir)
-                .start()
-            val out = p.inputStream.bufferedReader().readText().trim()
-            p.waitFor()
-            if (p.exitValue() == 0 && out.isNotEmpty()) out else "unknown"
-        }.getOrNull() ?: "unknown"
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())
+        fun git(vararg args: String): String =
+            runCatching {
+                val p = ProcessBuilder("git", *args).directory(rootDir).start()
+                val out = p.inputStream.bufferedReader().readText().trim()
+                p.waitFor()
+                if (p.exitValue() == 0) out else ""
+            }.getOrDefault("")
+        // 短 hash 8 位（iOS rev-parse --short=8 同构）；工作区有未提交改动标 dirty
+        val hash = git("rev-parse", "--short=8", "HEAD").ifEmpty { "unknown" }
+        val dirty = git("status", "--porcelain").isNotEmpty()
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
         File(genDir, "BuildInfo.kt").writeText(
             "// 构建脚本自动生成，勿手改（app/build.gradle.kts generateBuildInfo）。\n" +
                 "package cn.imgozi.planetport\n" +
                 "\n" +
                 "object BuildInfo {\n" +
                 "    const val time = \"$now\"\n" +
-                "    const val revision = \"$rev\"\n" +
+                "    const val hash = \"$hash\"\n" +
+                "    const val dirty = $dirty\n" +
                 "}\n",
         )
     }
