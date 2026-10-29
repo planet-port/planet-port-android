@@ -54,6 +54,14 @@ object TunnelStateBus {
     val nodeStatus: StateFlow<NodeStatusInfo?> = _nodeStatus.asStateFlow()
 
     /**
+     * 物理网络可用（NetWatch 路径表透出，对齐 iOS StatusStore.pathSatisfied）：
+     * 飞行模式/断网即时为 false，卡片显示「无网络」；不影响开关与 VPN 状态。
+     * 缺省 true（隧道未注册监听时不误显），停机复位防跨会话残留。
+     */
+    private val _pathSatisfied = MutableStateFlow(true)
+    val pathSatisfied: StateFlow<Boolean> = _pathSatisfied.asStateFlow()
+
+    /**
      * Core 版本缓存（编译期随核心二进制定死的静态常量，停机不清——对齐 iOS
      * StatusStore.coreVersion：核心启动时写入一次，stopTunnel 不清除，停机后
      * UI 仍显示最后已知版本）。随每份节点快照灌入（见 setNodeStatus）。
@@ -93,6 +101,19 @@ object TunnelStateBus {
     val eventLog: StateFlow<String> = _eventLog.asStateFlow()
 
     fun setTunnelState(state: TunnelState) { _tunnelState.value = state }
+
+    /** 物理路径可用性更新（NetWatch 候选表变化时即时调用，对齐 iOS 逐次透出） */
+    fun setPathSatisfied(satisfied: Boolean) { _pathSatisfied.value = satisfied }
+
+    /**
+     * 停止指令在途：STOP intent 已下发、尚未落地为终态（intent 队列异步，StateFlow
+     * 的 tunnelState 仍显示存活态）。供快速路径判定排除在途停止——关网络后立即
+     * 重开时，isRunning 仍 true 会误走「只写配置」路径，无人拉起隧道、卡片卡
+     * 「建立隧道」（iOS performStart 等待 .disconnecting 的对应缺口）。
+     */
+    @Volatile
+    var stopInFlight = false
+
     /** 置 null（停机/启动失败）只清 nodeStatus，coreVersion 缓存留存供 UI 展示 */
     fun setNodeStatus(info: NodeStatusInfo?) {
         info?.coreVersion?.takeIf { it.isNotBlank() }?.let { _coreVersion.value = it }

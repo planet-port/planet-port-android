@@ -71,6 +71,7 @@ fun PlanetCardView(
     moonCount: Int,
     showBadge: Boolean,
     badgeInUse: Boolean,
+    badgeConnecting: Boolean = false,
     modifier: Modifier = Modifier,
     isPreview: Boolean = false,
     interactionSource: MutableInteractionSource? = null,
@@ -125,6 +126,7 @@ fun PlanetCardView(
             if (showBadge && !isPreview) {
                 StatusBadge(
                     badgeInUse,
+                    badgeConnecting,
                     Modifier
                         .align(Alignment.TopEnd)
                         .offset(x = 10.dp, y = (-6).dp),
@@ -178,11 +180,12 @@ private fun CustomPlanetTile(planet: PlanetProfile) {
 }
 
 /**
- * 骑缝角标（iOS :125-137）：VPN 在跑 =「使用中」（主色实底白字），
- * 未跑 =「上次使用」（卡片底 secondary 字 + 0.5dp 发丝描边）。
+ * 骑缝角标（iOS :125-137）三态：VPN 在跑 =「使用中」（主色实底白字）；
+ * 隧道未跑但活跃行星已有启用网络（拉起中，卡片「建立隧道」阶段）=「连接中」
+ * （orange 实底白字）；否则「上次使用」（卡片底 secondary 字 + 0.5dp 发丝描边）。
  */
 @Composable
-private fun StatusBadge(inUse: Boolean, modifier: Modifier = Modifier) {
+private fun StatusBadge(inUse: Boolean, connecting: Boolean, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(50)
     // 描边用色在组合期取值（drawBehind 内非 composable 上下文）
     val hairline = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
@@ -190,14 +193,14 @@ private fun StatusBadge(inUse: Boolean, modifier: Modifier = Modifier) {
         modifier = modifier
             .clip(shape)
             .background(
-                if (inUse) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainer
+                when {
+                    inUse -> MaterialTheme.colorScheme.primary
+                    connecting -> Color(0xFFFF9500)
+                    else -> MaterialTheme.colorScheme.surfaceContainer
                 },
             )
             .then(
-                if (inUse) {
+                if (inUse || connecting) {
                     Modifier
                 } else {
                     Modifier.drawBehind {
@@ -212,9 +215,15 @@ private fun StatusBadge(inUse: Boolean, modifier: Modifier = Modifier) {
             .padding(horizontal = 7.dp, vertical = 3.dp),
     ) {
         Text(
-            stringResource(if (inUse) R.string.planetcard_inUse else R.string.planetcard_lastUsed),
+            stringResource(
+                when {
+                    inUse -> R.string.planetcard_inUse
+                    connecting -> R.string.planetcard_connecting
+                    else -> R.string.planetcard_lastUsed
+                },
+            ),
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-            color = if (inUse) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (inUse || connecting) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

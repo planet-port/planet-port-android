@@ -262,6 +262,8 @@
     <string name="planet_share_qr_title">QR Code Sharing</string>
     <string name="planet_title">Planet</string>
     <string name="planetcard_inUse">In Use</string>
+
+    <string name="planetcard_connecting">Connecting</string>
     <string name="planetcard_lastUsed">Last Used</string>
     <string name="planetcard_moonCount">Moons × %1$d</string>
     <string name="prefs_about_sectionHeader">About</string>
@@ -295,6 +297,8 @@
     <string name="qr_title">Scan to Join</string>
     <string name="status_disconnected">Not Connected</string>
     <string name="status_establishing">Establishing Tunnel</string>
+
+    <string name="status_noNetwork">No Network</string>
     <string name="status_pendingAuth">Pending Approval</string>
     <string name="status_waitingNode">Waiting for Node</string>
     <string name="theme_preset_bamboo">Bamboo Green</string>

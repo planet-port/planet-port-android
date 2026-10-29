@@ -151,6 +151,8 @@ fun NetworkDetailView(
             entry = entry,
             snapshot = ui.snapshot,
             nodeOnline = homeState.nodeOnline,
+            vpnRunning = homeState.tunnelRunning,
+            pathSatisfied = homeState.pathSatisfied,
             connectStartedAtMs = homeState.connectStartedAtMs,
             connectRetryCount = homeState.connectRetryCount,
             connectNowMs = connectNowMs,
@@ -174,6 +176,8 @@ private fun NetworkDetailContent(
     entry: NetworkEntry,
     snapshot: NetworkSnapshot?,
     nodeOnline: Boolean,
+    vpnRunning: Boolean,
+    pathSatisfied: Boolean,
     connectStartedAtMs: Long?,
     connectRetryCount: Int,
     connectNowMs: Long,
@@ -212,9 +216,13 @@ private fun NetworkDetailContent(
             FormRow(
                 stringResource(R.string.common_status),
                 snapshot?.let {
-                    // REQUESTING_CONFIGURATION 与卡片一致按 online 分段
-                    //（连接服务器/请求网络配置/连接超时，iOS 897245a）
-                    if (it.statusCode == 0) {
+                    // 物理断网（飞行模式）与卡片一致显示「无网络」（同样以隧道在跑
+                    // 为前提，iOS 55945a7）
+                    if (vpnRunning && !pathSatisfied) {
+                        stringResource(R.string.status_noNetwork)
+                    } else if (it.statusCode == 0) {
+                        // REQUESTING_CONFIGURATION 与卡片一致按 online 分段
+                        //（连接服务器/请求网络配置/连接超时，iOS 897245a）
                         val phase = connectPhaseLabel(
                             nodeOnline, connectStartedAtMs, connectNowMs, connectRetryCount, connectTimeoutMs,
                         )

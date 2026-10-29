@@ -149,8 +149,20 @@ internal object NetWatch {
 
     /** 表实际变化才重置 1.5s 防抖计时（能力微调如信号强度更新不重置） */
     private fun scheduleDebounce() {
+        exposeSatisfied()
         mainHandler.removeCallbacks(fireDebounced)
         mainHandler.postDelayed(fireDebounced, DEBOUNCE_MS)
+    }
+
+    /**
+     * 物理路径可用性即时透出（对齐 iOS 55945a7：NWPathMonitor 每次回调写
+     * StatusStore.pathSatisfied，App 即时显示「无网络」，不等核心 30s 超时的
+     * OFFLINE 事件）。satisfied = 候选表非空，与防抖/重启判定无关；回调线程
+     * 写 StateFlow（CAS 线程安全），值无变化不触发订阅方。
+     */
+    private fun exposeSatisfied() {
+        val satisfied = synchronized(this) { candidates.isNotEmpty() }
+        TunnelStateBus.setPathSatisfied(satisfied)
     }
 
     /** 主线程、防抖到期执行：候选表最强者求值，与基线比较，regained/switched 才触发 */

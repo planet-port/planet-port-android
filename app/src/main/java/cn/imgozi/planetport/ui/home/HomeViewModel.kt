@@ -73,6 +73,8 @@ data class HomeUiState(
     val tunnelRunning: Boolean = false,
     /** 核心是否已连通行星根服务器（VPN 级共享状态，iOS AppState.online 同构）。 */
     val nodeOnline: Boolean = false,
+    /** 物理网络可用（NetWatch 透出；飞行模式/断网即时 false，iOS pathSatisfied 同构）。 */
+    val pathSatisfied: Boolean = true,
     /**
      * 连接周期起点（毫秒 epoch）：vpnRunning 且未 online 且有启用网络时起算，
      * online 达成或隧道停止即清空（iOS AppState.connectStartedAt 同构）。
@@ -170,6 +172,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch {
+            TunnelStateBus.pathSatisfied.collect { satisfied ->
+                _state.update { it.copy(pathSatisfied = satisfied) }
+            }
+        }
+        viewModelScope.launch {
             TunnelStateBus.networkStatuses.collect {
                 _state.update { s -> s.copy(networkStatuses = it) }
                 checkAlertableStatus(it)
@@ -237,6 +244,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun onTunnelState(st: TunnelState) {
+        // 用户主动停止（停止代际变化）：连接周期终结，重试状态清零——iOS「VPN
+        // 停止即清零」的等价锚定。不在评估的 tunnelRunning 边沿上判：重试重启
+        // 同样制造 Stopped/Idle 边沿，两者无法在边沿上区分，只能锚定用户动作
+        // （stop 下发时自增代际，restartIfRunning 不自增）
+        if (lastStopGeneration != TunnelController.stopGeneration) {
+            lastStopGeneration = TunnelController.stopGeneration
+            connectCycleActive = false
+            _state.update { it.copy(connectRetryCount = 0) }
+        }
         _state.update {
             it.copy(
                 tunnelRunning = st is TunnelState.Running ||
@@ -284,6 +300,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private var connectRetryJob: Job? = null
 
     /**
+     * 重试周期进行中：第一次超时确认（[scheduleConnectRetry]）置位，online 达成 /
+     * 用户主动停止（停止代际变化）/ 启用网络清空 / 判死 / 切行星时终结。周期内
+     * 计数跨核心重启的停启边沿（Stopped/Idle/Starting）保留——iOS restartCore 不
+     * 停 VPN 会话、无这些边沿，Android 的等价语义即完全不理会它们：清零只锚定
+     * 低频且语义明确的周期终结事件，不在高频隧道状态边沿上判定（stopSelf 竞态
+     * 等服务重建形态的边沿组合不可枚举，边沿判清零必漏）。
+     */
+    private var connectCycleActive = false
+
+    /** 已消化的停止代际（[TunnelController.stop] 自增）：变化 = 用户主动停止。 */
+    private var lastStopGeneration = TunnelController.stopGeneration
+
+    /**
      * 连接计时的起止判定：tunnelRunning 且未 online 且活跃行星有启用网络时起算；
      * online 达成或隧道停止即取消。超时到点走 [disconnectOnConnectTimeout]——
      * Android 与核心同进程（TunnelStateBus 直读核心回调线程），无 iOS Darwin
@@ -291,14 +320,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun evaluateConnectTimer() {
         viewModelScope.launch {
-            // 重试等待期不起算新窗口：等 CONNECT_RETRY_DELAY_MS 重启核心后再由
-            // 隧道状态流（nodeOnline 变化）重新起算
+            // 重试等待期不起算新窗口：等 CONNECT_RETRY_DELAY_MS 重启核心后，
+            // 由 Running 边沿的评估重新起算（新窗口经 connectCycleActive 延续计数）
             if (connectRetryJob?.isActive == true) return@launch
             val s = _state.value
-            val shouldRun = s.tunnelRunning && !s.nodeOnline &&
+            val hasActiveNetworks =
                 StoreRepo.store.readActiveNetworks().any { it.lastActivated }
+            val shouldRun = s.tunnelRunning && !s.nodeOnline && hasActiveNetworks
             if (shouldRun) {
                 if (_state.value.connectStartedAtMs != null) return@launch
+                // 重试周期进行中（上一窗口超时进重试、核心重启后重新起算）→ 计数
+                // 延续；周期已终结的全新起点 → 兜底归零
+                if (!connectCycleActive) {
+                    _state.update { it.copy(connectRetryCount = 0) }
+                }
                 _state.update { it.copy(connectStartedAtMs = System.currentTimeMillis()) }
                 // 新连接周期开始：上一轮的超时断开记录随之失效（超时是整轮共享事件，
                 // 不该在新周期里继续显示在未参与连接的网络上；冲突记录单网络事件，保留）
@@ -311,12 +346,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     disconnectOnConnectTimeout()
                 }
             } else {
-                // online 达成 / 隧道停止 / 全部断开：周期结束，重试状态一并清零
+                // online 达成 / 隧道停止 / 全部断开：取消计时窗口。计数清零只锚定
+                // 其中的周期终结信号——online（周期成功）或启用网络清空（全断/判死
+                // 后的空跑）；tunnelRunning=false 且仍有启用网络的停机不清：那既是
+                // 重试重启的中间态，也是用户主动停止的中间态，后者由停止代际在
+                // onTunnelState 终结，此处无法也无需区分
                 connectTimeoutJob?.cancel()
                 connectTimeoutJob = null
                 connectRetryJob?.cancel()
                 connectRetryJob = null
-                _state.update { it.copy(connectStartedAtMs = null, connectRetryCount = 0) }
+                _state.update { it.copy(connectStartedAtMs = null) }
+                if (s.nodeOnline || !hasActiveNetworks) {
+                    connectCycleActive = false
+                    _state.update { it.copy(connectRetryCount = 0) }
+                }
             }
         }
     }
@@ -353,8 +396,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // nodeOnline 现场复核（终审 I-1 同族竞态）：_state 快照可能落后——核心恰在
         // 超时到点前达成 online 而 nodeStatus collector 尚未调度时，快照仍是
         // false，会把刚上线的节点误判超时并断开全部启用网络
-        if (!s.tunnelRunning || s.nodeOnline) return
+        if (s.nodeOnline) return
         if (TunnelStateBus.nodeStatus.value?.online == true) return
+        // 停启中间态到期的假窗口（重试重启间隙起算）：作废起点等 Running 边沿
+        // 重新起算——不清 startedAt 会让新窗口被残留起点拒绝、链路卡死
+        if (!s.tunnelRunning) {
+            connectTimeoutJob = null
+            _state.update { it.copy(connectStartedAtMs = null) }
+            return
+        }
         // 只置空引用，不 cancel：本函数正是由该 Job 执行，cancel 自身会让
         // 下一个挂起点（readNetworks）抛 CancellationException，静默吞掉后续写盘
         connectTimeoutJob = null
@@ -364,6 +414,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             scheduleConnectRetry()
             return
         }
+        // 判死：周期终结（后续停隧道的代际变化会再清一次，幂等无害）
+        connectCycleActive = false
         _state.update { it.copy(connectRetryCount = 0) }
         val store = StoreRepo.store
         val planetId = store.activePlanetId()
@@ -392,8 +444,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * 身份与配置，隧道侧恢复 join；新源端口重建 UDP 流，间歇性清洗可赶上放行
      * 窗口）。等待期内 [evaluateConnectTimer] 不起算新窗口，重启后 nodeOnline
      * 转 false 的状态流到达时重新起算（iOS scheduleConnectRetry 同构）。
+     * 此处置位 [connectCycleActive]：随后的停启边沿流（Stopped/Idle/Starting/
+     * Running）由评估经该标记一律延续计数，不逐边沿判定清零。
      */
     private fun scheduleConnectRetry() {
+        connectCycleActive = true
         _state.update { it.copy(connectRetryCount = it.connectRetryCount + 1) }
         connectTimeoutJob?.cancel()
         connectTimeoutJob = null
@@ -479,15 +534,25 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // applyPlanetAndStartVPN(planetId) 同构）：不重读 selectedPlanetId——
         // 滑页竞态下选中态先行变化，以 selected 应用会激活错行星
         val wasRunning = TunnelController.isRunning
-        // 快速路径=网络所属行星就是隧道行星且隧道在跑（iOS 同构）：writeNetworks
-        // 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈不重启
-        val fastPath = planetId == StoreRepo.store.activePlanetId() && wasRunning
+        // 快速路径=网络所属行星就是隧道行星且隧道在跑且无在途停止（iOS 同构）：
+        // writeNetworks 已发变更，隧道差分 join/leave，仅摆 600ms 加载圈不重启。
+        // 排除在途停止：关网络后立即重开时 STOP intent 尚未落地、isRunning 仍
+        // true，误走快速路径会无人拉起隧道，卡片卡「建立隧道」
+        val fastPath = planetId == StoreRepo.store.activePlanetId() &&
+            wasRunning && !TunnelStateBus.stopInFlight
         _pending.value = _pending.value + entry.networkId
         if (fastPath) {
             // 给隧道一个响应窗口，避免开关上的加载圈一闪而过（iOS 600ms 同构）
             delay(600)
             clearPending(entry.networkId)
             return
+        }
+        if (TunnelStateBus.stopInFlight) {
+            // 停止在途：等停机落地再走起停编排（iOS performStart 等待上一会话
+            // 拆除的同构），有界等待兜底进程级异常
+            withTimeoutOrNull(15_000) {
+                while (TunnelStateBus.stopInFlight) delay(100)
+            }
         }
         applySelectedPlanetAndStart(planetId)
         waitTunnelSettled(requireLeaveRunning = wasRunning)
@@ -629,14 +694,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             // 总线清空（对齐 iOS b4fb534：activePlanetId 已指向新行星，遗留状态
-            // 不再有所属行星可用）——重启后由新会话重写
+            // 不再有所属行星可用）——重启后由新会话重写。configs（地址/详情页快照）
+            // 一并清：对齐 iOS applyPlanetAndStartVPN 清 networkConfigs，否则停启
+            // 窗口期新行星页面读到旧行星会话的地址与配置（同 nwid 跨行星直接串显）
             TunnelStateBus.clearNetworkStatuses()
             TunnelStateBus.clearNetworkConflicts()
+            TunnelStateBus.clearNetworkConfigs()
             TunnelStateBus.setNodeStatus(null)
-            // 核心随行星重建，旧连接周期作废（新周期由新会话的隧道边沿重新起算）
+            // 核心随行星重建，旧连接周期作废（新周期由新会话的隧道边沿重新起算）。
+            // 显式终结而非靠停启边沿：切行星落盘后新行星网络已启用，停机边沿的
+            // 评估无法把该窗口与重试中间态区分，计数会跨行星串轮
             connectTimeoutJob?.cancel()
             connectTimeoutJob = null
-            _state.update { it.copy(connectStartedAtMs = null) }
+            connectCycleActive = false
+            _state.update { it.copy(connectStartedAtMs = null, connectRetryCount = 0) }
         }
         return planetChanged
     }

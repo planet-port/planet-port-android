@@ -262,6 +262,8 @@
     <string name="planet_share_qr_title">二维码分享</string>
     <string name="planet_title">行星</string>
     <string name="planetcard_inUse">使用中</string>
+
+    <string name="planetcard_connecting">连接中</string>
     <string name="planetcard_lastUsed">上次使用</string>
     <string name="planetcard_moonCount">卫星 x %1$d</string>
     <string name="prefs_about_sectionHeader">关于</string>
@@ -295,6 +297,8 @@
     <string name="qr_title">扫码加入</string>
     <string name="status_disconnected">未连接</string>
     <string name="status_establishing">建立隧道</string>
+
+    <string name="status_noNetwork">无网络</string>
     <string name="status_pendingAuth">待授权</string>
     <string name="status_waitingNode">等待节点响应</string>
     <string name="theme_preset_bamboo">竹青</string>

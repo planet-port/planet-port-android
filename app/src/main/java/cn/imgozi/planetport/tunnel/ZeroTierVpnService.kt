@@ -200,6 +200,7 @@ internal class ZeroTierVpnService : VpnService() {
         // 本路径通知 owner，置态后无需 collector 再推
         scope?.cancel()
         scope = null
+        TunnelStateBus.stopInFlight = false
         TunnelStateBus.setTunnelState(TunnelState.Stopped())
         // 先摘路径监听再拆链：teardown 期间的路径回调不得再触发重连（幂等，未注册时无害；
         // 重连编排的等待协程已捕获计划，不受此处注销影响）
@@ -215,6 +216,8 @@ internal class ZeroTierVpnService : VpnService() {
         runtime?.shutdown()
         runtime = null
         TunnelStateBus.setNodeStatus(null)
+        // 物理路径态复位（对齐 iOS 55945a7 stopTunnel）：防跨会话残留误显「无网络」
+        TunnelStateBus.setPathSatisfied(true)
         TunnelStateBus.clearNetworkStatuses()
         stopForegroundCompat()
         stopSelf()
@@ -279,6 +282,7 @@ internal class ZeroTierVpnService : VpnService() {
         // 兜底注销（stopTunnel 已覆盖正常/撤销路径）：系统直接销毁服务时不残留
         // 持服务引用的路径回调
         NetWatch.stop()
+        TunnelStateBus.stopInFlight = false
         TunnelStateBus.setTunnelState(TunnelState.Idle)
         super.onDestroy()
     }

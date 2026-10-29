@@ -406,9 +406,12 @@ private fun PlanetPage(
                 nodeId = state.planetNodeIds[planet.id] ?: "-",
                 moonCount = state.moonCounts[planet.id] ?: 0,
                 // iOS :42「isActive && hasActivatedPlanet」：角标只挂隧道绑定行星，
-                // 其余行星（含刚添加未激活的）无角标
+                // 其余行星（含刚添加未激活的）无角标。三态判定锚定活跃行星
+                //（非选中页），滑页不扰动角标
                 showBadge = planet.id == activeId && state.hasActivatedPlanet,
                 badgeInUse = running,
+                badgeConnecting = !running &&
+                    state.planetNetworks[activeId].orEmpty().any { it.lastActivated },
                 interactionSource = cardSource,
             )
         }
@@ -494,6 +497,7 @@ private fun PlanetPage(
                             hasStatus = isActivePage &&
                                 state.networkStatuses.containsKey(entry.networkId),
                             nodeOnline = state.nodeOnline,
+                            pathSatisfied = state.pathSatisfied,
                             connectStartedAtMs = state.connectStartedAtMs,
                             connectRetryCount = state.connectRetryCount,
                             nowMs = nowMs,

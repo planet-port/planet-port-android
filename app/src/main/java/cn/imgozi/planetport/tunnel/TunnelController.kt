@@ -38,11 +38,14 @@ object TunnelController {
      * 当前代际、START 下发前比对——窗口内用户停止会使代际失效，迟到的 START
      * 据此放弃，防「stop → awaitSettled → start」把用户主动停止顶回。
      * 只在真正下发 STOP 时自增：终态下的幂等 no-op 不作数（用户没有实际干预）。
+     * 另供 UI 侧比对变化识别用户主动停止（HomeViewModel 连接周期终结信号：
+     * restartIfRunning 的停启边沿与之无法区分，清零只能锚定用户动作）。
      * stop 收敛主线程、编排协程在 restartScope（Main.immediate）同线程，无实际
      * 竞态，@Volatile 属保险（与 [reconnectInFlight] 同范式）。
      */
     @Volatile
-    private var stopGeneration = 0
+    var stopGeneration = 0
+        private set
 
     /**
      * 隧道是否存活：Running/Starting/Reconnecting 视为在跑；
@@ -89,6 +92,9 @@ object TunnelController {
             else -> {
                 // 用户主动干预：代际自增使进行中编排窗口的迟到 START 失效
                 stopGeneration++
+                // STOP intent 异步落地，StateFlow 仍显示存活态：标记在途供快速
+                // 路径排除（见 TunnelStateBus.stopInFlight），stopTunnel 收口时清
+                TunnelStateBus.stopInFlight = true
                 ZeroTierVpnService.stop(context.applicationContext)
             }
         }

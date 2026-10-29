@@ -81,9 +81,11 @@ fun ztStatusLabel(code: Int): Int = when (code) {
  *    （共享故障不套「冲突,断开」模板），冲突原因走「<原因>，断开」模板；否则「未连接」
  * 4. `!vpnRunning` → 「建立隧道」橙（断开态判定先于 vpnRunning：自动断开伴随
  *    停隧道，先判 vpnRunning 会把原因吞成「建立隧道」，iOS b4fb534 同序修正）
- * 5. 有实时状态码（[hasStatus]）→ 待授权(2/6) 橙「待授权」；requestingConfiguration(0)
+ * 5. `!pathSatisfied` → 「无网络」橙（物理断网即时显示，优先于核心状态——
+ *    netconf 缓存仍是 ok 会假亮「在线」，iOS 55945a7 同序）
+ * 6. 有实时状态码（[hasStatus]）→ 待授权(2/6) 橙「待授权」；requestingConfiguration(0)
  *    按 online/耗时拆段（[connectPhaseLabelRes]）；ok(1) 绿；其余橙（状态文案）
- * 6. 兜底「等待节点响应」中性
+ * 7. 兜底「等待节点响应」中性
  *
  * 纯函数模型：只产出资源 ID，文案解析在 UI 层（stringResource）。
  *
@@ -96,6 +98,7 @@ fun ztStatusLabel(code: Int): Int = when (code) {
  * @param hasStatus    实时状态是否存在；默认由 [statusCode] 非空推出，保留参数以贴合
  *                     iOS「networkStatuses[nwid] 存在」的判定语义（调用方持有状态表时可用）
  * @param nodeOnline   核心是否已连通行星根服务器（VPN 级共享状态，TunnelStateBus.nodeStatus）
+ * @param pathSatisfied 物理网络可用（NetWatch 透出）；false 时已连接卡片显示「无网络」
  * @param connectStartedAtMs 连接周期起点（vpnRunning 且未 online 时起算，毫秒 epoch）；
  *                     null = 无计时（不判超时，仅显示进行中文案，iOS connectStartedAt 同构）
  * @param nowMs        当前时刻（[rememberConnectNowMs] 供给，驱动超时分段重组）
@@ -111,6 +114,7 @@ fun deriveNetworkCardStatus(
     statusCode: Int?,
     hasStatus: Boolean = statusCode != null,
     nodeOnline: Boolean = true,
+    pathSatisfied: Boolean = true,
     connectStartedAtMs: Long? = null,
     nowMs: Long = 0L,
     connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
@@ -134,6 +138,9 @@ fun deriveNetworkCardStatus(
     }
     if (!vpnRunning) {
         return NetworkCardStatus(R.string.status_establishing, StatusColor.Warn)
+    }
+    if (!pathSatisfied) {
+        return NetworkCardStatus(R.string.status_noNetwork, StatusColor.Warn)
     }
     if (hasStatus && statusCode != null) {
         if (statusCode == 2 || statusCode == 6) {
