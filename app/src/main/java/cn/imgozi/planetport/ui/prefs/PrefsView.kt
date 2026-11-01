@@ -76,8 +76,6 @@ import cn.imgozi.planetport.BuildInfo
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
-import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MAX_SEC
-import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MIN_SEC
 import cn.imgozi.planetport.ui.MainActivity
 import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.form.FormRow
@@ -160,15 +158,6 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                     title = stringResource(R.string.prefs_network_disableIPv6),
                     checked = prefs.disableIpv6,
                     onCheckedChange = vm::setDisableIpv6,
-                )
-                // 连接超时（Android 独有）：步进 5 秒，10..600；改设置即时影响
-                // 下一轮超时窗口（进行中窗口按起算时的值走完）
-                StepperRow(
-                    title = stringResource(R.string.prefs_network_connectTimeout, prefs.connectTimeoutSec),
-                    value = prefs.connectTimeoutSec,
-                    range = CONNECT_TIMEOUT_MIN_SEC..CONNECT_TIMEOUT_MAX_SEC,
-                    step = 5,
-                    onChange = vm::setConnectTimeoutSec,
                 )
                 StepperRow(
                     title = stringResource(R.string.prefs_network_multiConnectLimit, prefs.maxNetworks),

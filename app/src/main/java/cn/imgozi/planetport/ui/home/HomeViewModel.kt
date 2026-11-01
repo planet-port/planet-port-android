@@ -15,10 +15,7 @@ import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
 import cn.imgozi.planetport.ui.CONFLICT_TIMEOUT
-import cn.imgozi.planetport.ui.CONNECT_RETRY_DELAY_MS
-import cn.imgozi.planetport.ui.CONNECT_RETRY_LIMIT
 import cn.imgozi.planetport.ui.CONNECT_TIMEOUT_MS
-import cn.imgozi.planetport.ui.connectTimeoutMsOf
 import cn.imgozi.planetport.ui.ztStatusLabel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -67,26 +64,12 @@ data class HomeUiState(
     val planetNodeIds: Map<String, String> = emptyMap(),
     /** 同时连接软上限（2..6，取 max(2, 偏好值)，iOS HomeView 同构）。 */
     val maxNetworks: Int = 2,
-    /** 连接超时阈值（毫秒，全局设置 connectTimeoutSec 换算；超时判定与分段展示共用）。 */
-    val connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
     /** 隧道在跑（Running/Starting/Reconnecting，对齐 iOS vpnRunning 判定）。 */
     val tunnelRunning: Boolean = false,
     /** 核心是否已连通行星根服务器（VPN 级共享状态，iOS AppState.online 同构）。 */
     val nodeOnline: Boolean = false,
     /** 物理网络可用（NetWatch 透出；飞行模式/断网即时 false，iOS pathSatisfied 同构）。 */
     val pathSatisfied: Boolean = true,
-    /**
-     * 连接周期起点（毫秒 epoch）：vpnRunning 且未 online 且有启用网络时起算，
-     * online 达成或隧道停止即清空（iOS AppState.connectStartedAt 同构）。
-     * 「连接服务器」分段展示与超时判定（[connectTimeoutMs]）的共同起点。
-     */
-    val connectStartedAtMs: Long? = null,
-    /**
-     * 当前连接周期已重试次数（超时确认后重启核心计数，online 达成或周期结束
-     * 即清零，iOS AppState.connectRetryCount 同构）：驱动「连接服务器（重试 N/5）」
-     * 分段文案。
-     */
-    val connectRetryCount: Int = 0,
     /** nwid → ZT 原始状态码（隧道侧契约：文案在 UI 层生成）。 */
     val networkStatuses: Map<String, Int> = emptyMap(),
     /** nwid → 实时冲突原因码 "address"/"subnet"（隧道侧契约：文案在 UI 层生成；空表 = 无冲突）。 */
@@ -238,21 +221,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 moonCounts = moonCounts,
                 planetNodeIds = planets.mapNotNull { p -> p.lastNodeId?.let { id -> p.id to id } }.toMap(),
                 maxNetworks = max(2, prefs.maxNetworks),
-                connectTimeoutMs = connectTimeoutMsOf(prefs.connectTimeoutSec),
             )
         }
     }
 
     private fun onTunnelState(st: TunnelState) {
-        // 用户主动停止（停止代际变化）：连接周期终结，重试状态清零——iOS「VPN
-        // 停止即清零」的等价锚定。不在评估的 tunnelRunning 边沿上判：重试重启
-        // 同样制造 Stopped/Idle 边沿，两者无法在边沿上区分，只能锚定用户动作
-        // （stop 下发时自增代际，restartIfRunning 不自增）
-        if (lastStopGeneration != TunnelController.stopGeneration) {
-            lastStopGeneration = TunnelController.stopGeneration
-            connectCycleActive = false
-            _state.update { it.copy(connectRetryCount = 0) }
-        }
         _state.update {
             it.copy(
                 tunnelRunning = st is TunnelState.Running ||
@@ -291,80 +264,54 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             reason
         }
 
-    // MARK: - 连接计时与超时自动断开（对齐 iOS AppState.evaluateConnectTimer）
+    // MARK: - 连接计时与超时自动重试（对齐 iOS AppState.evaluateConnectTimer）
 
-    /** 连接超时任务（App 侧计时；进程冻结期 delay 顺延，解冻后迟到即补触发）。 */
+    /** 连接超时任务（App 侧计时；进程冻结期 delay 顺延，解冻后迟到即补触发。
+     *  循环仅前台成立：Activity 销毁 → viewModelScope 取消即停摆，隧道侧核心
+     *  自身继续尝试连接，重开 App 由隧道边沿的评估接续开窗）。 */
     private var connectTimeoutJob: Job? = null
 
-    /** 超时确认后的重试等待任务（CONNECT_RETRY_DELAY_MS 后重启核心）。 */
-    private var connectRetryJob: Job? = null
-
     /**
-     * 重试周期进行中：第一次超时确认（[scheduleConnectRetry]）置位，online 达成 /
-     * 用户主动停止（停止代际变化）/ 启用网络清空 / 判死 / 切行星时终结。周期内
-     * 计数跨核心重启的停启边沿（Stopped/Idle/Starting）保留——iOS restartCore 不
-     * 停 VPN 会话、无这些边沿，Android 的等价语义即完全不理会它们：清零只锚定
-     * 低频且语义明确的周期终结事件，不在高频隧道状态边沿上判定（stopSelf 竞态
-     * 等服务重建形态的边沿组合不可枚举，边沿判清零必漏）。
+     * 连接周期起点（毫秒 epoch）：tunnelRunning 且未 online 且有启用网络时起算，
+     * online 达成或隧道停止即清空；超时判定（[CONNECT_TIMEOUT_MS]）的起点
+     * （iOS AppState.connectStartedAt 同构，纯 VM 内部状态，UI 不感知）。
      */
-    private var connectCycleActive = false
-
-    /** 已消化的停止代际（[TunnelController.stop] 自增）：变化 = 用户主动停止。 */
-    private var lastStopGeneration = TunnelController.stopGeneration
+    private var connectStartedAtMs: Long? = null
 
     /**
      * 连接计时的起止判定：tunnelRunning 且未 online 且活跃行星有启用网络时起算；
-     * online 达成或隧道停止即取消。超时到点走 [disconnectOnConnectTimeout]——
+     * online 达成或隧道停止即取消。超时到点走 [retryOnConnectTimeout]——
      * Android 与核心同进程（TunnelStateBus 直读核心回调线程），无 iOS Darwin
-     * 通知送达延迟，无需断开前向隧道复核 online 的竞态防护（b4fb534）。
+     * 通知送达延迟，无需重启前向隧道复核 online 的竞态防护（b4fb534）。
      */
     private fun evaluateConnectTimer() {
         viewModelScope.launch {
-            // 重试等待期不起算新窗口：等 CONNECT_RETRY_DELAY_MS 重启核心后，
-            // 由 Running 边沿的评估重新起算（新窗口经 connectCycleActive 延续计数）
-            if (connectRetryJob?.isActive == true) return@launch
             val s = _state.value
             val hasActiveNetworks =
                 StoreRepo.store.readActiveNetworks().any { it.lastActivated }
             val shouldRun = s.tunnelRunning && !s.nodeOnline && hasActiveNetworks
             if (shouldRun) {
-                if (_state.value.connectStartedAtMs != null) return@launch
-                // 重试周期进行中（上一窗口超时进重试、核心重启后重新起算）→ 计数
-                // 延续；周期已终结的全新起点 → 兜底归零
-                if (!connectCycleActive) {
-                    _state.update { it.copy(connectRetryCount = 0) }
-                }
-                _state.update { it.copy(connectStartedAtMs = System.currentTimeMillis()) }
-                // 新连接周期开始：上一轮的超时断开记录随之失效（超时是整轮共享事件，
+                if (connectStartedAtMs != null) return@launch
+                connectStartedAtMs = System.currentTimeMillis()
+                // 新连接周期开始：上一轮的遗留超时记录随之失效（超时是整轮共享事件，
                 // 不该在新周期里继续显示在未参与连接的网络上；冲突记录单网络事件，保留）
                 clearStaleTimeoutRecords()
                 connectTimeoutJob?.cancel()
                 connectTimeoutJob = launch {
-                    // 阈值取设置页 connectTimeoutSec（每次开窗现读：改设置即时影响
-                    // 下一轮窗口，进行中窗口按起算时的值走完）
-                    delay(connectTimeoutMsOf(StoreRepo.store.readPrefs().connectTimeoutSec))
-                    disconnectOnConnectTimeout()
+                    delay(CONNECT_TIMEOUT_MS)
+                    retryOnConnectTimeout()
                 }
             } else {
-                // online 达成 / 隧道停止 / 全部断开：取消计时窗口。计数清零只锚定
-                // 其中的周期终结信号——online（周期成功）或启用网络清空（全断/判死
-                // 后的空跑）；tunnelRunning=false 且仍有启用网络的停机不清：那既是
-                // 重试重启的中间态，也是用户主动停止的中间态，后者由停止代际在
-                // onTunnelState 终结，此处无法也无需区分
+                // online 达成 / 隧道停止 / 全部断开：周期结束，计时状态清空
                 connectTimeoutJob?.cancel()
                 connectTimeoutJob = null
-                connectRetryJob?.cancel()
-                connectRetryJob = null
-                _state.update { it.copy(connectStartedAtMs = null) }
-                if (s.nodeOnline || !hasActiveNetworks) {
-                    connectCycleActive = false
-                    _state.update { it.copy(connectRetryCount = 0) }
-                }
+                connectStartedAtMs = null
             }
         }
     }
 
-    /** 清除活跃行星上一轮连接周期遗留的超时记录（仅 [CONFLICT_TIMEOUT]，对齐 iOS clearStaleTimeoutRecords）。 */
+    /** 清除活跃行星上一轮连接周期遗留的超时记录（仅 [CONFLICT_TIMEOUT]（旧版本遗留），
+     *  对齐 iOS clearStaleTimeoutRecords）。 */
     private suspend fun clearStaleTimeoutRecords() {
         val store = StoreRepo.store
         val planetId = store.activePlanetId()
@@ -385,81 +332,42 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 连接超时自动断开：核心起跑超过生效阈值（[connectTimeoutMsOf]，全局设置）
-     * 仍未连通行星根服务器，
-     * 判定物理网络故障，当前行星全部启用网络关闭并记录原因 [CONFLICT_TIMEOUT]
-     * （服务器连不上是共享故障，单关一个无意义），隧道随 configChanges 差分 leave；
-     * 无剩余启用网络则停隧道。与冲突自动断开同构。
+     * 连接超时自动重试：核心起跑超过 [CONNECT_TIMEOUT_MS] 仍未连通行星根服务器，
+     * 直接无感重启核心（磁盘持久化身份与配置，隧道侧恢复 join；新源端口重建
+     * UDP 流，间歇性故障可赶上恢复窗口），不限次数直到 online 或用户手动关闭；
+     * 重启经 restartIfRunning 的停启边沿由 evaluateConnectTimer 重新起算下一轮
+     * 窗口，UI 稳态显示「连接服务器」（停启边沿瞬闪「建立隧道/等待节点响应」，
+     * iOS 重启不停会话无此闪烁），无超时/重试提示；代价是 FGS 通知随每轮重启
+     * （≥46s）移除重建一次（对齐 iOS retryOnConnectTimeout）。
      */
-    private suspend fun disconnectOnConnectTimeout() {
+    private suspend fun retryOnConnectTimeout() {
         val s = _state.value
         // nodeOnline 现场复核（终审 I-1 同族竞态）：_state 快照可能落后——核心恰在
         // 超时到点前达成 online 而 nodeStatus collector 尚未调度时，快照仍是
-        // false，会把刚上线的节点误判超时并断开全部启用网络
+        // false，会把刚上线的节点误判超时而无谓重启核心
         if (s.nodeOnline) return
         if (TunnelStateBus.nodeStatus.value?.online == true) return
-        // 停启中间态到期的假窗口（重试重启间隙起算）：作废起点等 Running 边沿
+        // 停启中间态到期的假窗口（重启间隙起算）：作废起点等 Running 边沿
         // 重新起算——不清 startedAt 会让新窗口被残留起点拒绝、链路卡死
         if (!s.tunnelRunning) {
             connectTimeoutJob = null
-            _state.update { it.copy(connectStartedAtMs = null) }
+            connectStartedAtMs = null
+            return
+        }
+        // 在途停止守卫（同 activate 快速路径词汇）：45s 到点的消息可能排在用户
+        // stop 之后、Stopped 边沿之前执行——此刻快照仍显示在跑，无守卫会把用户
+        // 明确停止的隧道顶回（stopGeneration 防的就是同族竞态）。拦下即止，
+        // Stopped 边沿的评估照常收尾，循环终止
+        if (TunnelStateBus.stopInFlight) {
+            connectTimeoutJob = null
+            connectStartedAtMs = null
             return
         }
         // 只置空引用，不 cancel：本函数正是由该 Job 执行，cancel 自身会让
-        // 下一个挂起点（readNetworks）抛 CancellationException，静默吞掉后续写盘
+        // 下一个挂起点抛 CancellationException，静默吞掉后续重启
         connectTimeoutJob = null
-        _state.update { it.copy(connectStartedAtMs = null) }
-        // 重试未满则重启核心再战，累计满 CONNECT_RETRY_LIMIT 才判定物理网络故障
-        if (_state.value.connectRetryCount < CONNECT_RETRY_LIMIT) {
-            scheduleConnectRetry()
-            return
-        }
-        // 判死：周期终结（后续停隧道的代际变化会再清一次，幂等无害）
-        connectCycleActive = false
-        _state.update { it.copy(connectRetryCount = 0) }
-        val store = StoreRepo.store
-        val planetId = store.activePlanetId()
-        val networks = store.readNetworks(planetId)
-        if (networks.none { it.lastActivated }) return
-        storeWrite("writeNetworks") {
-            store.writeNetworks(
-                networks.map { entry ->
-                    if (entry.lastActivated) {
-                        entry.copy(lastActivated = false, lastConflict = CONFLICT_TIMEOUT)
-                    } else {
-                        entry
-                    }
-                },
-                planetId,
-            )
-        }
-        // 空跑收敛：无剩余启用网络则停隧道（stopVPNIfNoActiveNetworks 同构）。
-        // 停机前先收敛 UI（同 deactivate：防 Stopped 边沿先于 reload 到达，
-        // 角标在旧表窗口误显「连接中」）
-        if (store.readActiveNetworks().none { it.lastActivated }) {
-            reload()
-            TunnelController.stop(appContext)
-        }
-    }
-
-    /**
-     * 超时确认后的核心重试：等 [CONNECT_RETRY_DELAY_MS] 重启核心（磁盘持久化
-     * 身份与配置，隧道侧恢复 join；新源端口重建 UDP 流，间歇性清洗可赶上放行
-     * 窗口）。等待期内 [evaluateConnectTimer] 不起算新窗口，重启后 nodeOnline
-     * 转 false 的状态流到达时重新起算（iOS scheduleConnectRetry 同构）。
-     * 此处置位 [connectCycleActive]：随后的停启边沿流（Stopped/Idle/Starting/
-     * Running）由评估经该标记一律延续计数，不逐边沿判定清零。
-     */
-    private fun scheduleConnectRetry() {
-        connectCycleActive = true
-        _state.update { it.copy(connectRetryCount = it.connectRetryCount + 1) }
-        connectTimeoutJob?.cancel()
-        connectTimeoutJob = null
-        connectRetryJob = viewModelScope.launch {
-            delay(CONNECT_RETRY_DELAY_MS)
-            connectRetryJob = null
-            TunnelController.restartIfRunning(appContext)
-        }
+        connectStartedAtMs = null
+        TunnelController.restartIfRunning(appContext)
     }
 
     // MARK: - 行星浏览
@@ -709,12 +617,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             TunnelStateBus.clearNetworkConfigs()
             TunnelStateBus.setNodeStatus(null)
             // 核心随行星重建，旧连接周期作废（新周期由新会话的隧道边沿重新起算）。
-            // 显式终结而非靠停启边沿：切行星落盘后新行星网络已启用，停机边沿的
-            // 评估无法把该窗口与重试中间态区分，计数会跨行星串轮
+            // 显式作废而非靠停启边沿：切行星落盘后新行星网络已启用，停机边沿的
+            // 评估会立即为新行星开窗，残留起点会让窗口跨行星串轮
             connectTimeoutJob?.cancel()
             connectTimeoutJob = null
-            connectCycleActive = false
-            _state.update { it.copy(connectStartedAtMs = null, connectRetryCount = 0) }
+            connectStartedAtMs = null
         }
         return planetChanged
     }

@@ -71,7 +71,6 @@ import cn.imgozi.planetport.ui.form.FormRow
 import cn.imgozi.planetport.ui.form.FormSection
 import cn.imgozi.planetport.ui.form.FormToggleRow
 import cn.imgozi.planetport.ui.home.HomeViewModel
-import cn.imgozi.planetport.ui.rememberConnectNowMs
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.ztStatusLabel
 import kotlinx.coroutines.Dispatchers
@@ -106,11 +105,10 @@ fun NetworkDetailView(
     }
     val ui by vm.ui.collectAsState()
     val entry = ui.entry
-    // 连接分段展示依赖 App 侧连接计时（对齐 iOS NetworkDetailView 持 app: AppState）：
+    // 连接分段展示依赖 App 级在线状态（对齐 iOS NetworkDetailView 持 app: AppState）：
     // HomeViewModel 是 Activity 级单例，此处取得与首页同一实例
     val homeVm: HomeViewModel = viewModel()
     val homeState by homeVm.state.collectAsState()
-    val connectNowMs = rememberConnectNowMs(homeState.connectStartedAtMs).value
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -153,10 +151,6 @@ fun NetworkDetailView(
             nodeOnline = homeState.nodeOnline,
             vpnRunning = homeState.tunnelRunning,
             pathSatisfied = homeState.pathSatisfied,
-            connectStartedAtMs = homeState.connectStartedAtMs,
-            connectRetryCount = homeState.connectRetryCount,
-            connectNowMs = connectNowMs,
-            connectTimeoutMs = homeState.connectTimeoutMs,
             // 锁定判定锚定本网络归属行星（iOS 19f7681）：只有隧道行星下才存在
             // 「同时连接」的其他网络；全局选中页锚定在滑页竞态下会瞬时翻转
             routeViaLocked = ui.entryPlanetId != null &&
@@ -178,10 +172,6 @@ private fun NetworkDetailContent(
     nodeOnline: Boolean,
     vpnRunning: Boolean,
     pathSatisfied: Boolean,
-    connectStartedAtMs: Long?,
-    connectRetryCount: Int,
-    connectNowMs: Long,
-    connectTimeoutMs: Long,
     routeViaLocked: Boolean,
     onApplyDns: (DnsMode, List<String>) -> Unit,
     onSetRouteVia: (Boolean) -> Unit,
@@ -222,13 +212,8 @@ private fun NetworkDetailContent(
                         stringResource(R.string.status_noNetwork)
                     } else if (it.statusCode == 0) {
                         // REQUESTING_CONFIGURATION 与卡片一致按 online 分段
-                        //（连接服务器/请求网络配置/连接超时，iOS 897245a）
-                        val phase = connectPhaseLabel(
-                            nodeOnline, connectStartedAtMs, connectNowMs, connectRetryCount, connectTimeoutMs,
-                        )
-                        phase.intArg
-                            ?.let { arg -> stringResource(phase.res, arg) }
-                            ?: stringResource(phase.res)
+                        //（连接服务器/请求网络配置；超时重试无感循环，iOS 同构）
+                        stringResource(connectPhaseLabel(nodeOnline))
                     } else {
                         stringResource(ztStatusLabel(it.statusCode))
                     }

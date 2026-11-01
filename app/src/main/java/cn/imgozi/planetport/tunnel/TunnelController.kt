@@ -38,8 +38,6 @@ object TunnelController {
      * 当前代际、START 下发前比对——窗口内用户停止会使代际失效，迟到的 START
      * 据此放弃，防「stop → awaitSettled → start」把用户主动停止顶回。
      * 只在真正下发 STOP 时自增：终态下的幂等 no-op 不作数（用户没有实际干预）。
-     * 另供 UI 侧比对变化识别用户主动停止（HomeViewModel 连接周期终结信号：
-     * restartIfRunning 的停启边沿与之无法区分，清零只能锚定用户动作）。
      * stop 收敛主线程、编排协程在 restartScope（Main.immediate）同线程，无实际
      * 竞态，@Volatile 属保险（与 [reconnectInFlight] 同范式）。
      */
@@ -186,7 +184,7 @@ object TunnelController {
             // 切网自愈编排不能像丢普通热重启那样丢弃本次触发：行星切换经此路径时，
             // 在飞编排的 START 可能已带旧指针起核（startTunnel 读盘与 activatePlanet
             // 写盘竞态），吞掉重启会让旧 planet 文件的核心 join 新行星的网络——
-            // 经旧根服务器取不到 netconf，最终 6 分钟超时自动断开。排队等在飞编排
+            // 经旧根服务器取不到 netconf，持续连接失败。排队等在飞编排
             // 收口后补发：届时重读指针，确保核心按新行星装载
             TunnelStateBus.log("停启编排进行中，排队等待收口后补发热重启")
             val app = context.applicationContext

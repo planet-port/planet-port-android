@@ -54,7 +54,8 @@ data class NetworkEntry(
     val customDns: List<String>,
     /** 归属 Planet；null 仅为 JSON 兼容保留，写入时总会被盖戳。 */
     val planetId: String? = null,
-    /** 最近一次冲突原因码（"address"/"subnet"），再次开启时清除；null = 无记录。 */
+    /** 最近一次冲突原因码（"address"/"subnet"；"timeout" 仅旧版本超时断开时的
+     *  遗留记录，现超时改为无感重试不再写入），再次开启时清除；null = 无记录。 */
     val lastConflict: String? = null,
 ) {
     val id: String get() = networkId
@@ -100,9 +101,6 @@ data class AppPrefs(
     val parallax: Boolean = true,
     /** 同时连接网络软上限（对齐 iOS maxNetworks，2..6；默认 2）。 */
     val maxNetworks: Int = 2,
-    /** 连接超时（秒，Android 独有偏好，10..600；默认 45）。到点仍未 online 进入
-     *  复核重试链路（见 ui/StatusText.kt）。 */
-    val connectTimeoutSec: Int = 45,
     /** 按需连接（对齐 iOS prefConnectOnDemand/NEOnDemandRuleConnect；默认 false）。
      *  iOS 语义=系统维持隧道持久在线；Android 无系统级钩子，落地为 app 启动时
      *  隧道未跑且有已连接标记则自动拉起（HomeViewModel.init 消费），开启时不做

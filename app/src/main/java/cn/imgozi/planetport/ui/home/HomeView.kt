@@ -90,7 +90,6 @@ import cn.imgozi.planetport.ui.NetworkCardStatus
 import cn.imgozi.planetport.ui.Page
 import cn.imgozi.planetport.ui.components.EmptyStateCard
 import cn.imgozi.planetport.ui.deriveNetworkCardStatus
-import cn.imgozi.planetport.ui.rememberConnectNowMs
 import cn.imgozi.planetport.ui.theme.HomeMetrics
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -377,9 +376,6 @@ private fun PlanetPage(
     val networks = state.planetNetworks[planet.id].orEmpty()
     val running = state.tunnelRunning
     val activeId = state.activePlanetId
-    // 连接分段展示的秒级时钟（到点瞬间驱动「连接服务器 → 连接超时」重组切换）
-    val nowMs = rememberConnectNowMs(state.connectStartedAtMs).value
-
     Column(
         Modifier
             .fillMaxSize()
@@ -498,10 +494,6 @@ private fun PlanetPage(
                                 state.networkStatuses.containsKey(entry.networkId),
                             nodeOnline = state.nodeOnline,
                             pathSatisfied = state.pathSatisfied,
-                            connectStartedAtMs = state.connectStartedAtMs,
-                            connectRetryCount = state.connectRetryCount,
-                            nowMs = nowMs,
-                            connectTimeoutMs = state.connectTimeoutMs,
                         ),
                         isPending = entry.networkId in pending,
                         appearsActive = planet.id == activeId && entry.lastActivated,
