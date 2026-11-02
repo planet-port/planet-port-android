@@ -31,6 +31,7 @@ Android already had ZerotierFix for custom Planets, but Planet import and sharin
 - **Cross-Planet switching** — confirm the disconnect first, then start the new tunnel, through a confirmation dialog that stays under your control
 - **Duplicate protection** — deduplicated by World ID; the same Planet can't be added twice
 - **Moon nodes** — .moon file import, manual orbit, cache management
+- **Node identity mode** — share one node identity across all planets, or give each planet its own (uncorrelated); switch anytime — each planet's identity is kept and restored when you switch back
 
 ### Network connectivity
 
