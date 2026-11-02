@@ -72,6 +72,10 @@ internal class NodeRuntime(
     private val dataStoreRoot: File,
     private val planetDir: File,
     private val planetFile: File?,
+    /** 节点身份模式快照（AppPrefs.identityPerPlanet）：独立模式时 identity.* 落
+     *  [planetDir]。JNI 回调线程只读本快照，不查 prefs——切换模式经隧道整体
+     *  重启（重新装配本类）生效。 */
+    private val identityPerPlanet: Boolean,
     private val scope: CoroutineScope,
     /**
      * 节点身份冲突（EVENT_FATAL_ERROR_IDENTITY_COLLISION）的失败原因文案。
@@ -229,12 +233,15 @@ internal class NodeRuntime(
 
     /**
      * dataStore 对象名 → 落盘文件。返回 null 表示未知对象（读写各按错误码上报）。
-     * identity 跨 planet 共享（files/zt/）；moon/peer/netconf 按激活 planet 隔离
-     * （files/zt/<planetId>/）；planet 在自定义 planet 时重定向到导入文件
-     * （官方 planet 时读核心内置——文件不存在 stateGet 返回 -1 即可）。
+     * identity 按模式分流：共享模式落 dataStoreRoot（files/zt/，全行星共用，默认）；
+     *  独立模式落 planetDir（files/zt/<planetId>/，构造参数快照注入，核心重启即
+     *  模式切换生效）。moon/peer/netconf 按激活 planet 隔离（files/zt/<planetId>/）；
+     *  planet 在自定义 planet 时重定向到导入文件（官方 planet 时读核心内置——
+     *  文件不存在 stateGet 返回 -1 即可）。
      */
     internal fun stateFile(name: String): File? = when {
-        name == "identity.public" || name == "identity.secret" -> File(dataStoreRoot, name)
+        name == "identity.public" || name == "identity.secret" ->
+            if (identityPerPlanet) File(planetDir, name) else File(dataStoreRoot, name)
         name == "planet" -> planetFile ?: File(dataStoreRoot, "planet")
         name.startsWith("moons.d/") || name.startsWith("networks.d/") ||
             name.startsWith("peers.d/") -> File(planetDir, name)

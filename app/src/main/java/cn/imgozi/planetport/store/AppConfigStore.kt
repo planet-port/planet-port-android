@@ -21,6 +21,10 @@ class StorePaths(private val filesRoot: File) {
 
     /** 某个 Planet 的核心状态目录（identity.*、moons.d/ 等，P2 接核心时启用）。 */
     fun planetStateDir(planetId: String): File = File(filesRoot, "zt/$planetId")
+
+    /** 核心数据存储根（身份/planet 默认落点）。与 [planetStateDir] 同根派生，
+     *  隧道装配（ZeroTierVpnService）与身份复制（IdentityStore）共用，禁止各自硬编码。 */
+    val dataStoreRoot: File get() = File(filesRoot, "zt")
 }
 
 /**

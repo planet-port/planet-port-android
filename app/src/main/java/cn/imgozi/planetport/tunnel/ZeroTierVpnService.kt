@@ -106,9 +106,10 @@ internal class ZeroTierVpnService : VpnService() {
                 runtimeRef?.processWirePacket(data, remote)
             }
             val r = NodeRuntime(
-                dataStoreRoot = File(filesDir, "zt"),
+                dataStoreRoot = store.paths.dataStoreRoot,
                 planetDir = store.paths.planetStateDir(planet.id),
                 planetFile = planet.fileName?.let { File(store.paths.planetsDir, it) },
+                identityPerPlanet = store.readPrefs().identityPerPlanet,
                 scope = s,
                 identityCollisionReason = getString(R.string.tunnel_status_fatalConflict),
             )

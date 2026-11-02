@@ -106,4 +106,8 @@ data class AppPrefs(
      *  隧道未跑且有已连接标记则自动拉起（HomeViewModel.init 消费），开启时不做
      *  启动复位（resetAllNetworkActivation 跳过）。 */
     val connectOnDemand: Boolean = false,
+    /** 节点身份模式（对齐 iOS identity_per_planet；默认 false = 所有行星共享一个身份）。
+     *  独立模式下身份文件按行星隔离（files/zt/<planetId>/identity.*），核心只在
+     *  构造时读/生成身份，切换模式经隧道整体重启生效。 */
+    val identityPerPlanet: Boolean = false,
 )
