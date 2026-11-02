@@ -8,15 +8,19 @@ import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
+import cn.imgozi.planetport.store.IdentityStore
+import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
 import cn.imgozi.planetport.tunnel.TunnelController
 import cn.imgozi.planetport.tunnel.TunnelState
 import cn.imgozi.planetport.tunnel.TunnelStateBus
 import cn.imgozi.planetport.ui.theme.ThemeManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 全局偏好页状态。AppPrefs 是唯一事实源：每次变更「持久化（AppPrefs 字段）+
@@ -43,6 +47,42 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
         write({ it.copy(disableIpv6 = on) }, onPersisted = {
             TunnelController.restartIfRunning(getApplication())
         })
+    }
+
+    /**
+     * 切换节点身份模式（设置页身份模式选择触发，对齐 iOS AppState.switchIdentityMode）。
+     * 独立模式：当前激活行星播种现有共享身份（沿用，正在用的网络不中断），其余
+     * 行星首次连接时由核心生成新身份；共享模式：adopting 行星的独立身份复制为
+     * 全局共享身份（null = 无行星有独立身份，直接切换），其余行星独立身份文件
+     * 原地保留（切回独立模式时原样恢复）。
+     *
+     * 顺序约束：核心只在构造时读/生成身份、退出不回写，身份复制必须先于新核心
+     * 启动——restartIfRunning 的 START 在停机终态后才下发，故复制完成后才发起
+     * 重启即满足；复制放 IO 线程（文件虽小仍是磁盘操作），发起重启切回主线程
+     * （restartIfRunning 的调用方收敛主线程，见其注释）。
+     */
+    fun setIdentityMode(perPlanet: Boolean, adopting: String?) {
+        write({ it.copy(identityPerPlanet = perPlanet) }, onPersisted = {
+            viewModelScope.launch(Dispatchers.IO) {
+                val store = StoreRepo.store
+                if (perPlanet) {
+                    IdentityStore.seedSharedIdentity(store.paths, store.activePlanetId())
+                } else if (adopting != null) {
+                    IdentityStore.adoptSharedIdentity(store.paths, adopting)
+                }
+                withContext(Dispatchers.Main) {
+                    TunnelController.restartIfRunning(getApplication())
+                }
+            }
+        })
+    }
+
+    /** 切共享模式的候选行星（已有独立身份者），附节点地址供选择页展示（不可解析为 null）。 */
+    suspend fun sharedIdentityCandidates(): List<Pair<PlanetProfile, String?>> {
+        val paths = StoreRepo.store.paths
+        return StoreRepo.store.readPlanets().filter {
+            IdentityStore.hasPlanetIdentity(paths, it.id)
+        }.map { it to IdentityStore.planetIdentityAddress(paths, it.id) }
     }
 
     /** 同时连接网络软上限（2..6，纯偏好，UI 门控范围）。 */

@@ -272,6 +272,16 @@
     <string name="prefs_appearance_footer">背景圖可從相簿選擇或透過 URL 下載；視差動畫僅在設定了背景圖時生效。</string>
     <string name="prefs_appearance_parallax">視差動畫</string>
     <string name="prefs_appearance_sectionHeader">外觀</string>
+    <string name="prefs_identity_confirmMessage">當前行星沿用現有身份；其餘行星首次連接時生成新身份，其已加入的網路需要重新授權。</string>
+    <string name="prefs_identity_confirmSwitch">切換</string>
+    <string name="prefs_identity_confirmTitle">切換為每行星獨立身份？</string>
+    <string name="prefs_identity_footer">所有行星共用一個節點身份，或每個行星使用獨立身份。獨立身份的行星之間互不可關聯，適合隔離不同網路的隱私。</string>
+    <string name="prefs_identity_mode">身份模式</string>
+    <string name="prefs_identity_modePerPlanet">每行星獨立</string>
+    <string name="prefs_identity_modeShared">共享身份</string>
+    <string name="prefs_identity_pickFooter">選定的身份將成為所有行星共用的節點身份。各行星現有獨立身份保留，切回獨立模式時恢復。</string>
+    <string name="prefs_identity_pickTitle">選擇共享身份</string>
+    <string name="prefs_identity_sectionHeader">節點身份</string>
     <string name="prefs_language_sectionHeader">語言</string>
     <string name="prefs_language_system">跟隨系統</string>
     <string name="prefs_network_disableIPv6">停用 IPv6</string>

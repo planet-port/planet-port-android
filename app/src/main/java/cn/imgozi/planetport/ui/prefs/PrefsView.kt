@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,6 +78,7 @@ import cn.imgozi.planetport.BuildInfo
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.AppPrefs
 import cn.imgozi.planetport.store.BackgroundImageStore
+import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.ui.MainActivity
 import cn.imgozi.planetport.ui.components.SheetScaffold
 import cn.imgozi.planetport.ui.form.FormRow
@@ -84,6 +87,7 @@ import cn.imgozi.planetport.ui.form.FormToggleRow
 import cn.imgozi.planetport.ui.planet.PlanetIcon
 import cn.imgozi.planetport.ui.theme.PlanetFonts
 import cn.imgozi.planetport.ui.theme.ThemeManager
+import kotlinx.coroutines.launch
 
 /**
  * 全局设置页（iOS PrefsView.swift 可适用项移植）：
@@ -122,6 +126,12 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
     var showBgPicker by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+
+    var showIdentityModePicker by remember { mutableStateOf(false) }
+    var showIdentityConfirm by remember { mutableStateOf(false) }
+    var identityPickCandidates by remember { mutableStateOf<List<Pair<PlanetProfile, String?>>?>(null) }
+
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -173,6 +183,22 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                     title = stringResource(R.string.prefs_ondemand),
                     checked = prefs.connectOnDemand,
                     onCheckedChange = vm::setConnectOnDemand,
+                )
+            }
+
+            // 节点身份（对齐 iOS 身份 section：网络→按需连接→身份→语言）：模式行
+            // 点开选择弹层；切独立先确认，切共享有候选先选身份（无候选直接切）
+            FormSection(
+                header = stringResource(R.string.prefs_identity_sectionHeader),
+                footer = stringResource(R.string.prefs_identity_footer),
+            ) {
+                PickerRow(
+                    title = stringResource(R.string.prefs_identity_mode),
+                    value = stringResource(
+                        if (prefs.identityPerPlanet) R.string.prefs_identity_modePerPlanet
+                        else R.string.prefs_identity_modeShared
+                    ),
+                    onClick = { showIdentityModePicker = true },
                 )
             }
 
@@ -366,6 +392,60 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
             onDismiss = { showLanguagePicker = false },
         )
     }
+
+    // 身份模式选择（语言选择弹层同范式）：共享=当前项关闭；独立=确认弹窗；
+    // 切共享查候选——空直接切（不弹选择页），非空进身份选择弹层
+    if (showIdentityModePicker) {
+        IdentityModeSheet(
+            perPlanet = prefs.identityPerPlanet,
+            onSelect = { target ->
+                showIdentityModePicker = false
+                when {
+                    target == prefs.identityPerPlanet -> Unit
+                    target -> showIdentityConfirm = true
+                    else -> scope.launch {
+                        val candidates = vm.sharedIdentityCandidates()
+                        if (candidates.isEmpty()) {
+                            vm.setIdentityMode(false, null)
+                        } else {
+                            identityPickCandidates = candidates
+                        }
+                    }
+                }
+            },
+            onDismiss = { showIdentityModePicker = false },
+        )
+    }
+
+    if (showIdentityConfirm) {
+        AlertDialog(
+            onDismissRequest = { showIdentityConfirm = false },
+            title = { Text(stringResource(R.string.prefs_identity_confirmTitle)) },
+            text = { Text(stringResource(R.string.prefs_identity_confirmMessage)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showIdentityConfirm = false
+                    vm.setIdentityMode(true, null)
+                }) { Text(stringResource(R.string.prefs_identity_confirmSwitch)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showIdentityConfirm = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
+
+    identityPickCandidates?.let { candidates ->
+        IdentityPickSheet(
+            candidates = candidates,
+            onPick = { planetId ->
+                identityPickCandidates = null
+                vm.setIdentityMode(false, planetId)
+            },
+            onDismiss = { identityPickCandidates = null },
+        )
+    }
 }
 
 /** 存储码 → 语言选项显示名（null = 跟随系统，随界面语言本地化）。 */
@@ -505,6 +585,107 @@ private fun LanguageOptions(
             ) {
                 RadioButton(selected = selected == code, onClick = { onSelect(code) })
                 Text(label, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
+/** 身份模式选择弹层（LanguagePickerSheet 同范式）：两行单选，点选回调目标模式。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IdentityModeSheet(
+    perPlanet: Boolean,
+    onSelect: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.prefs_identity_mode),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+                listOf(
+                    false to stringResource(R.string.prefs_identity_modeShared),
+                    true to stringResource(R.string.prefs_identity_modePerPlanet),
+                ).forEach { (value, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(value) }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = perPlanet == value, onClick = { onSelect(value) })
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 切共享模式的身份选择弹层（对齐 iOS IdentityPickView）：行星名 + 节点地址
+ *  （等宽小字，不可解析显示 "—"），footer 说明往返保真语义。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IdentityPickSheet(
+    candidates: List<Pair<PlanetProfile, String?>>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        SheetScaffold {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.prefs_identity_pickTitle),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+                candidates.forEach { (planet, address) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(planet.id) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(planet.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                address ?: "—",
+                                style = PlanetFonts.MonoCaption,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Text(
+                    stringResource(R.string.prefs_identity_pickFooter),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

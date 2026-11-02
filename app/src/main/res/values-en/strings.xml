@@ -272,6 +272,16 @@
     <string name="prefs_appearance_footer">The background image can be picked from Photos or downloaded via URL; parallax only works when a background image is set.</string>
     <string name="prefs_appearance_parallax">Parallax Animation</string>
     <string name="prefs_appearance_sectionHeader">Appearance</string>
+    <string name="prefs_identity_confirmMessage">The current planet keeps its identity; other planets get a new one on first connect, and their networks must be authorized again.</string>
+    <string name="prefs_identity_confirmSwitch">Switch</string>
+    <string name="prefs_identity_confirmTitle">Switch to per-planet identities?</string>
+    <string name="prefs_identity_footer">All planets share one node identity, or each planet uses its own. Separate identities cannot be correlated across planets, keeping networks isolated.</string>
+    <string name="prefs_identity_mode">Identity Mode</string>
+    <string name="prefs_identity_modePerPlanet">Per-Planet</string>
+    <string name="prefs_identity_modeShared">Shared Identity</string>
+    <string name="prefs_identity_pickFooter">The chosen identity becomes the node identity for all planets. Each planet\'s own identity is kept and restored when you switch back.</string>
+    <string name="prefs_identity_pickTitle">Choose Shared Identity</string>
+    <string name="prefs_identity_sectionHeader">Node Identity</string>
     <string name="prefs_language_sectionHeader">Language</string>
     <string name="prefs_language_system">Follow System</string>
     <string name="prefs_network_disableIPv6">Disable IPv6</string>
