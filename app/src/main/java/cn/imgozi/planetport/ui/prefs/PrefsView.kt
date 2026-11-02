@@ -92,7 +92,8 @@ import kotlinx.coroutines.launch
 /**
  * 全局设置页（iOS PrefsView.swift 可适用项移植）：
  * 网络（禁用 IPv6 热重启 / 同时连接上限）、按需连接（app 启动自动恢复隧道；
- * iOS NEOnDemandRuleConnect 的 Android 落地）、语言（本任务只建 UI + 持久化，切换接线归 T7）、
+ * iOS NEOnDemandRuleConnect 的 Android 落地）、节点身份（共享/每行星独立身份切换）、
+ * 语言（本任务只建 UI + 持久化，切换接线归 T7）、
  * 外观（主题色入口首位——弹窗收编预设色板与 HSL 色盘（iOS fe0db0a）；背景图入口壳——
  * 选取器归 T7；视差无图禁用）、关于（Core 版本 / App 版本 +
  * MPL-2.0 归属声明 footer）。
@@ -177,7 +178,7 @@ fun PrefsView(activity: MainActivity, onBack: () -> Unit) {
                 )
             }
 
-            // 按需连接（iOS 独立 Section：网络区与语言区之间，PrefsView.swift:33-42）
+            // 按需连接（iOS 独立 Section；其后为节点身份区，PrefsView.swift:33-42）
             FormSection(footer = stringResource(R.string.prefs_ondemand_footer)) {
                 FormToggleRow(
                     title = stringResource(R.string.prefs_ondemand),
