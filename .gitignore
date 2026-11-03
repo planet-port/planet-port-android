@@ -14,3 +14,7 @@ build/
 
 # 构建时生成的构建信息（app/build.gradle.kts generateBuildInfo）
 app/src/main/java/cn/imgozi/planetport/Generated/
+
+# superpowers 工作产物（计划/规格/SDD 账本）不入库，仅保留本地
+docs/superpowers/
+.superpowers/
