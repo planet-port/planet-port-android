@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -335,7 +334,6 @@ private fun AddPlanetForm(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var url by remember { mutableStateOf("") }
-    var showScanner by remember { mutableStateOf(false) }
     var showPlanetReceiver by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
     // 下载进度 0~1；服务器未给 Content-Length 时为 null（不确定进度）
@@ -456,36 +454,12 @@ private fun AddPlanetForm(
                 }
             }
 
-            // 动态二维码导入（模块 QRTransfer）：连续扫分片，收齐即回填 pendingData，
-            // 复用与文件/URL 相同的「命名 + 添加 + 查重」后续流程
+            // 扫二维码导入（模块 QRTransfer）：分片码连续扫、收齐即回填
+            // pendingData；非分片帧（http(s) URL 码）经 onPlainFrame 回填
+            // 输入框直接下载——两路二维码合用同一入口，复用与文件/URL
+            // 相同的「命名 + 添加 + 查重」后续流程
             OutlinedButton(
                 onClick = { showPlanetReceiver = true },
-                enabled = !downloading,
-                contentPadding = PaddingValues(horizontal = 12.dp),
-                shape = RoundedCornerShape(HomeMetrics.radiusSmall),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(42.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.QrCode2,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    stringResource(R.string.addplanet_scanPlanetQr),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.weight(1f))
-            }
-
-            // 扫码导入（iOS 764b1b8）：与「导入」同款视觉（描边按钮；本主题
-            // surfaceContainer 全系=卡片底，容器色填充不可见），扫到 http(s)
-            // 链接回填并直接下载；下载中禁用
-            OutlinedButton(
-                onClick = { showScanner = true },
                 enabled = !downloading,
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 shape = RoundedCornerShape(HomeMetrics.radiusSmall),
@@ -500,9 +474,8 @@ private fun AddPlanetForm(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.size(8.dp))
-                // 与「选择行星文件」同款字体（默认 labelLarge）与 onSurface 色
                 Text(
-                    stringResource(R.string.addplanet_scanUrl),
+                    stringResource(R.string.addplanet_scanImport),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.weight(1f))
@@ -635,19 +608,6 @@ private fun AddPlanetForm(
         )
     }
 
-    if (showScanner) {
-        // 关扫码层 → 回填 URL → 直接下载导入（iOS importFromURL 同流程）
-        QrScannerSheet(
-            onScanned = { scanned ->
-                showScanner = false
-                url = scanned
-                importFromUrl()
-            },
-            onDismiss = { showScanner = false },
-            extract = QrHttpUrl::extract,
-        )
-    }
-
     if (showPlanetReceiver) {
         QRReceiveSheet(
             onComplete = { data ->
@@ -667,6 +627,14 @@ private fun AddPlanetForm(
                         payload.iconColor?.let(onColorHexChange)
                     }
                 }
+            },
+            onPlainFrame = { text ->
+                // 非分片帧：http(s) URL 码回填输入框并直接下载导入
+                val scanned = QrHttpUrl.extract(text) ?: return@QRReceiveSheet false
+                showPlanetReceiver = false
+                url = scanned
+                importFromUrl()
+                true
             },
             onDismiss = { showPlanetReceiver = false },
         )

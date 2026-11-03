@@ -15,8 +15,7 @@
     <string name="addplanet_namePlaceholder">行星名稱</string>
     <string name="addplanet_randomIcon">換個隨機圖示</string>
     <string name="addplanet_ready">已就緒 · %1$s</string>
-    <string name="addplanet_scanUrl">或掃描URL二維碼匯入</string>
-    <string name="addplanet_scanPlanetQr">或掃描動態二維碼導入</string>
+    <string name="addplanet_scanImport">或掃二維碼導入</string>
     <string name="addplanet_subtitle">可透過檔案、URL 或二維碼匯入行星檔案</string>
     <string name="addplanet_urlPlaceholder">或輸入行星檔案 URL</string>
     <!-- 动物图标名（iOS animal.* 同步） -->

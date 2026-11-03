@@ -73,12 +73,14 @@ import java.util.concurrent.Executors
  * 帧 → 按 index 聚合 → 齐全后整体校验（Base45 → 解压 → CRC）→ 通过即回调一次。
  * total/checksum 与已收集集不一致（扫到新会话）时自动清空重来；CRC 失败同样清空。
  * 相册多选识别的帧文本喂入同一聚合逻辑（相机被拒时相册通路保留）。
+ * [onPlainFrame]：非分片帧交给调用方处理（如 URL 码回填导入），接受即结束接收。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun QRReceiveSheet(
     onComplete: (ByteArray) -> Unit,
     onDismiss: () -> Unit,
+    onPlainFrame: ((String) -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     var granted by remember {
@@ -122,7 +124,11 @@ internal fun QRReceiveSheet(
     /** 聚合一帧；返回是否为有效协议帧（相册批次按此计数判定失败原因）。 */
     fun handle(text: String): Boolean {
         if (finished) return false
-        val frame = QRTransfer.parse(text) ?: return false
+        val frame = QRTransfer.parse(text) ?: run {
+            // 非分片帧：让调用方按普通码处理（URL 回填导入），接受即结束接收
+            if (onPlainFrame?.invoke(text) == true) finished = true
+            return false
+        }
         // 收到有效帧：清除相册失败提示（相机续扫时错误文案不该悬着）
         albumError = null
         // 换了传输会话（total 或 CRC 不同）：丢弃旧集合
