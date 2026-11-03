@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.IdentityStore
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetProfile
 import cn.imgozi.planetport.store.StoreRepo
@@ -26,6 +27,8 @@ data class PlanetSettingsUiState(
     val worldId: String = "—",
     /** planet 文件解读信息（官方或文件缺失为 null） */
     val fileInfo: PlanetImporter.PlanetFileInfo? = null,
+    /** 本行星节点 ID：从身份文件派生（IdentityStore.planetNodeIds），未生成 "—" */
+    val nodeId: String = "—",
 )
 
 /**
@@ -69,12 +72,18 @@ class PlanetSettingsViewModel(
         }
         // 挂起读先算完再赋值：不把挂起调用放进 StateFlow.update 的 CAS 重试循环
         val active = store.activePlanetId()
+        // 身份 ID 直连身份文件派生（与首页卡片同源，IdentityStore.planetNodeIds）
+        val perPlanet = store.readPrefs().identityPerPlanet
+        val nodeId = planet?.let {
+            IdentityStore.planetNodeIds(store.paths, listOf(it), perPlanet)[it.id]
+        } ?: "—"
         _ui.update {
             it.copy(
                 planet = planet,
                 activePlanetId = active,
                 worldId = worldId,
                 fileInfo = info,
+                nodeId = nodeId,
             )
         }
     }

@@ -25,7 +25,31 @@ object IdentityStore {
     /** 解析该行星独立身份的节点地址：identity.public 内容为 "address:publicKey"，
      *  冒号前 10 位 hex 即 ZeroTier 节点地址；无身份或不可解析返回 null。 */
     fun planetIdentityAddress(paths: StorePaths, planetId: String): String? =
-        runCatching { File(paths.planetStateDir(planetId), IDENTITY_PUBLIC).readText() }
+        addressOf(File(paths.planetStateDir(planetId), IDENTITY_PUBLIC))
+
+    /** 共享身份（files/zt/identity.public）的节点地址。共享模式下全行星
+     *  卡片显示此地址，切换模式后无需等核心重连即可刷新显示。 */
+    fun sharedIdentityAddress(paths: StorePaths): String? =
+        addressOf(File(paths.dataStoreRoot, IDENTITY_PUBLIC))
+
+    /** 全行星卡片身份地址：身份 ID 直连身份文件（ground truth）——共享模式
+     *  全行星显示共享地址，独立模式各读各的 identity.public（未生成剔除，
+     *  由 UI 显示占位）。身份模式切换后文件已就位，重读即刷新，不等核心
+     *  重连回填（旧地址属于别的身份，不可作为显示来源）。 */
+    fun planetNodeIds(
+        paths: StorePaths,
+        planets: List<PlanetProfile>,
+        perPlanet: Boolean,
+    ): Map<String, String> {
+        val shared = if (perPlanet) null else sharedIdentityAddress(paths)
+        return planets.mapNotNull { p ->
+            (if (perPlanet) planetIdentityAddress(paths, p.id) else shared)
+                ?.let { p.id to it }
+        }.toMap()
+    }
+
+    private fun addressOf(file: File): String? =
+        runCatching { file.readText() }
             .getOrNull()
             ?.split(":")
             ?.firstOrNull()

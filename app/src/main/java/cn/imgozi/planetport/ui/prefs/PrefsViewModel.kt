@@ -70,6 +70,9 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
                 } else if (adopting != null) {
                     IdentityStore.adoptSharedIdentity(store.paths, adopting)
                 }
+                // 身份文件已就位，立即通知 UI 重读派生地址刷新卡片显示
+                //（不等核心重连回填；iOS 等价 apply() 后直接 reloadConfig）
+                store.notifyIdentityChanged()
                 withContext(Dispatchers.Main) {
                     TunnelController.restartIfRunning(getApplication())
                 }

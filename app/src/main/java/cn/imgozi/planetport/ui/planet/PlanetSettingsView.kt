@@ -188,11 +188,12 @@ fun PlanetSettingsView(
                     FormRow("World ID", ui.worldId)
                     CopyableRow(
                         stringResource(R.string.planet_info_nodeId),
-                        // 激活行星优先实时值，其余/离线回退档案缓存（对齐 iOS nodeIDText）
+                        // 激活行星优先实时值，其余/离线回退身份文件派生值
+                        //（对齐 iOS：planetNodeIds 由身份文件派生 + 运行时回填）
                         if (planetId == ui.activePlanetId && !node?.nodeId.isNullOrEmpty()) {
                             node!!.nodeId
                         } else {
-                            planet.lastNodeId ?: "—"
+                            ui.nodeId
                         },
                     )
                     FormRow(

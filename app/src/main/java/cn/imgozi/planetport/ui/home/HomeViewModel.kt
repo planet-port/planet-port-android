@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cn.imgozi.planetport.R
+import cn.imgozi.planetport.store.IdentityStore
 import cn.imgozi.planetport.store.MoonEntry
 import cn.imgozi.planetport.store.NetworkEntry
 import cn.imgozi.planetport.store.PlanetImporter
@@ -219,7 +220,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 hasActivatedPlanet = hasActivated,
                 planetNetworks = networks,
                 moonCounts = moonCounts,
-                planetNodeIds = planets.mapNotNull { p -> p.lastNodeId?.let { id -> p.id to id } }.toMap(),
+                planetNodeIds = IdentityStore.planetNodeIds(store.paths, planets, prefs.identityPerPlanet),
                 maxNetworks = max(2, prefs.maxNetworks),
             )
         }
@@ -825,17 +826,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 节点 ID 缓存：隧道在跑读到即持久化到激活行星（iOS AppState.cacheNodeId）。 */
+    /** 节点 ID 运行时回填（iOS AppState.cacheNodeId 同构）：核心首次启动生成
+     *  身份文件之前 reload 读不到地址，隧道状态读到后补上内存（地址即身份
+     *  文件内容，两者恒一致，不再持久化）。 */
     private suspend fun cacheNodeId(nodeId: String) {
-        val store = StoreRepo.store
-        val activeId = store.activePlanetId()
-        val planets = store.readPlanets()
-        val index = planets.indexOfFirst { it.id == activeId }
-        if (index < 0 || planets[index].lastNodeId == nodeId) return
-        val updated = planets.toMutableList()
-        updated[index] = updated[index].copy(lastNodeId = nodeId)
-        storeWrite("writePlanets") { store.writePlanets(updated) }
-        reload()
+        val activeId = StoreRepo.store.activePlanetId()
+        if (activeId.isEmpty()) return
+        _state.update { it.copy(planetNodeIds = it.planetNodeIds + (activeId to nodeId)) }
     }
 
     /** 网络名缓存：连接后快照名非空且与存量不同则回写（iOS cacheNetworkName）。 */

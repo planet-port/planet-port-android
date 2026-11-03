@@ -26,8 +26,6 @@ data class PlanetProfile(
     val icon: String? = null,
     /** 自定义底色 "#RRGGBB"；null/解析失败按 id 哈希回退主题装饰盘。 */
     val iconColor: String? = null,
-    /** 该行星下本机节点 ID 缓存（隧道运行时回写，离线可显示；P2）。 */
-    val lastNodeId: String? = null,
 ) {
     companion object {
         const val OFFICIAL_ID = "official"

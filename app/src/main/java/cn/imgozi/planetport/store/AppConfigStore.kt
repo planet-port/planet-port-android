@@ -85,12 +85,19 @@ class AppConfigStore(val paths: StorePaths) {
 
     /** 不取域锁的写档（仅在已持有 opMutex 的复合段内使用，如导入器的读-追加-写）。 */
     internal suspend fun writePlanetsLocked(profiles: List<PlanetProfile>) {
-        // official 永在且排最前；档案本体以既有条目为准（保留 lastNodeId 等字段变更），缺失才用固定档案兜底
+        // official 永在且排最前；档案本体以既有条目为准（保留 icon/color 等字段变更），缺失才用固定档案兜底
         val official = profiles.firstOrNull { it.id == PlanetProfile.OFFICIAL_ID } ?: PlanetProfile.OFFICIAL
         val normalized = listOf(official) + profiles.filterNot { it.id == PlanetProfile.OFFICIAL_ID }
         files.write(paths.planetsFile, normalized, planetList)
         // UI 级刷新信号（rename/updateIcon/import/delete 共用入口）；
         // 首启 bootstrap 直写文件不经此处，无杂散发射
+        _planetsChanges.tryEmit(Unit)
+    }
+
+    /** 身份模式切换后的 UI 刷新信号（复用 [planetsChanges] 流）：身份文件已
+     *  就位，订阅方重读派生地址（见 IdentityStore.planetNodeIds）即刷新卡片
+     *  显示，不等核心重连回填。 */
+    fun notifyIdentityChanged() {
         _planetsChanges.tryEmit(Unit)
     }
 
