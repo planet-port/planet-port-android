@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.outlined.SwapHoriz
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,7 +33,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
@@ -49,18 +47,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.graphics.Bitmap
 import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.DnsMode
 import cn.imgozi.planetport.store.NetworkEntry
+import cn.imgozi.planetport.ui.components.ConfirmBubble
 import cn.imgozi.planetport.ui.components.CopyableRow
 import cn.imgozi.planetport.ui.components.CopyableValue
 import cn.imgozi.planetport.ui.components.DnsConfigSection
@@ -83,7 +85,7 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 /**
  * 网络详情页（iOS NetworkDetailView.swift 1:1）：
  * 八行静态+实时合并信息 / 分配的地址 / 托管路由 / DNS（含网络下发只读区与应用按钮）/
- * routeVia 开关（多网连接锁定）/ 删除（AlertDialog 确认）。
+ * routeVia 开关（多网连接锁定）/ 删除（自绘确认气泡，锚定删除行，对齐 iOS ConfirmBubble）。
  *
  * 快照走 TunnelStateBus.networkConfigs 推模式（iOS 为 ProviderMessage 拉模式，见 VM 注释）。
  *
@@ -109,58 +111,77 @@ fun NetworkDetailView(
     // HomeViewModel 是 Activity 级单例，此处取得与首页同一实例
     val homeVm: HomeViewModel = viewModel()
     val homeState by homeVm.state.collectAsState()
+    var showDeleteBubble by remember { mutableStateOf(false) }
+    // 删除行内容顶边（组合根坐标），作为确认气泡锚点。
+    // 删除行在子组合 NetworkDetailContent 内，此处持状态下传、子组合上报
+    val deleteAnchorTop = remember { mutableStateOf(0f) }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.network_detailTitle)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.common_back),
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text(stringResource(R.string.network_detailTitle)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.common_back),
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            },
+        ) { padding ->
+            if (entry == null) {
+                // 加载中 / 条目不存在（已被删除）：iOS 端 entry 由上一页传入不存在此态，
+                // Android 页面只持 nwid，首读完成仍无条目时给出明确文案
+                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                    if (ui.loaded) {
+                        Text(
+                            stringResource(R.string.network_notFoundOrDeleted),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    } else {
+                        CircularProgressIndicator()
                     }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
-    ) { padding ->
-        if (entry == null) {
-            // 加载中 / 条目不存在（已被删除）：iOS 端 entry 由上一页传入不存在此态，
-            // Android 页面只持 nwid，首读完成仍无条目时给出明确文案
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                if (ui.loaded) {
-                    Text(
-                        stringResource(R.string.network_notFoundOrDeleted),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    CircularProgressIndicator()
                 }
+                return@Scaffold
             }
-            return@Scaffold
+            NetworkDetailContent(
+                entry = entry,
+                snapshot = ui.snapshot,
+                nodeOnline = homeState.nodeOnline,
+                vpnRunning = homeState.tunnelRunning,
+                pathSatisfied = homeState.pathSatisfied,
+                // 锁定判定锚定本网络归属行星（iOS 19f7681）：只有隧道行星下才存在
+                // 「同时连接」的其他网络；全局选中页锚定在滑页竞态下会瞬时翻转
+                routeViaLocked = ui.entryPlanetId != null &&
+                    ui.entryPlanetId == ui.activePlanetId && ui.otherActivatedExists,
+                onApplyDns = vm::applyDns,
+                onSetRouteVia = vm::setRouteVia,
+                onDeleteClick = { showDeleteBubble = true },
+                deleteAnchorTopState = deleteAnchorTop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            )
         }
-        NetworkDetailContent(
-            entry = entry,
-            snapshot = ui.snapshot,
-            nodeOnline = homeState.nodeOnline,
-            vpnRunning = homeState.tunnelRunning,
-            pathSatisfied = homeState.pathSatisfied,
-            // 锁定判定锚定本网络归属行星（iOS 19f7681）：只有隧道行星下才存在
-            // 「同时连接」的其他网络；全局选中页锚定在滑页竞态下会瞬时翻转
-            routeViaLocked = ui.entryPlanetId != null &&
-                ui.entryPlanetId == ui.activePlanetId && ui.otherActivatedExists,
-            onApplyDns = vm::applyDns,
-            onSetRouteVia = vm::setRouteVia,
-            onDelete = { vm.delete(onBack) },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+        ConfirmBubble(
+            visible = showDeleteBubble,
+            anchorTopPx = deleteAnchorTop.value,
+            title = stringResource(R.string.network_delete_confirmTitle),
+            message = stringResource(R.string.network_delete_confirmMessage),
+            confirmLabel = stringResource(R.string.network_delete),
+            onConfirm = {
+                showDeleteBubble = false
+                vm.delete(onBack)
+            },
+            onDismiss = { showDeleteBubble = false },
         )
     }
 }
@@ -175,13 +196,15 @@ private fun NetworkDetailContent(
     routeViaLocked: Boolean,
     onApplyDns: (DnsMode, List<String>) -> Unit,
     onSetRouteVia: (Boolean) -> Unit,
-    onDelete: () -> Unit,
+    onDeleteClick: () -> Unit,
+    deleteAnchorTopState: MutableState<Float>,
     modifier: Modifier = Modifier,
 ) {
     // DNS 编辑态：条目首次就绪时初始化一次；后续 store 回读不打断编辑（对齐 iOS @State dns）
     var dnsMode by remember(entry.networkId) { mutableStateOf(entry.dnsMode) }
     var dnsServers by remember(entry.networkId) { mutableStateOf(entry.customDns) }
-    var showDelete by remember { mutableStateOf(false) }
+    // 锚点状态实体在外层（气泡挂 Scaffold 之上），此处委托读写
+    var deleteAnchorTop by deleteAnchorTopState
     var showQR by remember { mutableStateOf(false) }
     // 已切到 via 网关视图的路由下标（点击值区域切换）
     var viaExpandedRoutes by remember { mutableStateOf(setOf<Int>()) }
@@ -326,7 +349,8 @@ private fun NetworkDetailContent(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 44.dp)
-                    .clickable { showDelete = true },
+                    .onGloballyPositioned { deleteAnchorTop = it.positionInRoot().y }
+                    .clickable { onDeleteClick() },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -338,30 +362,6 @@ private fun NetworkDetailContent(
         }
 
         Spacer(Modifier.height(16.dp))
-    }
-
-    if (showDelete) {
-        AlertDialog(
-            onDismissRequest = { showDelete = false },
-            title = { Text(stringResource(R.string.network_delete_confirmTitle)) },
-            text = { Text(stringResource(R.string.network_delete_confirmMessage)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDelete = false
-                    onDelete()
-                }) {
-                    Text(
-                        stringResource(R.string.network_delete),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDelete = false }) {
-                    Text(stringResource(R.string.common_cancel))
-                }
-            },
-        )
     }
 
     if (showQR) {

@@ -240,8 +240,9 @@
     <string name="peers_tunnelDown">隧道未运行</string>
     <string name="peers_tunnelDownHint">开启网络后可查看实时连接</string>
     <string name="planet_add_title">添加行星服务器</string>
-    <string name="planet_delete">删除此行星</string>
-    <string name="planet_delete_confirmAction">删除行星、网络和卫星</string>
+    <string name="planet_delete">删除行星</string>
+    <string name="planet_delete_confirmAction">删除行星</string>
+    <string name="planet_delete_confirmMessage">删除行星将同步删除此行星下的网络。操作不可恢复！</string>
     <string name="planet_delete_confirmTitle">删除这颗行星？</string>
     <string name="planet_delete_footer">将一并删除该行星下保存的网络和卫星。若隧道正在使用它，VPN 将停止并回退到官方行星。</string>
     <string name="planet_diagnostics_footer">Peers 来自隧道的实时连接，仅隧道正在使用的行星可查看。</string>

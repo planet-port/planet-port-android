@@ -240,8 +240,9 @@
     <string name="peers_tunnelDown">Tunnel Not Running</string>
     <string name="peers_tunnelDownHint">Turn on a network to see live connections</string>
     <string name="planet_add_title">Add Planet Server</string>
-    <string name="planet_delete">Delete This Planet</string>
-    <string name="planet_delete_confirmAction">Delete Planet, Networks &amp; Moons</string>
+    <string name="planet_delete">Delete Planet</string>
+    <string name="planet_delete_confirmAction">Delete Planet</string>
+    <string name="planet_delete_confirmMessage">Deleting the planet also deletes its networks. This cannot be undone!</string>
     <string name="planet_delete_confirmTitle">Delete this planet?</string>
     <string name="planet_delete_footer">This also deletes the networks and moons saved under this planet. If the tunnel is using it, the VPN will stop and fall back to the official planet.</string>
     <string name="planet_diagnostics_footer">Peers are live connections from the tunnel and can only be viewed for the planet currently used by the tunnel.</string>

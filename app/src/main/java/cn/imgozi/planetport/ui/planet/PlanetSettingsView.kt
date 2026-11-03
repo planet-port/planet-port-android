@@ -49,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +64,7 @@ import cn.imgozi.planetport.R
 import cn.imgozi.planetport.store.PlanetImporter
 import cn.imgozi.planetport.store.PlanetKind
 import cn.imgozi.planetport.store.PlanetProfile
+import cn.imgozi.planetport.ui.components.ConfirmBubble
 import cn.imgozi.planetport.ui.components.CopyableRow
 import cn.imgozi.planetport.ui.components.fileSizeText
 import cn.imgozi.planetport.ui.form.FormRow
@@ -102,7 +105,9 @@ fun PlanetSettingsView(
     val planet = ui.planet
 
     var showIconPicker by remember { mutableStateOf(false) }
-    var showDelete by remember { mutableStateOf(false) }
+    var showDeleteBubble by remember { mutableStateOf(false) }
+    // 删除行内容顶边（组合根坐标），作为确认气泡锚点
+    var deleteAnchorTop by remember { mutableStateOf(0f) }
     var alertText by remember { mutableStateOf<String?>(null) }
     var showQRShare by remember { mutableStateOf(false) }
     var qrShareData by remember { mutableStateOf<ByteArray?>(null) }
@@ -115,157 +120,172 @@ fun PlanetSettingsView(
         planet?.fileName?.let { File(File(context.filesDir, "planets"), it) }?.takeIf { it.exists() }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    // 官方行星存储名不翻译，显示侧映射本地化文案（iOS PlanetProfile.displayName）
-                    Text(
-                        planet?.let {
-                            if (it.kind == PlanetKind.official) {
-                                stringResource(R.string.planet_official_name)
-                            } else {
-                                it.name
-                            }
-                        } ?: stringResource(R.string.planet_title),
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.common_back),
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
-    ) { padding ->
-        if (planet == null) {
-            Box(Modifier.fillMaxSize().padding(padding))
-            return@Scaffold
-        }
-        val isOfficial = planet.kind == PlanetKind.official
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            FormSection(
-                footer = if (isOfficial) {
-                    stringResource(R.string.planet_info_officialOnly)
-                } else {
-                    null
-                },
-            ) {
-                NameRow(
-                    planet = planet,
-                    isOfficial = isOfficial,
-                    onSave = { vm.rename(it) { alertText = it } },
-                )
-                IconRow(
-                    planet = planet,
-                    isOfficial = isOfficial,
-                    onClick = { showIconPicker = true },
-                )
-            }
-
-            FormSection(footer = stringResource(R.string.planet_info_footer)) {
-                FormRow("World ID", ui.worldId)
-                CopyableRow(
-                    stringResource(R.string.planet_info_nodeId),
-                    // 激活行星优先实时值，其余/离线回退档案缓存（对齐 iOS nodeIDText）
-                    if (planetId == ui.activePlanetId && !node?.nodeId.isNullOrEmpty()) {
-                        node!!.nodeId
-                    } else {
-                        planet.lastNodeId ?: "—"
-                    },
-                )
-                FormRow(
-                    stringResource(R.string.common_type),
-                    stringResource(
-                        if (isOfficial) R.string.planet_info_officialKind else R.string.planet_info_customKind,
-                    ),
-                    valueStyle = MaterialTheme.typography.bodyLarge,
-                )
-                ui.fileInfo?.let { info ->
-                    FileSizeRow(info)
-                    FormRow(
-                        stringResource(R.string.planet_info_revision),
-                        revisionText(info.timestamp),
-                    )
-                    if (!isOfficial && planetFile != null) {
-                        ShareRow(
-                            onFile = { showFileShare = true },
-                            onQr = {
-                                // 读取 planet 文件并连同名称/图标/底色组成 ZTP 容器进入
-                                // 二维码分享；读取失败(并发删除)不弹页
-                                planetFile?.let { file ->
-                                    runCatching { file.readBytes() }.getOrNull()?.let { bytes ->
-                                        qrShareData = PlanetPayload.container(
-                                            planet = bytes,
-                                            name = planet.name,
-                                            icon = planet.icon,
-                                            iconColor = planet.iconColor,
-                                        )
-                                        showQRShare = true
-                                    }
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-
-            FormSection(footer = stringResource(R.string.planet_diagnostics_footer)) {
-                NavRow(
-                    icon = Icons.Filled.Group,
-                    label = stringResource(R.string.planet_diagnostics_peers),
-                    enabled = planetId == ui.activePlanetId,
-                    onClick = navToPeers,
-                )
-                NavRow(
-                    icon = Icons.Filled.Nightlight,
-                    label = stringResource(R.string.planet_diagnostics_moons),
-                    onClick = navToMoon,
-                )
-                NavRow(
-                    icon = Icons.Filled.MonitorHeart,
-                    label = stringResource(R.string.planet_diagnostics_trace),
-                    onClick = navToApplyTrace,
-                )
-            }
-
-            if (!isOfficial) {
-                FormSection(
-                    footer = stringResource(R.string.planet_delete_footer),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 44.dp)
-                            .clickable { showDelete = true },
-                        contentAlignment = Alignment.Center,
-                    ) {
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = {
+                        // 官方行星存储名不翻译，显示侧映射本地化文案（iOS PlanetProfile.displayName）
                         Text(
-                            stringResource(R.string.planet_delete),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.labelLarge,
+                            planet?.let {
+                                if (it.kind == PlanetKind.official) {
+                                    stringResource(R.string.planet_official_name)
+                                } else {
+                                    it.name
+                                }
+                            } ?: stringResource(R.string.planet_title),
                         )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.common_back),
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            },
+        ) { padding ->
+            if (planet == null) {
+                Box(Modifier.fillMaxSize().padding(padding))
+                return@Scaffold
+            }
+            val isOfficial = planet.kind == PlanetKind.official
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(padding)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                FormSection(
+                    footer = if (isOfficial) {
+                        stringResource(R.string.planet_info_officialOnly)
+                    } else {
+                        null
+                    },
+                ) {
+                    NameRow(
+                        planet = planet,
+                        isOfficial = isOfficial,
+                        onSave = { vm.rename(it) { alertText = it } },
+                    )
+                    IconRow(
+                        planet = planet,
+                        isOfficial = isOfficial,
+                        onClick = { showIconPicker = true },
+                    )
+                }
+
+                FormSection(footer = stringResource(R.string.planet_info_footer)) {
+                    FormRow("World ID", ui.worldId)
+                    CopyableRow(
+                        stringResource(R.string.planet_info_nodeId),
+                        // 激活行星优先实时值，其余/离线回退档案缓存（对齐 iOS nodeIDText）
+                        if (planetId == ui.activePlanetId && !node?.nodeId.isNullOrEmpty()) {
+                            node!!.nodeId
+                        } else {
+                            planet.lastNodeId ?: "—"
+                        },
+                    )
+                    FormRow(
+                        stringResource(R.string.common_type),
+                        stringResource(
+                            if (isOfficial) R.string.planet_info_officialKind else R.string.planet_info_customKind,
+                        ),
+                        valueStyle = MaterialTheme.typography.bodyLarge,
+                    )
+                    ui.fileInfo?.let { info ->
+                        FileSizeRow(info)
+                        FormRow(
+                            stringResource(R.string.planet_info_revision),
+                            revisionText(info.timestamp),
+                        )
+                        if (!isOfficial && planetFile != null) {
+                            ShareRow(
+                                onFile = { showFileShare = true },
+                                onQr = {
+                                    // 读取 planet 文件并连同名称/图标/底色组成 ZTP 容器进入
+                                    // 二维码分享；读取失败(并发删除)不弹页
+                                    planetFile?.let { file ->
+                                        runCatching { file.readBytes() }.getOrNull()?.let { bytes ->
+                                            qrShareData = PlanetPayload.container(
+                                                planet = bytes,
+                                                name = planet.name,
+                                                icon = planet.icon,
+                                                iconColor = planet.iconColor,
+                                            )
+                                            showQRShare = true
+                                        }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(16.dp))
+                FormSection(footer = stringResource(R.string.planet_diagnostics_footer)) {
+                    NavRow(
+                        icon = Icons.Filled.Group,
+                        label = stringResource(R.string.planet_diagnostics_peers),
+                        enabled = planetId == ui.activePlanetId,
+                        onClick = navToPeers,
+                    )
+                    NavRow(
+                        icon = Icons.Filled.Nightlight,
+                        label = stringResource(R.string.planet_diagnostics_moons),
+                        onClick = navToMoon,
+                    )
+                    NavRow(
+                        icon = Icons.Filled.MonitorHeart,
+                        label = stringResource(R.string.planet_diagnostics_trace),
+                        onClick = navToApplyTrace,
+                    )
+                }
+
+                if (!isOfficial) {
+                    FormSection(
+                        footer = stringResource(R.string.planet_delete_footer),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 44.dp)
+                                .onGloballyPositioned { deleteAnchorTop = it.positionInRoot().y }
+                                .clickable { showDeleteBubble = true },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                stringResource(R.string.planet_delete),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+            }
         }
+        ConfirmBubble(
+            visible = showDeleteBubble,
+            anchorTopPx = deleteAnchorTop,
+            title = stringResource(R.string.planet_delete_confirmTitle),
+            message = stringResource(R.string.planet_delete_confirmMessage),
+            confirmLabel = stringResource(R.string.planet_delete_confirmAction),
+            onConfirm = {
+                showDeleteBubble = false
+                vm.delete(onBack)
+            },
+            onDismiss = { showDeleteBubble = false },
+        )
     }
 
     if (showIconPicker && planet != null) {
@@ -295,30 +315,6 @@ fun PlanetSettingsView(
             onDismiss = {
                 showQRShare = false
                 qrShareData = null
-            },
-        )
-    }
-
-    if (showDelete) {
-        AlertDialog(
-            onDismissRequest = { showDelete = false },
-            title = { Text(stringResource(R.string.planet_delete_confirmTitle)) },
-            text = { Text(stringResource(R.string.common_irreversible)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDelete = false
-                    vm.delete(onBack)
-                }) {
-                    Text(
-                        stringResource(R.string.planet_delete_confirmAction),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDelete = false }) {
-                    Text(stringResource(R.string.common_cancel))
-                }
             },
         )
     }

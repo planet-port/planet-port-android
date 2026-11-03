@@ -110,29 +110,41 @@ class PlanetSettingsViewModel(
     }
 
     /**
-     * 删除顺序对齐 iOS（PlanetSettingsView.deletePlanet，swift:227-236）：仅删除
-     * 激活行星时先停 VPN（TunnelController.stop），级联清理由 deletePlanet 完成
-     * （网络/卫星/文件/状态目录 + 指针回退官方 + notifyConfigChanged）。
-     * [onDeleted] 供视图退栈。
+     * 删除顺序（对齐 iOS 2488ced 三段式）：行星使用中时先写回 lastActivated=false
+     * 断开该行星全部网络（writeNetworks → notifyConfigChanged → 隧道 applyConfig
+     * diff 逐网 leave），再 stop + awaitSettled 停用行星等停机终态（给隧道留出
+     * 处理 leave 的时间窗），最后级联删除配置（deletePlanet：网络/卫星/文件/
+     * 状态目录 + 指针回退官方 + notifyConfigChanged）。未使用中直接删除。
      *
-     * 门控核对（简报侦查 §4 两疑点）：
+     * 门控核对（沿用旧结论）：
      * - 删非激活行星且隧道在跑：不停——核心只在启动时装载激活行星的 planet 文件，
-     *   通知触发的 applyConfig 只重读激活行星的网络/月壳（本次删除未触碰），停机
-     *   反而误伤在跑连接（iOS 同样只在删激活行星时 stop）。
-     * - 删激活行星：先 stop 再 deletePlanet，删除后不自动重启——iOS 实况无 restart
-     *   调用，隧道停在已停止待用户手动开启；且 planetDir 在服务启动期固化、热重载
-     *   不换目录，回退官方只能由下次启动装载。停机后删除触发的 configChanges 已无
-     *   隧道侧消费者（订阅随 stopTunnel 取消），不会迟到重配。
+     *   applyConfig 只重读激活行星的网络/月壳（本次删除未触碰），停机反而误伤
+     *   在跑连接。
+     * - 删激活行星：三段式后不自动重启——隧道停在已停止，回退官方由下次启动
+     *   装载（planetDir 在服务启动期固化）。
+     * - awaitSettled 已是终态时立即返回（隧道本就未跑的删除路径不挂起）；
+     *   超时返回 false 不阻断删除（进程级异常场景，交由用户手动处理）。
+     * [onDeleted] 供视图退栈。
      */
     fun delete(onDeleted: () -> Unit) {
         viewModelScope.launch {
             val planet = _ui.value.planet ?: return@launch
             if (planet.id == _ui.value.activePlanetId) {
+                // 1. 断开所有网络：写回触发隧道 diff 逐网 leave
+                val networks = StoreRepo.store.readNetworks(planetId = planet.id)
+                if (networks.any { it.lastActivated }) {
+                    StoreRepo.store.writeNetworks(
+                        networks.map { it.copy(lastActivated = false) },
+                        planetId = planet.id,
+                    )
+                }
+                // 2. 停用行星，等停机终态（stop 幂等，终态 no-op）
                 TunnelController.stop(getApplication())
+                TunnelController.awaitSettled()
             }
-            // 删除失败只记日志不崩进程（对齐 HomeViewModel storeWrite 兜底范式，
-            // deletePlanet 经 JsonFileStore 走同一写路径）：行星留档，列表下次
-            // 重读自然还原；退栈照旧，不因低概率磁盘故障阻断导航
+            // 3. 级联删除。失败只记日志不崩进程（对齐 HomeViewModel storeWrite
+            // 兜底范式）：行星留档，列表下次重读自然还原；退栈照旧，不因低概率
+            // 磁盘故障阻断导航
             runCatching { StoreRepo.store.deletePlanet(planet) }
                 .onFailure { Log.w(TAG, "deletePlanet 写盘失败", it) }
             onDeleted()
