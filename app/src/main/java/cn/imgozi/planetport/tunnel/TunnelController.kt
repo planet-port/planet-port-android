@@ -22,6 +22,9 @@ object TunnelController {
     /** 重启编排：只跑「等停机终态 → 再启动」的短任务，主线程即时派发（无长期驻留协程） */
     private val restartScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    /** 启动意图窗口（见 [startIntentAtMs]） */
+    private const val START_INTENT_WINDOW_MS = 30_000L
+
     /**
      * 停启编排进行中标记：切网重连与偏好热重启共用（QF-3，.superpowers/sdd/
      * p5-task-1-review.md——两路都是 stop → awaitSettled → start，交错最坏多一轮
@@ -44,6 +47,32 @@ object TunnelController {
     @Volatile
     var stopGeneration = 0
         private set
+
+    /**
+     * 最近一次隧道启动意图时间戳（对齐 iOS VPNManager.startIntentAt，30s 窗口）。
+     * UI 据此区分「隧道拉起中」与「意外停止」（onRevoke 被其它 VPN 挤掉/用户从
+     * 系统快捷开关停止等）：所有拉起路径（含先停后起的切换/热重启序列、Failed
+     * 态先 stop 再启的兜底）入口先打点，观察到隧道在跑或启动明确失败即清除；
+     * Stopped/Idle 边沿若窗口外到来，判定为意外停止，网络激活回落掉线状态。
+     * 30s 窗口既覆盖停启编排的拆建间隙，也兜底 START 被吞时不至于永久卡
+     * 「建立隧道」。收敛主线程读写，@Volatile 属保险（与 [reconnectInFlight] 同范式）。
+     */
+    @Volatile
+    private var startIntentAtMs = 0L
+
+    /** 启动意图打点（拉起编排入口调用） */
+    fun markStartIntent() {
+        startIntentAtMs = System.currentTimeMillis()
+    }
+
+    /** 是否处于启动意图窗口内 */
+    val startIntentActive: Boolean
+        get() = System.currentTimeMillis() - startIntentAtMs < START_INTENT_WINDOW_MS
+
+    /** 清除启动意图（隧道已观察到在跑/启动明确失败时调用） */
+    fun clearStartIntent() {
+        startIntentAtMs = 0
+    }
 
     /**
      * 隧道是否存活：Running/Starting/Reconnecting 视为在跑；
@@ -70,6 +99,7 @@ object TunnelController {
         onPermissionDenied: () -> Unit = {},
     ) {
         if (isRunning) return
+        markStartIntent()
         val app = context.applicationContext
         if (VpnService.prepare(context) == null) {
             ZeroTierVpnService.start(app)
@@ -130,6 +160,9 @@ object TunnelController {
      */
     fun reconnectForNetworkChange(context: Context) {
         if (!isRunning) return
+        // 入口即打点：STOP 到 START 之间存在 Stopped 边沿，UI 需识别这是
+        // 重启序列而非意外停止，不清网络激活
+        markStartIntent()
         if (reconnectInFlight) {
             TunnelStateBus.log("停启编排进行中，合并本次网络切换触发")
             return
@@ -180,6 +213,9 @@ object TunnelController {
      */
     fun restartIfRunning(context: Context) {
         if (!isRunning) return
+        // 入口即打点（先于 isRunning 判定后的两分支）：STOP 到 START 之间存在
+        // Stopped 边沿，UI 需识别这是热重启序列而非意外停止，不清网络激活
+        markStartIntent()
         if (reconnectInFlight) {
             // 切网自愈编排不能像丢普通热重启那样丢弃本次触发：行星切换经此路径时，
             // 在飞编排的 START 可能已带旧指针起核（startTunnel 读盘与 activatePlanet

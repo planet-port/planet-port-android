@@ -128,6 +128,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     // isRunning 判为不在跑放行 START，但服务侧双 START 守卫只刷新通知
                     // 就 return，核心不会重启——与 applySelectedPlanetAndStart 兜底一致
                     if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                        // Failed 先停再启：stop 前打启动意图，防 Stopped 边沿先于
+                        // ensureStarted 打点到达被误判意外停止而清激活
+                        TunnelController.markStartIntent()
                         TunnelController.stop(appContext)
                     }
                     TunnelController.ensureStarted(
@@ -236,12 +239,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         // 起跑/停机边沿即连接计时起点/取消点（iOS connectionStatus 边沿 evaluateConnectTimer）
         evaluateConnectTimer()
         when (st) {
-            is TunnelState.Running -> startAttemptAt = 0
+            is TunnelState.Running -> {
+                startAttemptAt = 0
+                // 隧道已观察到在跑：启动意图即达成使命（iOS pollRuntime 清 startIntent）
+                TunnelController.clearStartIntent()
+            }
             is TunnelState.Failed -> {
                 val fromStartAttempt = startAttemptAt > 0
                 startAttemptAt = 0
                 // 仅启动尝试期的 Failed 报「无法启动 VPN」；运行期 TUN 故障由状态行呈现
                 if (fromStartAttempt) {
+                    // 启动明确失败：意图即失效（iOS startTunnel completion(false)
+                    // 清 startIntent），并立即回落掉线状态（iOS 靠下轮轮询收敛，
+                    // Android 无轮询，边沿处直接收口）
+                    TunnelController.clearStartIntent()
+                    fallBackToDisconnectedIfIdle()
                     emitNotice(
                         appContext.getString(R.string.home_error_vpnStartTitle),
                         failedReasonText(st.reason),
@@ -249,6 +261,32 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             else -> Unit
+        }
+        // 意外停止回落（对齐 iOS pollRuntime 的终态收敛）：Stopped/Idle 边沿且无
+        // 活跃启动意图 = 被其它 VPN 挤掉（onRevoke）/用户从系统快捷开关停止等，
+        // 网络实际已离线，重置激活回落掉线状态（与启动时 init 块的收敛同一逻辑，
+        // 运行中持续生效）。运行期 Failed(recoverable) 不在列：服务进程仍存活
+        // 且可能自愈，清激活会让自愈成功后 join 不到网络。
+        if (st is TunnelState.Stopped || st is TunnelState.Idle) {
+            fallBackToDisconnectedIfIdle()
+        }
+    }
+
+    /**
+     * 意外停止收敛：无启动意图且仍有启用网络时重置激活并重读（iOS
+     * resetAllNetworkActivation + reloadConfig，被挤掉后卡片从「建立隧道」
+     * 回落「未连接」、开关弹回关闭；不自动重连抢隧道）。resetAllNetworkActivation
+     * 自带无激活早退，重复触发零写盘。
+     */
+    private fun fallBackToDisconnectedIfIdle() {
+        if (TunnelController.startIntentActive) return
+        viewModelScope.launch {
+            if (!StoreRepo.store.readActiveNetworks().any { it.lastActivated }) return@launch
+            TunnelStateBus.log("隧道意外停止（无启动意图），网络激活回落掉线状态")
+            storeWrite("resetAllNetworkActivation") {
+                StoreRepo.store.resetAllNetworkActivation()
+            }
+            reload()
         }
     }
 
@@ -537,7 +575,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(switchDialog = dlg.copy(disconnecting = true)) }
             _pending.value = _pending.value + entry.networkId
             withContext(NonCancellable) {
-                // 先断开当前 VPN；弹窗不关，断开进度由 disconnecting 态呈现
+                // 先断开当前 VPN；弹窗不关，断开进度由 disconnecting 态呈现。
+                // stop 前打启动意图：停机终态的 Stopped 边沿会被误判意外停止而
+                // 清掉即将写入的新行星激活（iOS 编排入口打点同构）
+                TunnelController.markStartIntent()
                 if (TunnelController.isRunning) {
                     TunnelController.stop(appContext)
                     val settled = withTimeoutOrNull(STOP_SETTLE_TIMEOUT_MS) {
@@ -563,6 +604,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 TunnelController.restartIfRunning(appContext)
             } else {
                 if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                    // Failed 先停再启：stop 前打启动意图，防 Stopped 边沿被误判
+                    // 意外停止（见上方 confirmSwitchPlanet 同注释）
+                    TunnelController.markStartIntent()
                     TunnelController.stop(appContext)
                 }
                 startAttemptAt = System.currentTimeMillis()
@@ -651,6 +695,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 if (planetChanged) TunnelController.restartIfRunning(appContext)
             else -> {
                 if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                    // Failed 先停再启：stop 前打启动意图，防 Stopped 边沿被误判
+                    // 意外停止而清激活
+                    TunnelController.markStartIntent()
                     TunnelController.stop(appContext)
                 }
                 startAttemptAt = System.currentTimeMillis()

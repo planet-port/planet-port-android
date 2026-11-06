@@ -110,6 +110,9 @@ class PrefsViewModel(application: Application) : AndroidViewModel(application) {
                     // 就 return，核心不会重启——与 HomeViewModel 按需恢复兜底一致
                     if (hasActive) {
                         if (TunnelStateBus.tunnelState.value is TunnelState.Failed) {
+                            // Failed 先停再启：stop 前打启动意图，防 Stopped 边沿被
+                            // 误判意外停止而清激活（HomeViewModel 同注释）
+                            TunnelController.markStartIntent()
                             TunnelController.stop(getApplication())
                         }
                         TunnelController.ensureStarted(
