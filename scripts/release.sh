@@ -44,6 +44,8 @@ sed -i '' -E "s/versionName = \"[^\"]+\"/versionName = \"$NEXT\"/" "$GRADLE"
 
 git add CHANGELOG.md "$GRADLE"
 git commit -m "chore(release): v$NEXT" -m "由 scripts/release.sh 生成，版本与更新日志依据 Conventional Commits 自动推导。"
-git tag "v$NEXT"
+# 附注标签：git push --follow-tags 只推附注标签，轻量标签会被静默漏推
+# （tag 不上去则 release CI 不触发，Release 缺失）
+git tag -a "v$NEXT" -m "v$NEXT"
 
-echo "完成：v$NEXT (versionCode $BUILD) 已提交并打 tag。推送到远端时记得：git push --follow-tags"
+echo "完成：v$NEXT (versionCode $BUILD) 已提交并打 tag（附注）。推送到远端时记得：git push --follow-tags"
