@@ -1,0 +1,66 @@
+name: Release Build
+
+# 可复用发布构建：tag 推送（build.yml）与网页发版（release-dispatch.yml）共用。
+# 不设独立触发器，仅 workflow_call。
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 要构建发布的版本 tag（如 v1.5.0）
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: 拉取 ZeroTier 核心源码
+        run: ./scripts/bootstrap.sh
+
+      - name: 解码发布签名 keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
+      - name: Build release APK
+        env:
+          PP_KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
+          PP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PP_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --console=plain
+
+      - name: 提取 CHANGELOG 对应版本段落作为发布说明
+        run: |
+          TAG="${{ inputs.tag }}"
+          awk -v tag="$TAG" '
+            index($2, tag) == 1 && $1 == "##" { insec = 1; next }
+            insec && $1 == "##" { exit }
+            insec { print }
+          ' CHANGELOG.md > release-notes.md
+          [ -s release-notes.md ] || { echo "错误：CHANGELOG.md 中未找到 $TAG 段落" >&2; exit 1; }
+
+      - name: 创建 Release 并上传 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          cp app/build/outputs/apk/release/app-release.apk "planet-port-$TAG.apk"
+          gh release create "$TAG" \
+            "planet-port-$TAG.apk" \
+            --title "$TAG" \
+            --notes-file release-notes.md
