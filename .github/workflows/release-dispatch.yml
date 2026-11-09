@@ -3,6 +3,9 @@ name: Release Dispatch
 # 网页发版入口：Actions 页 Run workflow 即完成「版本推导 → CHANGELOG →
 # versionCode/versionName → 提交 → 打 tag → 构建 → 发布 Release」全流程，
 # 等价于本地 ./scripts/release.sh + git push --follow-tags。
+# 注意：bump 完成后若构建失败/被取消，tag 已在远端——恢复方式是对该次
+# 运行 Re-run failed jobs（gh run rerun --failed），重新 dispatch 会因
+# tag 已存在而中止。
 # 版本推导复用 scripts/release.sh 本体（macOS runner 原生满足 BSD sed），
 # 构建复用 release-build.yml。
 on:
