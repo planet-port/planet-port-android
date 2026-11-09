@@ -7,6 +7,11 @@ name: Release Dispatch
 # 构建复用 release-build.yml。
 on:
   workflow_dispatch:
+    inputs:
+      beta:
+        description: 发布 beta 验证版（vX.Y.Z-beta.N，prerelease 形式）
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -33,7 +38,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: 执行发版脚本
-        run: ./scripts/release.sh
+        run: |
+          if [ "${{ inputs.beta }}" = "true" ]; then
+            ./scripts/release.sh beta
+          else
+            ./scripts/release.sh
+          fi
 
       - name: 输出本次 tag
         id: tag
