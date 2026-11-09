@@ -58,7 +58,17 @@ jobs:
       - name: 拉取 ZeroTier 核心源码
         run: ./scripts/bootstrap.sh
 
+      - name: 解码发布签名 keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
       - name: Build release APK
+        env:
+          PP_KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
+          PP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PP_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon --console=plain
 
       - name: 提取 CHANGELOG 对应版本段落作为发布说明

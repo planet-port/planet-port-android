@@ -20,11 +20,26 @@ android {
         versionName = "1.5.0"
     }
 
+    signingConfigs {
+        // CI 发布签名（GitHub Secrets → 环境变量注入）：debug keystore 每台
+        // 机器随机生成，CI 一次性 runner 上每次构建签名都不同，覆盖安装必然
+        // 冲突；专用 keystore 保证各版本签名恒定
+        if (System.getenv("PP_KEYSTORE_FILE") != null) {
+            create("ciRelease") {
+                storeFile = file(System.getenv("PP_KEYSTORE_FILE"))
+                storePassword = System.getenv("PP_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("PP_KEY_ALIAS")
+                keyPassword = System.getenv("PP_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // release 暂用 debug 签名便于直接装机验证
-            signingConfig = signingConfigs.getByName("debug")
+            // CI 注入专用发布签名；未注入（本地构建）回落 debug 签名便于直接装机验证
+            signingConfig = signingConfigs.findByName("ciRelease")
+                ?: signingConfigs.getByName("debug")
         }
     }
 
