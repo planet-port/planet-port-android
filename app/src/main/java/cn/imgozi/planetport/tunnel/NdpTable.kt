@@ -93,28 +93,37 @@ internal class NdpTable {
             return Ipv6Address(m)
         }
 
-        /** RFC 4861 布局：ICMPv6 头(4) + flags/保留(4) + target(16) + 源 MAC 选项(8)，与 parse 对齐 */
+        /** RFC 4861 布局：ICMPv6 头(4) + flags/保留(4) + target(16) + 链路层地址选项(8，类型按报文分派)，与 parse 对齐 */
         private fun icmpv6(type: Int, target: Ipv6Address, mac: Long, flags: Int): ByteArray {
             val p = ByteArray(8 + 16 + 8)
             p[0] = type.toByte(); p[1] = 0
             p[4] = flags.toByte()  // NS 恒 0；NA 见 neighborAdvertisement 的 Solicited/Override 语义
             target.bytes.copyInto(p, 8)
-            p[24] = 1; p[25] = 1  // 源链路层地址选项
+            // 选项类型按报文分派（RFC 4861 §4.6.1/§4.6.2）：NS 携带源链路层地址选项
+            // （type 1），NA 携带目标链路层地址选项（type 2）——真实内核 ndisc 只按
+            // 各自类型读取选项，类型错配的报文被丢弃（对端解析永远 INCOMPLETE）
+            p[24] = if (type == 136) 2 else 1; p[25] = 1
             for (shift in 40 downTo 0 step 8) {
                 p[26 + (5 - shift / 8)] = ((mac shr shift) and 0xff).toByte()
             }
             return p
         }
 
+        /** 解析 NS/NA 载荷；链路层地址选项类型按报文分派：NS 认源选项(1)，NA 认目标选项(2) */
         fun parse(payload: ByteArray): NdpPacket? {
             if (payload.size < 24) return null
             if (payload[0] != 135.toByte() && payload[0] != 136.toByte()) return null
             val target = Ipv6Address(payload.copyOfRange(8, 24))
             var senderMac: Long? = null
-            if (payload.size >= 32 && payload[24] == 1.toByte() && payload[25] == 1.toByte()) {
-                var v = 0L
-                for (i in 2 until 8) v = (v shl 8) or (payload[24 + i].toLong() and 0xff)
-                senderMac = v
+            if (payload.size >= 32 && payload[25] == 1.toByte()) {
+                // 选项类型按报文分派：NS=源选项(1)、NA=目标选项(2)；NA 宽限也收 1，
+                // 兼容仍按旧构造（未修复）发 type 1 的软件姊妹端
+                val accepted = if (payload[0] == 136.toByte()) intArrayOf(2, 1) else intArrayOf(1)
+                if (accepted.contains(payload[24].toInt() and 0xff)) {
+                    var v = 0L
+                    for (i in 2 until 8) v = (v shl 8) or (payload[24 + i].toLong() and 0xff)
+                    senderMac = v
+                }
             }
             return NdpPacket(payload[0].toInt(), target, senderMac)
         }
