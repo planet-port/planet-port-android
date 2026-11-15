@@ -352,13 +352,22 @@ internal class TunnelManager(
                 DnsMode.none -> emptyList()
             }
         } else emptyList()
-        // 组播订阅（broadcast + ADI=各网络首个 IPv4，ARP 可靠性的关键，SDK 文档要求）。
+        // 组播订阅（ARP broadcast + 各 v6 地址的请求节点组播，地址解析可达性的关键，
+        // SDK 文档要求；组语义等价核心 MulticastGroup::deriveMulticastGroupForAddressResolution）。
         // 每次都发：core 侧按组去重幂等无代价；且 leave 会连带丢弃 Network 的全部
         // 订阅记录，rejoin 后须重订——不能只挂在 establish 分支内
         for (item in valid) {
-            val adi = item.v4.firstOrNull()
-                ?.let { NetworkContextMath.parseIPv4(RoutePlanner.ipOnly(it)) } ?: continue
-            runtime.multicastSubscribe(item.nwid, Ethernet.BROADCAST_MAC, adi.toLong())
+            item.v4.firstOrNull()
+                ?.let { NetworkContextMath.parseIPv4(RoutePlanner.ipOnly(it)) }
+                ?.let { runtime.multicastSubscribe(item.nwid, Ethernet.BROADCAST_MAC, it.toLong()) }
+            // v6：请求节点组播（33:33:ff:xx:xx:xx + ADI 0）——不订阅则对端内核的 NS
+            // 到不了本端，NDP 应答与 DAD 应答路径无触发源；陈旧地址的订阅由应答侧
+            // 地址归属检查把关，无害
+            for (cidr in item.v6) {
+                val addr = NetworkContextMath.parseIPv6(RoutePlanner.ipOnly(cidr)) ?: continue
+                val group = NdpTable.multicastMAC(NdpTable.solicitedNodeMulticast(addr))
+                runtime.multicastSubscribe(item.nwid, group, 0L)
+            }
         }
         // 幂等闸门：与当前 TUN 生效配置完全一致则跳过重建（CONFIG_UPDATE 60s 重推）
         val signature = "$allV4|$allV6|" +
