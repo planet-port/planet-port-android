@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- API 26 以下兜底 launcher 图标（自适应图标仅 v26+；minSdk 23）：
-     红底 + 白色品牌轮辐图形，与 ic_launcher_fg 同造型（几何规整化） -->
+     红底 + 白色品牌图形，形状路径取自 1024 设计稿真实轮廓
+     （双向胶囊 + 斜臂 + 中心 hub + 四颗节点，双层 -5°/-6° 旋转） -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
@@ -9,24 +10,79 @@
     <path
         android:fillColor="#FFD44037"
         android:pathData="M0,0h48v48h-48z" />
-    <!-- 贯穿斜线 -->
-    <path
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="3.2"
-        android:strokeLineCap="round"
-        android:pathData="M13.6,13.6 L34.4,34.4" />
-    <!-- 四向辐条 -->
-    <path
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="3.2"
-        android:strokeLineCap="round"
-        android:pathData="M24,8.4 V39.6 M8.4,24 H39.6" />
-    <!-- 中心 hub -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M24,19.12a4.88,4.88 0 1,0 0.001,0z" />
-    <!-- 四个端点节点 -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M24,4.18a4.22,4.22 0 1,0 0.001,0z M39.6,19.78a4.22,4.22 0 1,0 0.001,0z M24,35.38a4.22,4.22 0 1,0 0.001,0z M8.4,19.78a4.22,4.22 0 1,0 0.001,0z" />
+    <group
+        android:scaleX="0.046875"
+        android:scaleY="0.046875"
+        android:pivotX="0"
+        android:pivotY="0">
+        <group
+            android:rotation="-5"
+            android:pivotX="1195.293"
+            android:pivotY="-377.465">
+            <group
+                android:rotation="-6"
+                android:pivotX="433.025"
+                android:pivotY="433">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M773.082665,402.608339 C789.85129,402.608339 803.444947,416.215149 803.444947,433 C803.444947,449.784851 789.85129,463.391661 773.082665,463.391661 L92.9675407,463.391661 C76.1989153,463.391661 62.6052584,449.784851 62.6052584,433 C62.6052584,416.215149 76.1989153,402.608339 92.9675407,402.608339 L773.082665,402.608339 Z" />
+            </group>
+            <group
+                android:rotation="-6"
+                android:pivotX="433.025"
+                android:pivotY="433.95">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M433.025103,63.5513686 C449.810927,63.5513686 463.418526,77.1442374 463.418526,93.9118908 L463.418526,773.987588 C463.418526,790.755241 449.810927,804.34811 433.025103,804.34811 C416.239279,804.34811 402.63168,790.755241 402.63168,773.987588 L402.63168,93.9118908 C402.63168,77.1442374 416.239279,63.5513686 433.025103,63.5513686 Z" />
+            </group>
+            <group
+                android:rotation="-6"
+                android:pivotX="433.025"
+                android:pivotY="433.475">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M194.225159,167.290566 C206.682931,156.042609 225.871069,157.05575 237.083064,169.55348 L674.080726,656.663806 C685.292721,669.161536 684.282819,688.411217 671.825047,699.659174 C659.367274,710.90713 640.179137,709.893989 628.967142,697.39626 L191.96948,210.285933 C180.757485,197.788204 181.767387,178.538522 194.225159,167.290566 Z" />
+            </group>
+            <group
+                android:rotation="-6"
+                android:pivotX="433.025"
+                android:pivotY="434.9">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M311.451,434.899 A121.574,121.567 0 1,0 554.599,434.899 A121.574,121.567 0 1,0 311.451,434.899 Z" />
+            </group>
+            <group
+                android:rotation="-6"
+                android:pivotX="93.948"
+                android:pivotY="470.04">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M93.9479609,375.563236 C146.12851,375.563236 188.429924,417.862252 188.429924,470.040352 C188.429924,522.218453 146.12954,564.516438 93.9489912,564.516438 C41.7684423,564.516438 -0.532972373,522.217422 -0.532972373,470.039322 C-0.532972373,417.861222 41.767412,375.563236 93.9479609,375.563236 Z" />
+            </group>
+            <group
+                android:rotation="-6"
+                android:pivotX="773.052"
+                android:pivotY="398.81">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M773.051009,297.33278 C829.097462,297.33278 874.532972,342.765714 874.532972,398.809896 C874.532972,454.854079 829.098492,500.285982 773.052039,500.285982 C717.005586,500.285982 671.570076,454.853048 671.570076,398.808866 C671.570076,342.764684 717.004556,297.33278 773.051009,297.33278 Z" />
+            </group>
+            <group
+                android:rotation="-6"
+                android:pivotX="399.832"
+                android:pivotY="103.943">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M314.352,103.943 A85.481,85.477 0 1,0 485.314,103.943 A85.481,85.477 0 1,0 314.352,103.943 Z" />
+            </group>
+            <group
+                android:rotation="-6"
+                android:pivotX="469.017"
+                android:pivotY="772.057">
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M469.016367,666.580369 C527.271908,666.580369 574.49833,713.804113 574.49833,772.057485 C574.49833,830.310858 527.272938,877.533571 469.017397,877.533571 C410.761855,877.533571 363.535433,830.309827 363.535433,772.056455 C363.535433,713.803083 410.760825,666.580369 469.016367,666.580369 Z" />
+            </group>
+        </group>
+    </group>
 </vector>

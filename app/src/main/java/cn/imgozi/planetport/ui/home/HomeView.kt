@@ -744,10 +744,10 @@ private fun HeaderZone(
 }
 
 /**
- * App logo：iOS 同款位图资产（planetportlogo.png，256×256，透明圆角已内嵌）。
- * 此前以 Canvas 均分轮辐近似复刻，节点布局/渐变与真图标不符（走查「格式不正确」）；
- * 现直接引用 iOS Assets 的原 PNG，尺寸 40dp + 9dp 圆角裁切与 iOS
- * Image("PlanetPortLogo").frame(40).clipShape(RoundedRectangle(9)) 一致。
+ * App logo：iOS 同款位图资产（planetport_logo.png，1024×1024，透明圆角已内嵌）。
+ * 2026-11 品牌定稿图（红渐变底 + 网络形），与 iOS Assets PlanetPortLogo 同源；
+ * 尺寸 40dp + 9dp 圆角裁切与 iOS Image("PlanetPortLogo").frame(40)
+ * .clipShape(RoundedRectangle(9)) 一致。
  */
 @Composable
 private fun AppLogo(modifier: Modifier = Modifier) {
