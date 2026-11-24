@@ -1,5 +1,7 @@
 package cn.imgozi.planetport.ui.home
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -64,10 +66,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.AnnotatedString
@@ -605,7 +608,7 @@ private fun HeaderZone(
         // 行结构对齐 iOS：logo 左，右列高锁 40dp（与 logo 等高）给内部
         // Spacer/offset 确定参照系；标题行在顶、指示器沉底
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AppLogo(Modifier.size(40.dp))
+            AppLogo(Modifier.size(HomeMetrics.sizeLogo))
             // iOS headerZone HStack spacing 5.5（HomeView.swift:187）
             Spacer(Modifier.size(5.5.dp))
             Column(
@@ -751,8 +754,21 @@ private fun HeaderZone(
  */
 @Composable
 private fun AppLogo(modifier: Modifier = Modifier) {
+    // 1024 源图直绘 40dp 跨约 9 倍缩小，painterResource 默认双线性单级采样
+    // 在圆角与斜臂边缘产生毛边；改为两级收敛：inSampleSize 盒式预缩 4 倍
+    // （1024→256）再按显示密度双线性缩到 1:1，边缘干净且不增加常驻开销
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val painter = remember(density) {
+        val target = with(density) { HomeMetrics.sizeLogo.toPx() }.roundToInt()
+        val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+        val src = BitmapFactory.decodeResource(context.resources, R.drawable.planet_port_logo, opts)
+        val scaled = Bitmap.createScaledBitmap(src, target, target, true)
+        if (scaled !== src) src.recycle()
+        BitmapPainter(scaled.asImageBitmap())
+    }
     Image(
-        painter = painterResource(R.drawable.planet_port_logo),
+        painter = painter,
         contentDescription = null,
         modifier = modifier.clip(RoundedCornerShape(HomeMetrics.radiusLogo)),
     )

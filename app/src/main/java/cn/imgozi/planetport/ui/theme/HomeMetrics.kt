@@ -46,6 +46,9 @@ object HomeMetrics {
     /** 圆角：App logo 9。 */
     val radiusLogo = 9.dp
 
+    /** App logo 40（iOS Image("PlanetPortLogo").frame(40) 同款）。 */
+    val sizeLogo = 40.dp
+
     /** 发丝分隔线 0.5pt。 */
     val hairline = 0.5.dp
 
