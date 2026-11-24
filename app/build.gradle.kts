@@ -16,8 +16,8 @@ android {
         applicationId = "cn.imgozi.a.planetport"
         minSdk = 23
         targetSdk = 33
-        versionCode = 8
-        versionName = "1.6.0"
+        versionCode = 9
+        versionName = "1.7.0"
     }
 
     signingConfigs {
