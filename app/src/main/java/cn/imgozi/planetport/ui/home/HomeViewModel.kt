@@ -767,10 +767,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val result = runCatching {
                 val worldId = PlanetImporter.worldIdOf(data)
-                if (worldId != null && worldId in StoreRepo.planetImporter.existingWorldIds()) {
-                    // 查重经专用类型走同链路回传，文案在消费侧映射——本地化文案
-                    // 不混入异常 message 通道（iOS addplanet.duplicate；T7b 审查 I-1）
-                    throw DuplicateWorld(worldId)
+                if (worldId != null) {
+                    val owner = StoreRepo.planetImporter.worldIdOwner(worldId)
+                    if (owner != null) {
+                        // 查重经专用类型走同链路回传，文案在消费侧映射——本地化文案
+                        // 不混入异常 message 通道（iOS addplanet.duplicate；T7b 审查 I-1）
+                        val name = if (owner.id == PlanetProfile.OFFICIAL_ID) {
+                            appContext.getString(R.string.planet_official_name)
+                        } else {
+                            owner.name
+                        }
+                        throw DuplicateWorld(name)
+                    }
                 }
                 StoreRepo.planetImporter.importPlanetData(data, name, icon, iconColor)
             }
@@ -819,8 +827,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             appContext.getString(R.string.error_planet_writeFailed)
         null -> when (e) {
             is DuplicateWorld ->
-                // 16 位 hex 与全 App 及 iOS %016llx 一致（P4 终审 M-1）
-                appContext.getString(R.string.addplanet_duplicate, MoonEntry.formatWorldId(e.worldId))
+                appContext.getString(R.string.addplanet_duplicate, e.planetName)
             else -> {
                 Log.w(TAG, "导入链未识别异常", e)
                 appContext.getString(R.string.addplanet_importFailed)
@@ -828,8 +835,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 添加行星查重（VM 层编排，不属导入器校验域）。 */
-    private class DuplicateWorld(val worldId: ULong) : RuntimeException("duplicate world id")
+    /** 添加行星查重（VM 层编排，不属导入器校验域），载荷为冲突行星展示名。 */
+    private class DuplicateWorld(val planetName: String) : RuntimeException("duplicate world id")
 
     // MARK: - 隧道运行期回写缓存
 

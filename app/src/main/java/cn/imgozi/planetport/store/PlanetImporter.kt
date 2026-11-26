@@ -159,13 +159,13 @@ class PlanetImporter(private val store: AppConfigStore) {
         }
     }
 
-    /** 已存在的 World ID 集合（含官方内置），供添加时查重。 */
-    suspend fun existingWorldIds(): Set<ULong> {
-        val ids = mutableSetOf(ZT_WORLD_ID_EARTH)
+    /** 查找占用该 World ID 的行星档案（官方内置 Earth 恒为官方档案），未占用返回 null。 */
+    suspend fun worldIdOwner(worldId: ULong): PlanetProfile? {
+        if (worldId == ZT_WORLD_ID_EARTH) return PlanetProfile.OFFICIAL
         for (profile in store.readPlanets()) {
-            inspectPlanetFile(profile)?.let { ids.add(it.worldId) }
+            if (inspectPlanetFile(profile)?.worldId == worldId) return profile
         }
-        return ids
+        return null
     }
 
     /** 从 .planet 文件尽力解读只读信息：byte0 类型 + 8B 大端 worldId + 8B 大端时间戳（需 ≥17B）。 */

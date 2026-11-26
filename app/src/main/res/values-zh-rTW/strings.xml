@@ -10,7 +10,7 @@
     <string name="addplanet_action">新增行星伺服器</string>
     <string name="addplanet_chooseFile">選擇行星檔案</string>
     <string name="addplanet_downloading">正在下載行星檔案…</string>
-    <string name="addplanet_duplicate">已存在相同的 Planet（World ID %1$s），不能重複新增。</string>
+    <string name="addplanet_duplicate">匯入的伺服器與%1$s的 ID 相同，不需要重複匯入。</string>
     <string name="addplanet_importFailed">匯入失敗</string>
     <string name="addplanet_namePlaceholder">行星名稱</string>
     <string name="addplanet_randomIcon">換個隨機圖示</string>
